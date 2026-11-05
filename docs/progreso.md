@@ -710,3 +710,19 @@ campo vacío al abrir.
   encuentra si tiene OSC 8.
 - El doble clic separa en `:` y `/`, así que Open Selection abre lo
   seleccionado tal cual; no hay selección inteligente de URL.
+
+## Fase 12 — Registro de la sesión y Paste Special
+
+### Plan
+
+1. **Session › Log › Log to File… y Stop Logging:** una hoja con la ruta
+   (relativa a la carpeta personal, como Save Selected Text); el bucle de E/S
+   añade al archivo los bytes tal como llegan del PTY hasta que se para.
+2. **Edit › Paste Special:**
+   - **Paste Slowly:** manda el portapapeles en trozos pequeños con una pausa
+     entre ellos, para programas que pierden lo que llega de golpe.
+   - **Paste Escaping Special Characters:** antepone `\` a los caracteres
+     especiales de la shell.
+   - **Paste Selection:** pega la selección del terminal sin pasar por el
+     portapapeles.
+3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.

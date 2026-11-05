@@ -713,3 +713,19 @@ empty.
   found when it has OSC 8.
 - Double click splits at `:` and `/`, so Open Selection opens the selection
   as is; there is no smart URL selection.
+
+## Phase 12 — Session log and Paste Special
+
+### Plan
+
+1. **Session › Log › Log to File… and Stop Logging:** a sheet with the path
+   (relative to the home folder, like Save Selected Text); the I/O loop
+   appends the bytes to the file as they come from the PTY until it stops.
+2. **Edit › Paste Special:**
+   - **Paste Slowly:** sends the clipboard in small chunks with a pause
+     between them, for programs that lose what arrives all at once.
+   - **Paste Escaping Special Characters:** puts `\` before the shell's
+     special characters.
+   - **Paste Selection:** pastes the terminal selection without going
+     through the clipboard.
+3. **Test** on headless sway and documentation in both languages.
