@@ -208,3 +208,31 @@ check` limpio en los dos modos del kit; 17 tests de la app y 1 del bloque.
 - **Make Text Bigger** se muestra como Super+= y no ⌘+.
 - **Faltan** Undo Close, Edit Tab Title, mover pestañas entre ventanas y
   arrastrarlas.
+
+## Fase 3 — Perfiles y preferencias
+
+### Plan
+
+1. **Perfiles** en el `.domain` de la app: nombre, familia y tamaño de fuente,
+   esquema de color (o «seguir al sistema»), orden inicial y directorio
+   (inicio, el de la sesión anterior o uno fijo), y cuál es el perfil por
+   omisión. Sin perfiles guardados hay uno, «Default».
+2. **Cada sesión con su perfil:** la orden y el directorio al arrancar; la
+   fuente y el esquema al dibujar. Divisiones y pestañas nuevas usan el perfil
+   de la sesión activa («with Current Profile»).
+3. **Esquemas importables** desde `.itermcolors` (plist XML) con el crate
+   `plist`. Los importados se guardan en el mismo `.domain`, así llegan en vivo
+   a todas las ventanas. Se importan desde Preferencias (ruta en un campo,
+   porque el kit no tiene selector de archivos) o con
+   `curseterm --import-colors <archivo>`.
+4. **Preferencias** con la estructura de iTerm2 hecha con `PreferencesWindow`:
+   «Appearance» (barra de pestañas con una sola pestaña) y un grupo
+   «Profiles» con un panel por perfil, cuyas secciones siguen las pestañas
+   General, Colors y Text del editor de perfiles de iTerm2; duplicar, borrar y
+   elegir el perfil por omisión.
+5. **Menú «Profiles»** con un ítem por perfil, que abre una pestaña con él
+   (Ctrl+Super+1…9). El kit no deja cambiar los ítems de un menú de primer
+   nivel: con el kit tal cual se actualizan las etiquetas y la lista nueva
+   aparece en la siguiente ventana; un parche (0004) añade
+   `MenuHandle::set_menu` para cambiarla en vivo.
+6. **Prueba** en sway sin pantalla, como en las fases anteriores.
