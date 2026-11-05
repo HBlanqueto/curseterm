@@ -2,13 +2,14 @@
 
 Versión/commit de BarrierKit usado: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Resumen: documento vivo; estado al cerrar la fase 1 (2026-11-05), probado en
+Resumen: documento vivo; estado al cerrar la fase 2 (2026-11-05), probado en
 sway sin pantalla con lavapipe (`progreso.md`). Lo más serio: los handlers de
 `use_menu_action` corren fuera del contexto de Freya y hacen abortar la app si
 tocan el portapapeles o `WindowControls::get()` (BK-017); el menú solo se
 publica en D-Bus con `org_kde_kwin_appmenu_manager`, al contrario de lo que
 dice la documentación (BK-018); una ventana por proceso y sin título en vivo
-(BK-001, BK-002); sin IME ni selección primaria. El lienzo, las pestañas, el
+(BK-001, BK-002); sin token de activación para apps (BK-019); sin IME ni
+selección primaria. El lienzo, las pestañas, los paneles divididos, el
 token `MONO` y el estado vivo del menú se resolvieron como bloques; el título,
 los atajos y el menú en D-Bus, como parches probados.
 
@@ -32,19 +33,20 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-003 | input / menú global | Atajos no consumidos y `ShortcutKey` limitado | alta | Parche 0002 (tests del kit); tal cual, el codificador ignora Super |
 | BK-004 | IME | Sin `zwp_text_input_v3` | media | Ninguno |
 | BK-005 | portapapeles | Sin selección primaria | media | Ninguno |
-| BK-006 | contenedores | Sin pestañas de documento | media | Bloque `views::tab_bar` |
-| BK-007 | contenedores | Sin divisor genérico anidable | media | Pendiente (fase 2) |
+| BK-006 | contenedores | Sin pestañas de documento | media | Bloque probado `views::tab_bar` |
+| BK-007 | contenedores | Sin divisor genérico anidable | media | Bloque probado `views::split_panes` |
 | BK-008 | tokens / texto | Sin cara monoespaciada en Tengen | baja | Bloque `tokens::MONO` |
 | BK-009 | texto / rendimiento | Sin lienzo público y caché de párrafos apagada | media | Bloque `canvas` |
-| BK-010 | menú global | Títulos de `Action` estáticos y menú sin reemplazo en vivo | media | Bloque `app_menu::use_menu_enabled`; submenús en la fase 2 |
+| BK-010 | menú global | Títulos de `Action` estáticos y menú sin reemplazo en vivo | media | Bloque probado `app_menu` (activado, marca, submenús) |
 | BK-011 | docs | Documentación que no coincide con el código | baja | — |
 | BK-012 | ventana / persistencia | El tamaño guardado es uno por `app_id` | media | Workaround: `KeepTerminalSize` |
 | BK-013 | ventana | El cierre pedido por el compositor no se puede interceptar | media | Ninguno |
 | BK-014 | plataforma | `Timers::wakeup` no se puede dar de baja | baja | Workaround: un solo canal por ventana |
 | BK-015 | persistencia | Las preferencias van siempre a `~/.config/malaysia/` | baja | Se acepta |
-| BK-016 | input / menú global | Los atajos con Mayús comparan el carácter producido | media | Pendiente (fase 2) |
+| BK-016 | input / menú global | Los atajos con Mayús comparan el carácter producido | media | Workaround: atajo por texto con `}` y `{` |
 | BK-017 | menú global / plataforma | Los handlers del menú corren fuera del contexto de Freya | **bloqueante** | Workaround probado: handles tomados en `render` |
 | BK-018 | menú global / docs | Sin `org_kde_kwin_appmenu_manager` el menú no se publica en D-Bus | alta | Parche 0003 probado |
+| BK-019 | ventana / plataforma | Una app no puede pedir un token de xdg-activation | media | Ninguno; sin lista de ventanas en «Window» |
 
 ## Gaps
 
@@ -164,9 +166,10 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Cómo lo resolví en CurseTerm**: bloque `barrier_kit_next::views::tab_bar::TabBar`
   (`crates/barrier-kit-next/src/views/tab_bar.rs`): títulos `String`, botón de
   cerrar en la pestaña elegida o bajo el puntero, `use_interaction` y
-  `Palette`; su alto es `tokens::TAB_BAR`. Falta «+», reordenar e indicador de
-  actividad (fase 2). Probado: tres pestañas con título por OSC, elegir y
-  cerrar (`docs/capturas/fase1-pestanas.png`).
+  `Palette`; su alto es `tokens::TAB_BAR`; `on_add(label, ..)` añade el
+  botón «+». Probado: pestañas con título por OSC, elegir, cerrar y «+»
+  (`docs/capturas/fase2-barra-de-pestanas.png`). Falta reordenar arrastrando
+  e indicador de actividad.
 - **Coste del workaround**: —
 - **API propuesta para el kit**: `TabBar::new(label).tab(Tab::new(id, title: String).closable(true)).on_select(..).on_close(..).on_add(..)`.
 - **Gravedad**: media
@@ -179,9 +182,18 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Qué ofrece hoy BarrierKit**: `views::split::SplitView`
   (`views/split.rs:94`): barra lateral + detalle + inspector.
 - **Qué falta**: un divisor de N hijos en una dirección, anidable.
-- **Cómo lo resolví en CurseTerm**: pendiente (fase 2).
-- **Coste del workaround**: —
-- **API propuesta para el kit**: `SplitPanes::new(Direction::Horizontal).pane(a).pane(b).ratios(State<Vec<f32>>)`.
+- **Cómo lo resolví en CurseTerm**: bloque
+  `barrier_kit_next::views::split_panes::SplitPanes`
+  (`crates/barrier-kit-next/src/views/split_panes.rs`): N paneles en un eje
+  con `Size::flex(ratio)`, divisores de `tokens::SPLIT_PANES.divider` que se
+  arrastran (`ColResize`/`RowResize`), mínimo `pane_min` por panel; controlado
+  con `.ratios(..)` y `.on_ratios(..)`; se anida poniendo un `SplitPanes` como
+  panel. CurseTerm guarda el árbol en `panes.rs`. Probado: divisiones
+  anidadas, arrastre y teclado (`docs/capturas/fase2-paneles.png`,
+  `fase2-divisor-arrastrado.png`).
+- **Coste del workaround**: el arrastre usa las proporciones del último
+  render; con muchos eventos entre dos frames se pierde algo de recorrido.
+- **API propuesta para el kit**: la del bloque: `SplitPanes::new(label, Direction).pane(a).pane(b).ratios(Vec<f32>).on_ratios(cb)`.
 - **Gravedad**: media
 - **Cómo reproducirlo**: `SplitView` no tiene opción de dirección.
 
@@ -238,8 +250,12 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Cómo lo resolví en CurseTerm**: bloque
   `barrier_kit_next::app_menu::use_menu_enabled(id, enabled)`, la versión
   pública del `use_menu_enabled` privado de `app/undo.rs`; «Copy» se apaga sin
-  selección. Para «Profiles» y «Window» (fase 2): `MenuItem::action` con
-  `String` y `MenuHandle::update` sobre el `Submenu`.
+  selección. En la fase 2 se generalizó: `use_menu_update(id, value, apply)`,
+  `use_menu_checked`, `use_submenu_items` y `submenu(id, ..)` (no hay
+  constructor de `MenuItem::Submenu` con id). Probado por D-Bus: «Select Tab»
+  se rellena con las pestañas y marca la activa; «Show Tab Bar» y «Maximize
+  Active Pane» llevan marca; una docena de entradas se activan según el
+  contexto.
 - **Coste del workaround**: las entradas dinámicas no son `Action`, así que no
   tienen `Shortcut` tipado.
 - **API propuesta para el kit**: `use_menu(|menu: &mut AppMenu| ..)` que se vuelve a evaluar cuando cambia su estado.
@@ -323,8 +339,10 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
   compara el glifo del atajo con `key.to_string()`. Con Mayús, en un teclado
   US, la tecla `]` llega como `}`.
 - **Qué falta**: comparar por tecla física (`Code`) o por keysym sin Mayús.
-- **Cómo lo resolví en CurseTerm**: pendiente (fase 2).
-- **Coste del workaround**: —
+- **Cómo lo resolví en CurseTerm**: «Select Next Tab» y «Select Previous
+  Tab» se declaran por texto como `Super+Shift+}` y `Super+Shift+{`
+  (`crates/curseterm/src/menu.rs`). Probado con `wtype`.
+- **Coste del workaround**: depende de la distribución de teclado; el menú muestra `}` en vez de `]`.
 - **API propuesta para el kit**: que `find_menu_shortcut` reciba también el `Code` y compare por él cuando hay Mayús.
 - **Gravedad**: media
 - **Cómo reproducirlo**: un `MenuItem` con `"Super+Shift+bracketright"`;
@@ -373,6 +391,26 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Gravedad**: alta
 - **Cómo reproducirlo**: abrir cualquier app con `.menu(..)` en sway y listar
   los objetos de su nombre en el bus: no hay `/MenuBar/*`.
+
+### BK-019 — Una app no puede pedir un token de xdg-activation
+- **Área**: ventana / plataforma
+- **Qué necesitaba CurseTerm**: la lista de ventanas abiertas del menú
+  «Window» de iTerm2, que trae al frente la elegida.
+- **Qué ofrece hoy BarrierKit**: `WindowControls::present(token)`
+  (`platform/window.rs:207`) usa un token que ya se tiene; pedirlo
+  (`xdg_activation_v1.get_activation_token`) solo existe en
+  `shell::Activation` (`shell/activation.rs`), tras la feature `shell`.
+- **Qué falta**: `Activation::request` para cualquier app, con la superficie y
+  el último serial de entrada de la ventana.
+- **Cómo lo resolví en CurseTerm**: no se muestra la lista; una entrada que no
+  traiga la ventana sería decorativa. En Malaysia, la barra de menús ya añade
+  a «Window» las ventanas de la app.
+- **Coste del workaround**: fuera de Malaysia no hay forma de saltar a otra
+  ventana de CurseTerm desde el menú.
+- **API propuesta para el kit**: mover `Activation` de `shell/` a `platform/` y darle `WindowControls::activation_token(callback)`.
+- **Gravedad**: media
+- **Cómo reproducirlo**: buscar `get_activation_token` fuera de
+  `crates/barrier-kit/src/shell/`: no aparece.
 
 ## Cosas que funcionaron bien
 
@@ -423,5 +461,9 @@ barra de Malaysia, GNOME y KDE reales.
 - `docs/barrierkit/07-titlebars.md` dice que `.close_only(true)` «deja solo el
   botón de cerrar»; el código (`traffic.rs:126`) dibuja también minimizar y
   maximizar, en gris.
+- `docs/barrierkit/16-preguntas.md` invita a usar `rect` de Freya directamente,
+  pero ningún capítulo dice que `Size::flex` solo reparte si el padre tiene
+  `.content(Content::flex())`; sin él, el primer hijo ocupa todo (lo vimos con
+  los paneles).
 - Nada documenta el signo de `WheelEventData::delta_y`: el runner pasa el eje
   de Wayland tal cual (`platform/input/seat.rs:301`), negativo hacia arriba.

@@ -161,3 +161,50 @@ cerrar, y repintado al cambiar foco, fuente o esquema.
    como parche si el resto de la fase cabe.
 7. **Prueba** en sway sin pantalla como en la fase 1, y por D-Bus con el
    parche 0003 para el menú.
+
+### Resultado (2026-11-05)
+
+Probado como en la fase 1 (sway sin pantalla, lavapipe, `wtype`, el puntero
+virtual del scratchpad y el menú por D-Bus con el parche 0003). `./dev.sh
+check` limpio en los dos modos del kit; 17 tests de la app y 1 del bloque.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Split Vertically (Super+D) y Horizontally (Super+Mayús+D), anidados | ✓; cada panel tiene su PTY (`stty size` da 14×53 en un cuarto) | `fase2-paneles.png` |
+| Select Pane Left/Right/Above/Below (Super+Alt+flechas), Next/Previous Pane (Super+] y Super+[) | ✓ | — |
+| Move Divider (Ctrl+Super+flechas) | ✓, el panel reajusta el texto | `fase2-divisor-movido.png` |
+| Arrastrar el divisor con el ratón; clic para activar un panel | ✓ | `fase2-divisor-arrastrado.png` |
+| Maximize Active Pane (Super+Mayús+Return), con marca | ✓ | `fase2-panel-maximizado.png` |
+| Close (Super+W) cierra el panel; el último cierra la pestaña y luego la ventana | ✓ | — |
+| Close All Panes in Tab (Super+Alt+W) | ✓, solo activo con divisiones | — |
+| Barra de pestañas con «+» | ✓ | `fase2-barra-de-pestanas.png` |
+| Select Next/Previous Tab (Super+Mayús+} y {), Super+1…9, Move Tab Left/Right | ✓ | — |
+| «Select Tab» ▸ con la lista de pestañas y una marca de radio en la activa | ✓ por D-Bus | — |
+| Show Tab Bar con una sola pestaña, con marca | ✓ | `fase2-mostrar-barra.png` |
+| Duplicate Tab abre en el directorio de la sesión activa | ✓ | `fase2-duplicar-y-texto-mayor.png` |
+| Make Text Bigger/Smaller/Normal Size (Super+=, Super+-, Super+0) | ✓, el PTY se reajusta | ídem |
+| Toggle Full Screen (Ctrl+Super+F) | ✓ en sway | — |
+| Estados vivos por D-Bus: activado/desactivado según pestañas y divisiones, marcas | ✓ | — |
+
+**No probado:**
+
+- **Minimize y Zoom:** sway no minimiza y en mosaico no maximiza; se llaman
+  `WindowControls::minimize` y `toggle_maximize`, sin efecto visible aquí.
+- **Malaysia:** sigue sin poder construirse (fase 1). En Malaysia, Super+M y
+  Super+W los atiende el compositor.
+
+**Difiere de iTerm2:**
+
+- **Lista de ventanas en «Window»:** no está. Cada ventana es un proceso
+  (BK-001) y una app no puede pedir un token de activación para traer otra al
+  frente (BK-019), así que un ítem así no haría nada. En Malaysia la barra ya
+  añade al menú «Window» la lista de ventanas de la app.
+- **Cerrar un panel** activa el primero del árbol, no el vecino.
+- **Los paneles inactivos** no se atenúan; solo su cursor sale hueco.
+- **Atajos con Mayús:** se declaran con el carácter producido (`Super+Shift+}`)
+  por BK-016; en un teclado no US pueden no coincidir.
+- **Make Text Bigger** se muestra como Super+= y no ⌘+.
+- **Faltan** Undo Close, Edit Tab Title, mover pestañas entre ventanas y
+  arrastrarlas.
