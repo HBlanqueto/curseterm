@@ -2,7 +2,7 @@
 
 Versión/commit de BarrierKit usado: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Resumen: documento vivo; estado al cerrar la fase 16 (2026-11-05), probado en
+Resumen: documento vivo; estado al cerrar la fase 17 (2026-11-05), probado en
 sway sin pantalla con lavapipe (`progreso.md`). Lo más serio: los handlers de
 `use_menu_action` corren fuera del contexto de Freya y hacen abortar la app si
 tocan el portapapeles o `WindowControls::get()` (BK-017); el menú solo se
@@ -59,7 +59,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-027 | controles / input | Una vista con teclado global no sabe si un campo de texto o un `Alert` se quedan la tecla | baja | Workaround probado: foco seguido y cierre diferido del `Alert` |
 | BK-028 | controles | Las etiquetas de `SegmentedControl` se parten en dos líneas | baja | Workaround: Ajustes a 980 px |
 | BK-029 | controles | `TextField` no puede tomar el foco al abrirse | media | Parche 0006 probado |
-| BK-030 | entrada | Los eventos de ratón no traen modificadores | media | Workaround: Super seguido con el teclado |
+| BK-030 | entrada | Los eventos de ratón no traen modificadores | media | Workaround: modificadores seguidos con el teclado |
 | BK-031 | ventana / apariencia | Una ventana no puede pedir fondo translúcido | media | Parche 0007 probado |
 
 ## Gaps
@@ -639,17 +639,18 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 ### BK-030 — Los eventos de ratón no traen modificadores
 - **Área**: entrada
 - **Qué necesitaba CurseTerm**: Super+clic para abrir un enlace, como ⌘-clic
-  en iTerm2.
+  en iTerm2; Mayús para seleccionar cuando el programa pide el ratón, y Ctrl
+  y Alt dentro del informe del ratón.
 - **Qué ofrece hoy BarrierKit**: el runner guarda los modificadores del
   teclado (`platform/input/seat.rs:399`), pero `MouseEventData` de Freya 0.4.3
   solo lleva posición y botón.
 - **Qué falta**: los modificadores en los eventos de ratón y de rueda.
-- **Cómo lo resolví en CurseTerm**: la ventana sigue Super con
-  `on_global_key_down` y `on_global_key_up`. Al pulsar Super, el compositor
-  manda la tecla antes que los modificadores, así que la propia tecla Meta
-  cuenta como pulsada.
-- **Coste del workaround**: si Super se suelta con la ventana sin foco, la
-  ventana lo cree pulsado hasta la siguiente tecla.
+- **Cómo lo resolví en CurseTerm**: la ventana sigue Super, Mayús, Ctrl y
+  Alt con `on_global_key_down` y `on_global_key_up`. Al pulsar un
+  modificador, el compositor manda la tecla antes que los modificadores, así
+  que la propia tecla cuenta como pulsada.
+- **Coste del workaround**: si un modificador se suelta con la ventana sin
+  foco, la ventana lo cree pulsado hasta la siguiente tecla.
 - **API propuesta para el kit**: `modifiers` en los datos de puntero, o una consulta de los modificadores actuales.
 - **Gravedad**: media
 - **Cómo reproducirlo**: leer `MouseEventData` en `freya-core-0.4.3/src/events/data.rs`.

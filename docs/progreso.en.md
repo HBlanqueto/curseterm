@@ -929,3 +929,29 @@ only shows and changes the mode.
    active session gets `CSI I` or `CSI O`.
 4. **Test** on headless sway with a reader that shows what arrives, and
    documentation in both languages.
+
+### Result (2026-11-05)
+
+Tested on headless sway with a Python reader that turns the modes on, puts
+the tty in raw mode and records what it gets. `./dev.sh check` clean in both
+kit modes; 39 app tests and 1 block test. No new gap; BK-030 now covers every
+modifier.
+
+**Works:**
+
+| Test | Result |
+|---|---|
+| Modes 1000, 1006 and 1004; click on column 6 of row 2: `CSI <0;6;2M` and `CSI <0;6;2m` arrive | ✓ |
+| Opening Settings and closing them: `CSI O` and `CSI I` arrive | ✓ |
+| Modes 1000 and 1002 in the classic format: press (32), two drags (64) when the cell changes, release (35), wheel up (96) and down (97) | ✓ |
+| With Shift held, dragging selects text and nothing reaches the program | ✓ |
+
+**Not tested:** mode 1003 (motion without a button) with a real program such
+as `htop` or `vim`; the middle and right buttons; Ctrl and Alt inside the
+report outside the tests.
+
+**Differs from iTerm2:**
+
+- There is no setting to turn mouse reporting off per profile.
+- UTF-8 mode (1005) is missing; cells past column 222 are not reported in
+  the classic format.

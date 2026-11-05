@@ -15,6 +15,7 @@ use vow_design::SPACE_2;
 use crate::config::Scheme;
 use crate::grid::{self, Fonts};
 use crate::links;
+use crate::mouse::{self, Pointer};
 use crate::session::{self, Session, SessionId};
 
 pub struct TerminalPane {
@@ -26,7 +27,7 @@ pub struct TerminalPane {
     pub broadcast: bool,
     pub find: Option<Rc<str>>,
     pub on_focus: Callback<SessionId, ()>,
-    pub super_held: State<bool>,
+    pub held: State<Modifiers>,
     pub badge: Option<Rc<str>>,
     pub opacity: f32,
 }
@@ -64,7 +65,9 @@ impl Component for TerminalPane {
         let broadcast = self.broadcast;
         let find = self.find.clone();
         let on_focus = self.on_focus.clone();
-        let super_held = self.super_held;
+        let held = self.held;
+        let mut pressed = use_state(|| None::<MouseButton>);
+        let mut reported_cell = use_state(|| None::<(usize, usize)>);
         let badge = self.badge.clone();
         let opacity = self.opacity;
 
@@ -145,12 +148,20 @@ impl Component for TerminalPane {
                         let point_at = point_at.clone();
                         move |event: Event<MouseEventData>| {
                             let data = event.data();
+                            let (point, side) = point_at(data.element_location.to_tuple());
+                            if let Some(button) = data.button
+                                && mouse::reported(session.mode(), *held.peek())
+                            {
+                                on_focus.call(session.id);
+                                pressed.set(Some(button));
+                                send(&session, Pointer::Press(button), point, *held.peek());
+                                return;
+                            }
                             if data.button != Some(MouseButton::Left) {
                                 return;
                             }
                             on_focus.call(session.id);
-                            let (point, side) = point_at(data.element_location.to_tuple());
-                            if *super_held.peek()
+                            if held.peek().contains(Modifiers::META)
                                 && let Some(link) = session.link_at(point)
                             {
                                 links::open(&link);
@@ -168,13 +179,36 @@ impl Component for TerminalPane {
                             *repaint.write() += 1;
                         }
                     })
+                    .on_mouse_up({
+                        let session = session.clone();
+                        let point_at = point_at.clone();
+                        move |event: Event<MouseEventData>| {
+                            let Some(button) = pressed.write().take() else {
+                                return;
+                            };
+                            if mouse::reported(session.mode(), *held.peek()) {
+                                let (point, _) = point_at(event.data().element_location.to_tuple());
+                                send(&session, Pointer::Release(button), point, *held.peek());
+                            }
+                        }
+                    })
                     .on_mouse_move({
                         let session = session.clone();
                         move |event: Event<MouseEventData>| {
+                            let (point, side) = point_at(event.data().element_location.to_tuple());
+                            if mouse::reported(session.mode(), *held.peek()) {
+                                let cell = viewport_cell(&session, point);
+                                if *reported_cell.peek() != Some(cell) {
+                                    reported_cell.set(Some(cell));
+                                    let pointer =
+                                        (*pressed.peek()).map_or(Pointer::Motion, Pointer::Drag);
+                                    send(&session, pointer, point, *held.peek());
+                                }
+                                return;
+                            }
                             if !*dragging.read() {
                                 return;
                             }
-                            let (point, side) = point_at(event.data().element_location.to_tuple());
                             session.extend_selection(point, side);
                             *repaint.write() += 1;
                         }
@@ -185,12 +219,40 @@ impl Component for TerminalPane {
                         move |event: Event<WheelEventData>| {
                             let lines =
                                 (-event.data().delta_y as f32 / fonts.cell_height).round() as i32;
+                            if mouse::reported(session.mode(), *held.peek()) {
+                                let pointer = if lines > 0 {
+                                    Pointer::WheelUp
+                                } else {
+                                    Pointer::WheelDown
+                                };
+                                let at = (*reported_cell.peek()).unwrap_or_default();
+                                for _ in 0..lines.unsigned_abs() {
+                                    if let Some(bytes) =
+                                        mouse::report(pointer, at, *held.peek(), session.mode())
+                                    {
+                                        session.write(bytes);
+                                    }
+                                }
+                                return;
+                            }
                             wheel(&session, lines);
                             *repaint.write() += 1;
                         }
                     })
                     .child(painter),
             )
+    }
+}
+
+fn viewport_cell(session: &Session, point: Point) -> (usize, usize) {
+    let line = point.line.0 + session.display_offset() as i32;
+    (point.column.0, line.max(0) as usize)
+}
+
+fn send(session: &Session, pointer: Pointer, point: Point, held: Modifiers) {
+    if let Some(bytes) = mouse::report(pointer, viewport_cell(session, point), held, session.mode())
+    {
+        session.write(bytes);
     }
 }
 

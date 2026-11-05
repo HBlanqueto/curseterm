@@ -9,6 +9,7 @@ mod keys;
 mod links;
 mod localize;
 mod menu;
+mod mouse;
 mod osc;
 mod pane_view;
 mod panes;

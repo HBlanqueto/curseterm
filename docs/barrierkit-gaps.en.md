@@ -2,7 +2,7 @@
 
 BarrierKit version/commit used: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Summary: living document; state at the close of phase 16 (2026-11-05), tested on
+Summary: living document; state at the close of phase 17 (2026-11-05), tested on
 headless sway with lavapipe (`progreso.en.md`). The most serious: the
 `use_menu_action` handlers run outside Freya's context and abort the app if
 they touch the clipboard or `WindowControls::get()` (BK-017); the menu is only
@@ -59,7 +59,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-027 | controls / input | A view with global keyboard does not know whether a text field or an `Alert` keeps the key | low | Tested workaround: tracked focus and deferred `Alert` dismissal |
 | BK-028 | controls | `SegmentedControl` labels wrap onto two lines | low | Workaround: Settings at 980 px |
 | BK-029 | controls | `TextField` cannot take the focus when it opens | medium | Patch 0006 tested |
-| BK-030 | input | Mouse events carry no modifiers | medium | Workaround: Super tracked through the keyboard |
+| BK-030 | input | Mouse events carry no modifiers | medium | Workaround: modifiers tracked through the keyboard |
 | BK-031 | window / appearance | A window cannot ask for a translucent background | medium | Patch 0007 tested |
 
 ## Gaps
@@ -635,17 +635,18 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 ### BK-030 — Mouse events carry no modifiers
 - **Area**: input
 - **What CurseTerm needed**: Super+click to open a link, like ⌘-click in
-  iTerm2.
+  iTerm2; Shift to select when the program asks for the mouse, and Ctrl and
+  Alt inside the mouse report.
 - **What BarrierKit offers today**: the runner keeps the keyboard modifiers
   (`platform/input/seat.rs:399`), but Freya 0.4.3's `MouseEventData` only
   carries position and button.
 - **What is missing**: the modifiers in mouse and wheel events.
-- **How CurseTerm solves it**: the window tracks Super with
-  `on_global_key_down` and `on_global_key_up`. When Super is pressed, the
-  compositor sends the key before the modifiers, so the Meta key itself
-  counts as held.
-- **Workaround cost**: if Super is released while the window has no focus,
-  the window thinks it is held until the next key.
+- **How CurseTerm solves it**: the window tracks Super, Shift, Ctrl and Alt
+  with `on_global_key_down` and `on_global_key_up`. When a modifier is
+  pressed, the compositor sends the key before the modifiers, so the key
+  itself counts as held.
+- **Workaround cost**: if a modifier is released while the window has no
+  focus, the window thinks it is held until the next key.
 - **Proposed kit API**: `modifiers` in the pointer data, or a query for the current modifiers.
 - **Severity**: medium
 - **How to reproduce**: read `MouseEventData` in `freya-core-0.4.3/src/events/data.rs`.

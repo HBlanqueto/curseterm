@@ -930,3 +930,29 @@ solo muestra y cambia el modo.
    sesión activa recibe `CSI I` o `CSI O`.
 4. **Prueba** en sway sin pantalla con un lector que muestra lo que llega, y
    documentación en los dos idiomas.
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla con un lector en Python que activa los modos,
+pone el tty en crudo y guarda lo que recibe. `./dev.sh check` limpio en los
+dos modos del kit; 39 tests de la app y 1 del bloque. Ningún gap nuevo; BK-030
+ahora cubre todos los modificadores.
+
+**Funciona:**
+
+| Prueba | Resultado |
+|---|---|
+| Modos 1000, 1006 y 1004; clic en la columna 6 de la fila 2: llegan `CSI <0;6;2M` y `CSI <0;6;2m` | ✓ |
+| Abrir Ajustes y cerrarlos: llegan `CSI O` y `CSI I` | ✓ |
+| Modos 1000 y 1002 en formato clásico: pulsación (32), dos arrastres (64) al cambiar de celda, soltar (35), rueda arriba (96) y abajo (97) | ✓ |
+| Con Mayús pulsada, arrastrar selecciona texto y no llega nada al programa | ✓ |
+
+**No probado:** el modo 1003 (movimiento sin botón) con un programa real
+como `htop` o `vim`; el botón central y el derecho; Ctrl y Alt dentro del
+informe fuera de los tests.
+
+**Difiere de iTerm2:**
+
+- No hay ajuste para desactivar el informe del ratón por perfil.
+- El modo UTF-8 (1005) no está; las celdas más allá de la columna 222 no se
+  informan en el formato clásico.

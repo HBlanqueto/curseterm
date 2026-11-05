@@ -79,7 +79,7 @@ struct Handles {
     picker: PickerState,
     sheet: State<Option<Sheet>>,
     draft: State<String>,
-    super_held: State<bool>,
+    held: State<Modifiers>,
     transparency: State<bool>,
 }
 
@@ -220,7 +220,7 @@ impl App for Terminal {
         let buried = use_state(|| None::<Buried>);
         let pastes = use_state(Vec::<String>::new);
         let sheet = use_state(|| None::<Sheet>);
-        let mut super_held = use_state(|| false);
+        let mut held = use_state(Modifiers::empty);
         let transparency = use_state(|| true);
         let draft = use_state(String::new);
         let picker = PickerState {
@@ -252,7 +252,7 @@ impl App for Terminal {
             picker,
             sheet,
             draft,
-            super_held,
+            held,
             transparency,
         });
         use_side_effect({
@@ -317,6 +317,7 @@ impl App for Terminal {
         use_live_menu(&handles);
 
         let window_focused = handles.controls.status.read().activated;
+        use_focus_report(&handles, window_focused);
         let palette = Palette::current();
         let state = workspace.read();
         let title = state.window_title().to_string();
@@ -421,13 +422,11 @@ impl App for Terminal {
             }))
             .on_global_key_up(move |event: Event<KeyboardEventData>| {
                 let data = event.data();
-                let released = matches!(data.key, Key::Named(NamedKey::Meta));
-                super_held.set_if_modified(!released && data.modifiers.contains(Modifiers::META));
+                held.set_if_modified(data.modifiers.difference(key_modifier(&data.key)));
             })
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
                 let data = event.data();
-                let meta = data.key == Key::Named(NamedKey::Meta);
-                super_held.set_if_modified(meta || data.modifiers.contains(Modifiers::META));
+                held.set_if_modified(data.modifiers.union(key_modifier(&data.key)));
                 if keyboard.closing.peek().is_some() {
                     return;
                 }
@@ -523,7 +522,7 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                     broadcast: painting.receivers.contains(id),
                     find: painting.find.clone().filter(|_| *id == painting.active),
                     on_focus: Callback::new(move |id| workspace.write().focus(id)),
-                    super_held: painting.handles.super_held,
+                    held: painting.handles.held,
                     opacity: if painting.transparent {
                         profile.opacity()
                     } else {
@@ -1625,6 +1624,32 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
 fn jump(session: Option<Rc<Session>>, jump: MarkJump) {
     if let Some(session) = session {
         session.jump_to_mark(jump);
+    }
+}
+
+// BK-030: the compositor sends a modifier key before its modifiers, so the key itself counts.
+fn key_modifier(key: &Key) -> Modifiers {
+    match key {
+        Key::Named(NamedKey::Meta) => Modifiers::META,
+        Key::Named(NamedKey::Shift) => Modifiers::SHIFT,
+        Key::Named(NamedKey::Control) => Modifiers::CONTROL,
+        Key::Named(NamedKey::Alt) => Modifiers::ALT,
+        _ => Modifiers::empty(),
+    }
+}
+
+fn use_focus_report(handles: &Handles, focused: bool) {
+    let mut reported = use_state(|| focused);
+    if *reported.peek() == focused {
+        return;
+    }
+    reported.set(focused);
+    if let Some(session) = handles
+        .active()
+        .filter(|session| session.has_state(TerminalState::FocusReporting))
+    {
+        let sequence: &[u8] = if focused { b"\x1b[I" } else { b"\x1b[O" };
+        session.write(sequence.to_vec());
     }
 }
 
