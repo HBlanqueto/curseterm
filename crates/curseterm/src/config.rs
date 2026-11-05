@@ -39,6 +39,7 @@ pub struct Profile {
     pub prompt_before_closing: ClosePrompt,
     pub alt_key: AltKey,
     pub badge: String,
+    pub transparency: u8,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -119,6 +120,7 @@ impl Default for Profile {
             prompt_before_closing: ClosePrompt::IfJobs,
             alt_key: AltKey::Escape,
             badge: String::new(),
+            transparency: 0,
         }
     }
 }
@@ -133,6 +135,10 @@ pub enum WorkingDirectory {
 }
 
 impl Profile {
+    pub fn opacity(&self) -> f32 {
+        1.0 - f32::from(self.transparency.min(90)) / 100.0
+    }
+
     pub fn text_size(&self, zoom: i32) -> f32 {
         let (smallest, largest) = TERMINAL.font_sizes;
         (self.font_size as i32 + zoom).clamp(smallest as i32, largest as i32) as f32

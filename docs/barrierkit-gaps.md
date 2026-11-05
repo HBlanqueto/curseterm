@@ -2,7 +2,7 @@
 
 Versión/commit de BarrierKit usado: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Resumen: documento vivo; estado al cerrar la fase 13 (2026-11-05), probado en
+Resumen: documento vivo; estado al cerrar la fase 14 (2026-11-05), probado en
 sway sin pantalla con lavapipe (`progreso.md`). Lo más serio: los handlers de
 `use_menu_action` corren fuera del contexto de Freya y hacen abortar la app si
 tocan el portapapeles o `WindowControls::get()` (BK-017); el menú solo se
@@ -60,7 +60,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-028 | controles | Las etiquetas de `SegmentedControl` se parten en dos líneas | baja | Workaround: Ajustes a 980 px |
 | BK-029 | controles | `TextField` no puede tomar el foco al abrirse | media | Parche 0006 probado |
 | BK-030 | entrada | Los eventos de ratón no traen modificadores | media | Workaround: Super seguido con el teclado |
-| BK-031 | ventana / apariencia | Una ventana no puede pedir fondo translúcido | media | Ninguna; sin View › Use Transparency |
+| BK-031 | ventana / apariencia | Una ventana no puede pedir fondo translúcido | media | Parche 0007 probado |
 
 ## Gaps
 
@@ -664,9 +664,12 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
   cambiarlo.
 - **Qué falta**: un fondo por ventana, o un alfa que la app pueda pedir, y que
   el compositor lo componga con su desenfoque.
-- **Cómo lo resolví en CurseTerm**: no lo resolví; View no tiene Use
-  Transparency.
-- **Coste del workaround**: falta una función visible de iTerm2.
+- **Cómo lo resolví en CurseTerm**: el parche
+  [`kit-parches/0007-fondo-translucido.patch`](../kit-parches/0007-fondo-translucido.patch)
+  añade `WindowControls::set_background_alpha`, que multiplica el alfa de ese
+  fondo, y su documentación. Con el kit tal cual, View › Use Transparency
+  queda desactivada.
+- **Coste del workaround**: sin el parche, la ventana es siempre opaca.
 - **API propuesta para el kit**: `WindowControls::set_background(Rgba)` o `WindowOptions::background`.
 - **Gravedad**: media
 - **Cómo reproducirlo**: pintar la raíz de la app con alfa 0,5; la ventana sigue opaca.

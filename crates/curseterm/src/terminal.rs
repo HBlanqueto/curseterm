@@ -26,7 +26,7 @@ use freya_clipboard::copypasta::ClipboardProvider;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Size};
 
-use vow_design::{CAPTION, DURATION_FAST_MS, DURATION_SLOW_MS, HEADLINE, SPACE_1, SPACE_2};
+use vow_design::{CAPTION, DURATION_FAST_MS, DURATION_SLOW_MS, HEADLINE, Rgba, SPACE_1, SPACE_2};
 
 use crate::config::{
     APP_ID, AltKey, ClosePrompt, Defaults, Profile, SessionEnd, WorkingDirectory, change_defaults,
@@ -77,6 +77,7 @@ struct Handles {
     sheet: State<Option<Sheet>>,
     draft: State<String>,
     super_held: State<bool>,
+    transparency: State<bool>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -203,6 +204,7 @@ impl App for Terminal {
         let pastes = use_state(Vec::<String>::new);
         let sheet = use_state(|| None::<Sheet>);
         let mut super_held = use_state(|| false);
+        let transparency = use_state(|| true);
         let draft = use_state(String::new);
         let paste_history = PasteHistory {
             query: use_state(String::new),
@@ -234,6 +236,7 @@ impl App for Terminal {
             sheet,
             draft,
             super_held,
+            transparency,
         });
         use_side_effect({
             let handles = handles.clone();
@@ -343,6 +346,7 @@ impl App for Terminal {
                     new_tab(&on_add, &add_events, &profile, None)
                 })
         });
+        let transparent = transparency_supported() && *transparency.read();
         let body = state.active_tab().map(|tab| {
             let root = if tab.zoomed {
                 Pane::Leaf(tab.active)
@@ -365,10 +369,13 @@ impl App for Terminal {
                     Broadcast::Off => Vec::new(),
                     mode => state.receivers(mode),
                 },
+                transparent,
             };
             pane_tree(&root, Vec::new(), &painting)
         });
         drop(state);
+        #[cfg(feature = "kit-parcheado")]
+        use_background_alpha(if transparent { 0.0 } else { 1.0 });
         #[cfg(feature = "kit-parcheado")]
         use_window_title(&title);
 
@@ -387,7 +394,14 @@ impl App for Terminal {
             .height(Size::fill())
             .direction(Direction::Vertical)
             .content(Content::flex())
-            .background(color(palette.window_background))
+            .background(color(if transparent {
+                Rgba {
+                    a: 0.0,
+                    ..palette.window_background
+                }
+            } else {
+                palette.window_background
+            }))
             .on_global_key_up(move |event: Event<KeyboardEventData>| {
                 let data = event.data();
                 let released = matches!(data.key, Key::Named(NamedKey::Meta));
@@ -474,6 +488,7 @@ struct Painting {
     tab: usize,
     receivers: Vec<SessionId>,
     find: Option<Rc<str>>,
+    transparent: bool,
 }
 
 fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
@@ -492,6 +507,11 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                     find: painting.find.clone().filter(|_| *id == painting.active),
                     on_focus: Callback::new(move |id| workspace.write().focus(id)),
                     super_held: painting.handles.super_held,
+                    opacity: if painting.transparent {
+                        profile.opacity()
+                    } else {
+                        1.0
+                    },
                     badge: (!profile.badge.is_empty()).then(|| {
                         let title = painting.workspace.peek().title(*id).to_string();
                         Rc::from(profile.badge.replace(r"\(session.name)", &title))
@@ -563,6 +583,8 @@ fn use_live_menu(handles: &Handles) {
         .active()
         .is_some_and(|session| session.extras().show_timestamps);
     use_menu_checked(menu::SHOW_TIMESTAMPS.id, timestamps);
+    use_menu_enabled(menu::USE_TRANSPARENCY.id, transparency_supported());
+    use_menu_checked(menu::USE_TRANSPARENCY.id, *handles.transparency.read());
     let marks = handles.active().is_some_and(|session| session.has_marks());
     let triggers = handles
         .active()
@@ -925,6 +947,7 @@ fn find_bar(handles: &Handles, mut revision: State<u64>) -> Element {
     let find = handles.find;
     let navigate = handles.clone();
     rect()
+        .background(color(Palette::current().window_background))
         .width(Size::fill())
         .direction(Direction::Horizontal)
         .content(Content::flex())
@@ -1422,6 +1445,11 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
                 session.toggle_copy_mode();
             }
         }
+        _ if id == menu::USE_TRANSPARENCY.id => {
+            let mut transparency = handles.transparency;
+            let next = !*transparency.peek();
+            transparency.set(next);
+        }
         _ if id == menu::SHOW_TIMESTAMPS.id => {
             if let Some(session) = &active {
                 let mut extras = session.extras();
@@ -1510,6 +1538,20 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
 fn jump(session: Option<Rc<Session>>, jump: MarkJump) {
     if let Some(session) = session {
         session.jump_to_mark(jump);
+    }
+}
+
+// BK-031: without patch 0007 the runner clears the window opaque, so transparency stays off.
+fn transparency_supported() -> bool {
+    cfg!(feature = "kit-parcheado")
+}
+
+#[cfg(feature = "kit-parcheado")]
+fn use_background_alpha(alpha: f32) {
+    let mut published = use_state(|| 1.0f32);
+    if *published.peek() != alpha {
+        published.set(alpha);
+        WindowControls::get().set_background_alpha(alpha);
     }
 }
 

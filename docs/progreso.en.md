@@ -814,3 +814,27 @@ out on the left.
    off. With the kit as is the item stays disabled.
 4. **Test** on headless sway, which composes the alpha over the desktop
    background, and documentation in both languages.
+
+### Result (2026-11-05)
+
+Tested on headless sway with the patched kit and an orange desktop
+background. `./dev.sh check` clean in both kit modes; 35 app tests and 1
+block test. BK-031 is solved with patch 0007.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `transparency = 50`: the pane shows the orange through; the title bar and the tab bar stay opaque | ✓ | `fase14-transparencia.png` |
+| ⌘U turns transparency off and on again | ✓ after fixing a panic: `set(!*peek())` asked for the write while the read was still borrowed | — |
+| Settings › Window › Transparency at 80 %: the `.domain` stores 80 and the open window changes live | ✓ | `fase14-ajustes-transparencia.png` |
+
+**Not tested:** with the kit as is, the disabled menu item (there is no D-Bus
+menu without patch 0003); panes with profiles of different transparency in
+the same tab; blur, which sway does not do.
+
+**Differs from iTerm2:**
+
+- Transparency affects the default background; background colours a program
+  sets stay opaque, without iTerm2's option to choose.
+- There is no own blur: it depends on the compositor.

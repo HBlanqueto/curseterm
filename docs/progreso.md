@@ -812,3 +812,27 @@ puede salirse por la izquierda.
    ventana. Con el kit tal cual la entrada queda desactivada.
 4. **Prueba** en sway sin pantalla, que compone el alfa sobre el fondo del
    escritorio, y documentación en los dos idiomas.
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla con el kit parcheado y un fondo de escritorio
+naranja. `./dev.sh check` limpio en los dos modos del kit; 35 tests de la app
+y 1 del bloque. BK-031 queda resuelto con el parche 0007.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `transparency = 50`: el panel deja ver el naranja; la barra de título y la de pestañas siguen opacas | ✓ | `fase14-transparencia.png` |
+| ⌘U apaga y vuelve a encender la transparencia | ✓ tras corregir un pánico: `set(!*peek())` pedía la escritura con la lectura aún prestada | — |
+| Ajustes › Window › Transparency al 80 %: el `.domain` guarda 80 y la ventana abierta cambia en vivo | ✓ | `fase14-ajustes-transparencia.png` |
+
+**No probado:** con el kit tal cual, la entrada de menú desactivada (no hay
+menú en D-Bus sin el parche 0003); paneles de perfiles con transparencias
+distintas en la misma pestaña; el desenfoque, que sway no hace.
+
+**Difiere de iTerm2:**
+
+- La transparencia afecta al fondo por omisión; los colores de fondo que
+  pone un programa siguen opacos, sin la opción de iTerm2 para elegirlo.
+- No hay desenfoque propio: depende del compositor.

@@ -100,6 +100,8 @@ pub const FULL_SCREEN: Action =
 pub const SHOW_TIMESTAMPS: Action = Action::new("show-timestamps", || tr!("show-timestamps"))
     .shortcut(super_with(Modifiers::SHIFT, 'e'));
 pub const RESET_CHARSET: Action = Action::new("reset-charset", || tr!("reset-charset"));
+pub const USE_TRANSPARENCY: Action =
+    Action::new("use-transparency", || tr!("use-transparency")).shortcut(super_key('u'));
 pub const FIND_CURSOR: Action =
     Action::new("find-cursor", || tr!("find-cursor")).shortcut(super_key('/'));
 pub const MAXIMIZE_PANE: &str = "maximize-pane";
@@ -225,6 +227,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
             vec![
                 SHOW_TAB_BAR.item_with(true, CheckState::Checkbox(false)),
                 FULL_SCREEN.item(true),
+                USE_TRANSPARENCY.item_with(false, CheckState::Checkbox(true)),
                 MenuItem::Separator,
                 FIND_CURSOR.item(true),
                 SHOW_TIMESTAMPS.item_with(true, CheckState::Checkbox(false)),

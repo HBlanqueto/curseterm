@@ -28,6 +28,7 @@ pub struct TerminalPane {
     pub on_focus: Callback<SessionId, ()>,
     pub super_held: State<bool>,
     pub badge: Option<Rc<str>>,
+    pub opacity: f32,
 }
 
 impl PartialEq for TerminalPane {
@@ -40,6 +41,7 @@ impl PartialEq for TerminalPane {
             && self.broadcast == other.broadcast
             && self.find == other.find
             && self.badge == other.badge
+            && self.opacity == other.opacity
     }
 }
 
@@ -64,6 +66,7 @@ impl Component for TerminalPane {
         let on_focus = self.on_focus.clone();
         let super_held = self.super_held;
         let badge = self.badge.clone();
+        let opacity = self.opacity;
 
         let mut look = DefaultHasher::new();
         (
@@ -74,6 +77,7 @@ impl Component for TerminalPane {
             broadcast,
             &find,
             &badge,
+            opacity.to_bits(),
             &scheme.name,
             fonts.cell_width.to_bits(),
         )
@@ -95,6 +99,7 @@ impl Component for TerminalPane {
                     inset: SPACE_2,
                     broadcast: broadcast.then_some(scheme.ansi[1]),
                     badge: badge.as_deref(),
+                    opacity,
                 };
                 grid::draw(ctx, &term, &fonts, &scheme, focused, &overlay);
             })
@@ -110,7 +115,8 @@ impl Component for TerminalPane {
         rect()
             .width(Size::fill())
             .height(Size::fill())
-            .background(Color::from_rgb(
+            .background(Color::from_argb(
+                (opacity * 255.0).round() as u8,
                 scheme.background.r,
                 scheme.background.g,
                 scheme.background.b,

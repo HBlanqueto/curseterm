@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use barrier_kit::app::{use_defaults, use_menu_action};
 use barrier_kit::choices::RadioGroup;
 use barrier_kit::compact::{IconButton, Stepper};
-use barrier_kit::controls::{Button, ScrollView, SegmentedControl, Switch, TextField};
+use barrier_kit::controls::{Button, ScrollView, SegmentedControl, Slider, Switch, TextField};
 use barrier_kit::platform::{RunError, WindowControls, WindowOptions, run_window};
 use barrier_kit::popup_button::PopUpButton;
 use barrier_kit::style::{Palette, text};
@@ -441,7 +441,26 @@ fn window_section(index: usize, profile: &Profile) -> Section {
             field: Field::Rows,
             value: profile.rows.to_string(),
         }))
+        .row(
+            Row::new(tr!("window-transparency"))
+                .detail(tr!("window-transparency-detail"))
+                .control(
+                    Slider::stepped(TRANSPARENCY_STEPS)
+                        .value(usize::from(profile.transparency / TRANSPARENCY_STEP))
+                        .on_change(move |step: usize| {
+                            change_defaults(|defaults| {
+                                defaults.ensure_profiles();
+                                if let Some(profile) = defaults.profiles.get_mut(index) {
+                                    profile.transparency = step as u8 * TRANSPARENCY_STEP;
+                                }
+                            });
+                        }),
+                ),
+        )
 }
+
+const TRANSPARENCY_STEP: u8 = 10;
+const TRANSPARENCY_STEPS: usize = 10;
 
 fn session_section(index: usize, profile: &Profile) -> Section {
     let endings = SessionEnd::ALL.map(|ending| {

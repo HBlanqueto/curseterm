@@ -214,3 +214,6 @@ log-confirm = Start Logging
 profile-badge = Badge
 profile-badge-detail = Large translucent text in the top-right corner of each pane; \(session.name) becomes the session title
 profile-badge-placeholder = No badge
+window-transparency = Transparency
+window-transparency-detail = Default background of each pane; turned on and off with View › Use Transparency
+use-transparency = Use Transparency

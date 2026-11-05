@@ -187,6 +187,7 @@ pub struct Overlay<'a> {
     pub inset: f32,
     pub broadcast: Option<Rgb>,
     pub badge: Option<&'a str>,
+    pub opacity: f32,
 }
 
 pub fn draw(
@@ -209,6 +210,7 @@ pub fn draw(
     let background = palette.resolve(Color::Named(NamedColor::Background));
     let mut fill = paint(background);
     fill.set_anti_alias(false);
+    fill.set_alpha_f(overlay.opacity);
     ctx.canvas
         .draw_rect(SkRect::new(0.0, 0.0, ctx.width, ctx.height), &fill);
     if let Some(tint) = overlay.broadcast {
