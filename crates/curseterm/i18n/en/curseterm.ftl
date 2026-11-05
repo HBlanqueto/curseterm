@@ -155,3 +155,4 @@ alt-key = Alt key acts as
 alt-key-normal = Normal
 alt-key-escape = Esc+
 alt-key-detail = AltGr composes characters and does not count as Alt.
+session-ended-quickly = [Session ended very soon after starting; check the profile command]

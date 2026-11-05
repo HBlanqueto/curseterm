@@ -461,3 +461,31 @@ changing Columns and Rows from the field.
 - No window remembers its size or whether it was maximized (BK-012).
 - Window has no style, transparency or screen; Keys has no per-profile
   shortcuts.
+
+### Review (2026-11-05)
+
+A code review of phases 4 to 6 found ten problems, all fixed:
+
+- A pending close stored the tab by index; it now stores one of its
+  sessions.
+- "Restart" with a command that exits at once looped; if the session lasts
+  less than a second it stays open with a notice.
+- The "n of m" count scanned the whole scrollback on every key; it is now
+  computed after a `DURATION_FAST_MS` pause, and the compiled search is
+  reused while the query does not change.
+- With a profile command (`sh -c`), "Prompt before closing" did not see the
+  process; it now counts as a job while it lives.
+- The window size did not clamp the font size like the pane; both use
+  `Profile::text_size`.
+- A session that ended no longer takes keys or fills the log with warnings.
+- Columns, Rows and Scrollback accept only digits; 0 columns or rows is
+  saved as 1.
+- Two two-line comments become one line each.
+
+Testing the first item showed another bug: after closing a tab from the
+alert, the remaining pane still showed the closed session and kept it alive,
+because the canvas key did not include the session. It does now. Tested on
+sway: `false` with "Restart" leaves the notice without creating processes;
+the "×" of a tab running `sleep 100` asks, closes that tab and ends `sleep`;
+typing into an ended session leaves no warnings; "13 of 13" arrives after the
+pause.

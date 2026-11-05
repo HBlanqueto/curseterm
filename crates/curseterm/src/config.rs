@@ -2,14 +2,13 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 
 use alacritty_terminal::vte::ansi::Rgb;
-use barrier_kit_next::tokens::MONO;
+use barrier_kit_next::tokens::{MONO, TERMINAL};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub const APP_ID: &str = "org.curseterm.CurseTerm";
 pub const APP_NAME: &str = "CurseTerm";
 const DEFAULT_PROFILE: &str = "Default";
-// alacritty_terminal's Grid::clear_history reallocates every row up to this limit:
-// https://docs.rs/crate/alacritty_terminal/0.26.0/source/src/grid/mod.rs
+// Grid::clear_history reallocates every row up to this limit (alacritty_terminal 0.26 grid/mod.rs).
 pub const SCROLLBACK_LIMIT: u32 = 100_000;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -129,6 +128,13 @@ pub enum WorkingDirectory {
     Home,
     Previous,
     Fixed(PathBuf),
+}
+
+impl Profile {
+    pub fn text_size(&self, zoom: i32) -> f32 {
+        let (smallest, largest) = TERMINAL.font_sizes;
+        (self.font_size as i32 + zoom).clamp(smallest as i32, largest as i32) as f32
+    }
 }
 
 impl Defaults {

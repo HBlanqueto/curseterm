@@ -600,6 +600,10 @@ enum Field {
 }
 
 impl Field {
+    fn is_numeric(self) -> bool {
+        matches!(self, Self::Scrollback | Self::Columns | Self::Rows)
+    }
+
     fn placeholder(self) -> &'static str {
         match self {
             Self::Name => tr!("profile-name"),
@@ -636,7 +640,7 @@ impl Field {
                 }
                 Self::Family => profile.font_family = value.clone(),
                 Self::Columns | Self::Rows => {
-                    if let Some(cells) = value.parse::<u16>().ok().filter(|cells| *cells > 0) {
+                    if let Ok(cells) = value.parse::<u16>().map(|cells| cells.max(1)) {
                         match self {
                             Self::Columns => profile.columns = cells,
                             _ => profile.rows = cells,
@@ -682,7 +686,9 @@ impl Component for ProfileText {
         let (index, field) = (self.index, self.field);
         use_side_effect(move || {
             let value = draft.read().clone();
-            if value != *saved.peek() {
+            if field.is_numeric() && !value.chars().all(|c| c.is_ascii_digit()) {
+                draft.set(value.chars().filter(char::is_ascii_digit).collect());
+            } else if value != *saved.peek() {
                 field.store(index, &value);
             }
         });

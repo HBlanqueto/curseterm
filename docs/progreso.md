@@ -458,3 +458,32 @@ en la «×» de una pestaña (comparten `request_close`, sin captura);
 - Ninguna ventana recuerda su tamaño ni si estaba maximizada (BK-012).
 - Window no tiene estilo, transparencia ni pantalla; Keys no tiene atajos
   por perfil.
+
+### Revisión (2026-11-05)
+
+Una revisión del código de las fases 4 a 6 encontró diez problemas, todos
+corregidos:
+
+- Un cierre pendiente guardaba la pestaña por índice; ahora guarda una de
+  sus sesiones.
+- «Restart» con una orden que termina al instante entraba en bucle; si la
+  sesión dura menos de un segundo queda abierta con un aviso.
+- El recuento «n de m» recorría todo el historial en cada tecla; ahora se
+  calcula tras una pausa de `DURATION_FAST_MS`, y la búsqueda compilada se
+  reutiliza mientras no cambia la consulta.
+- Con una orden de perfil (`sh -c`), «Prompt before closing» no veía el
+  proceso; ahora cuenta como trabajo mientras viva.
+- El tamaño de la ventana no limitaba el tamaño de letra como el panel;
+  los dos usan `Profile::text_size`.
+- Una sesión terminada ya no recibe teclas ni llena el registro de avisos.
+- Columns, Rows y Scrollback solo admiten dígitos; 0 columnas o filas se
+  guarda como 1.
+- Dos comentarios de dos líneas pasan a una.
+
+Al probar el primer punto apareció otro fallo: tras cerrar una pestaña desde
+el aviso, el panel que quedaba seguía mostrando la sesión cerrada y la
+retenía viva, porque la clave del lienzo no incluía la sesión. Ahora la
+incluye. Probado en sway: `false` con «Restart» deja el aviso sin crear
+procesos; la «×» de una pestaña con `sleep 100` pregunta, cierra esa pestaña
+y termina `sleep`; escribir en una sesión terminada no deja avisos; «13 of
+13» llega tras la pausa.

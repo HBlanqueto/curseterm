@@ -61,6 +61,7 @@ impl Component for TerminalPane {
 
         let mut look = DefaultHasher::new();
         (
+            session.id,
             self.revision,
             *repaint.read(),
             focused,

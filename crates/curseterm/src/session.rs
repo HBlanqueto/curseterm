@@ -5,6 +5,7 @@ use std::io;
 use std::path::PathBuf;
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Instant;
 
 use alacritty_terminal::event::{Event, EventListener, OnResize, WindowSize};
 use alacritty_terminal::grid::{Dimensions, Scroll};
@@ -98,7 +99,27 @@ pub struct Session {
     size: Cell<GridSize>,
     area: Cell<Option<(f32, f32)>>,
     shell_pid: u32,
+    runs_command: bool,
+    pub started: Instant,
+    ended: Cell<bool>,
     scrollback: Cell<usize>,
+}
+
+thread_local! {
+    static SEARCH: RefCell<Option<(String, RegexSearch)>> = const { RefCell::new(None) };
+}
+
+fn with_search<R>(query: &str, search: impl FnOnce(&mut RegexSearch) -> R) -> Option<R> {
+    SEARCH.with(|cached| {
+        let mut cached = cached.borrow_mut();
+        if cached.as_ref().is_none_or(|(known, _)| known != query) {
+            *cached = Some((
+                query.to_string(),
+                RegexSearch::new(&literal_pattern(query)).ok()?,
+            ));
+        }
+        cached.as_mut().map(|(_, regex)| search(regex))
+    })
 }
 
 impl Session {
@@ -108,6 +129,7 @@ impl Session {
         launch: Launch,
         listener: Listener,
     ) -> io::Result<Self> {
+        let runs_command = launch.command.is_some();
         let options = tty::Options {
             shell: launch
                 .command
@@ -139,6 +161,9 @@ impl Session {
             size: Cell::new(size),
             area: Cell::new(None),
             shell_pid,
+            runs_command,
+            started: Instant::now(),
+            ended: Cell::new(false),
             scrollback: Cell::new(Config::default().scrolling_history),
         })
     }
@@ -156,7 +181,7 @@ impl Session {
 
     pub fn write(&self, bytes: impl Into<Cow<'static, [u8]>>) {
         let bytes = bytes.into();
-        if bytes.is_empty() {
+        if bytes.is_empty() || self.ended.get() {
             return;
         }
         self.term.lock().scroll_display(Scroll::Bottom);
@@ -298,9 +323,10 @@ impl Session {
     }
 
     pub fn find(&self, query: &str, direction: Direction) -> bool {
-        let Ok(mut regex) = RegexSearch::new(&literal_pattern(query)) else {
-            return false;
-        };
+        with_search(query, |regex| self.find_with(regex, direction)).unwrap_or(false)
+    }
+
+    fn find_with(&self, regex: &mut RegexSearch, direction: Direction) -> bool {
         let mut term = self.term.lock();
         let current = term
             .selection
@@ -315,7 +341,7 @@ impl Session {
             Direction::Right => Side::Left,
             Direction::Left => Side::Right,
         };
-        let Some(found) = term.search_next(&mut regex, origin, direction, side, None) else {
+        let Some(found) = term.search_next(regex, origin, direction, side, None) else {
             return false;
         };
         term.scroll_to_point(*found.start());
@@ -346,10 +372,13 @@ impl Session {
 
     pub fn has_jobs(&self) -> bool {
         let foreground = rustix::termios::tcgetpgrp(self.pty.borrow().file());
-        foreground.is_ok_and(|group| group.as_raw_nonzero().get() as u32 != self.shell_pid)
+        foreground.is_ok_and(|group| {
+            self.runs_command || group.as_raw_nonzero().get() as u32 != self.shell_pid
+        })
     }
 
     pub fn show_ended(&self, notice: &str) {
+        self.ended.set(true);
         let mut processor: Processor = Processor::new();
         processor.advance(
             &mut *self.term.lock(),
@@ -377,12 +406,18 @@ pub fn visible_matches(term: &Term<Listener>, query: &str) -> Vec<Match> {
 }
 
 fn matches_between(term: &Term<Listener>, query: &str, start: Point, end: Point) -> Vec<Match> {
-    let Ok(mut regex) = RegexSearch::new(&literal_pattern(query)) else {
-        return Vec::new();
-    };
+    with_search(query, |regex| matches_with(term, regex, start, end)).unwrap_or_default()
+}
+
+fn matches_with(
+    term: &Term<Listener>,
+    regex: &mut RegexSearch,
+    start: Point,
+    end: Point,
+) -> Vec<Match> {
     let mut found = Vec::new();
     let mut origin = start;
-    while let Some(next) = term.regex_search_right(&mut regex, origin, end) {
+    while let Some(next) = term.regex_search_right(regex, origin, end) {
         let last = *next.end() >= end;
         origin = next.end().add(term, Boundary::None, 1);
         found.push(next);

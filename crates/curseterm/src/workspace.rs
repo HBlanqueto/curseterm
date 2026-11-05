@@ -172,7 +172,7 @@ impl Workspace {
             .collect()
     }
 
-    fn tab_of(&self, id: SessionId) -> Option<usize> {
+    pub fn tab_of(&self, id: SessionId) -> Option<usize> {
         self.tabs
             .iter()
             .position(|tab| tab.root.leaves().contains(&id))

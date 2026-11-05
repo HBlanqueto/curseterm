@@ -18,7 +18,6 @@ use barrier_kit::theme::color;
 use barrier_kit::titlebar::Titlebar;
 use barrier_kit::views::feedback::Alert;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
-use barrier_kit_next::tokens::TERMINAL;
 use barrier_kit_next::views::split_panes::SplitPanes;
 use barrier_kit_next::views::tab_bar::{Badge, TabBar};
 use freya_clipboard::copypasta::ClipboardProvider;
@@ -42,6 +41,7 @@ use crate::windows;
 use crate::workspace::{Broadcast, Closed, Workspace};
 
 const INITIAL_GRID: (u16, u16) = (80, 24);
+const QUICK_EXIT: Duration = Duration::from_secs(1);
 const DIVIDER_STEP: f32 = 0.05;
 
 type Sessions = HashMap<SessionId, Rc<Session>>;
@@ -70,7 +70,7 @@ struct Handles {
 #[derive(Clone, Copy, PartialEq)]
 enum Closing {
     Session(SessionId),
-    Tab(usize),
+    TabOf(SessionId),
     Window,
 }
 
@@ -118,13 +118,11 @@ impl Handles {
     }
 
     fn fonts_for(&self, profile: &Profile) -> Rc<Fonts> {
-        let (smallest, largest) = TERMINAL.font_sizes;
-        let size = (profile.font_size as i32 + *self.text_zoom.peek())
-            .clamp(smallest as i32, largest as i32);
+        let size = profile.text_size(*self.text_zoom.peek());
         self.fonts
             .borrow_mut()
-            .entry((profile.font_family.clone(), size))
-            .or_insert_with(|| Rc::new(Fonts::new(&profile.font_family, size as f32)))
+            .entry((profile.font_family.clone(), size as i32))
+            .or_insert_with(|| Rc::new(Fonts::new(&profile.font_family, size)))
             .clone()
     }
 
@@ -208,8 +206,15 @@ impl App for Terminal {
                 if let Some(session) = handles.active().filter(|_| !query.is_empty()) {
                     session.clear_selection();
                     session.find(&query, SearchDirection::Left);
-                    find.show_position(&session, &query);
                     *revision.write() += 1;
+                    let typed = query.clone();
+                    handles
+                        .timers
+                        .after(Duration::from_millis(DURATION_FAST_MS), move || {
+                            if *find.query.peek() == typed {
+                                find.show_position(&session, &typed);
+                            }
+                        });
                 }
             }
         });
@@ -262,9 +267,12 @@ impl App for Terminal {
                 .zip(state.rang_tabs())
                 .fold(
                     TabBar::new(tr!("tabs"), tr!("close-tab")),
-                    |bar, (title, rang)| match rang {
-                        true => bar.badged_tab(title, bell),
-                        false => bar.tab(title),
+                    |bar, (title, rang)| {
+                        if rang {
+                            bar.badged_tab(title, bell)
+                        } else {
+                            bar.tab(title)
+                        }
                     },
                 )
                 .selected(state.active)
@@ -272,7 +280,17 @@ impl App for Terminal {
                     let mut workspace = workspace;
                     workspace.write().select_tab(index);
                 })
-                .on_close(move |index| request_close(&on_close, Closing::Tab(index)))
+                .on_close(move |index: usize| {
+                    let active = on_close
+                        .workspace
+                        .peek()
+                        .tabs
+                        .get(index)
+                        .map(|tab| tab.active);
+                    if let Some(id) = active {
+                        request_close(&on_close, Closing::TabOf(id));
+                    }
+                })
                 .on_add(tr!("new-tab-button"), move |_| {
                     let profile = on_add.defaults.peek().default_profile_name();
                     new_tab(&on_add, &add_events, &profile, None)
@@ -639,6 +657,9 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
                 .when_session_ends
             {
                 SessionEnd::Close => close_session(handles, id),
+                SessionEnd::Restart if session.started.elapsed() < QUICK_EXIT => {
+                    session.show_ended(tr!("session-ended-quickly"));
+                }
                 SessionEnd::Restart => {
                     if let Some(events) = handles.events.get() {
                         restart(handles, events, &session);
@@ -721,10 +742,9 @@ fn request_close(handles: &Handles, closing: Closing) {
     let workspace = handles.workspace.peek();
     let ids = match closing {
         Closing::Session(id) => vec![id],
-        Closing::Tab(index) => workspace
-            .tabs
-            .get(index)
-            .map(|tab| tab.root.leaves())
+        Closing::TabOf(id) => workspace
+            .tab_of(id)
+            .map(|index| workspace.tabs[index].root.leaves())
             .unwrap_or_default(),
         Closing::Window => workspace.receivers(Broadcast::AllTabs),
     };
@@ -752,13 +772,17 @@ fn request_close(handles: &Handles, closing: Closing) {
 fn close_now(handles: &Handles, closing: Closing) {
     match closing {
         Closing::Session(id) => close_session(handles, id),
-        Closing::Tab(index) => close_tab(handles, index),
+        Closing::TabOf(id) => {
+            let index = handles.workspace.peek().tab_of(id);
+            if let Some(index) = index {
+                close_tab(handles, index);
+            }
+        }
         Closing::Window => handles.controls.close(),
     }
 }
 
-// BK-027: the Alert's Enter or Escape also reaches the terminal's global key handler,
-// so the alert stays up until that handler has seen the key and ignored it.
+// BK-027: the Alert's key also reaches the global handler, so the alert goes one loop later.
 fn dismiss_later(handles: &Handles, then: impl Fn() + 'static) {
     let closing = handles.closing;
     handles.timers.after(Duration::ZERO, move || {
@@ -852,8 +876,9 @@ fn on_action(id: &str, handles: &Handles, events: &Events) {
         }
         _ if id == menu::CLOSE_WINDOW.id => request_close(handles, Closing::Window),
         _ if id == menu::CLOSE_PANES.id => {
-            let index = workspace.peek().active;
-            request_close(handles, Closing::Tab(index));
+            if let Some(session) = active {
+                request_close(handles, Closing::TabOf(session.id));
+            }
         }
         _ if id == menu::COPY.id => {
             if let Some(session) = &active {

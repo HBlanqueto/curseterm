@@ -155,3 +155,4 @@ alt-key = La tecla Alt actúa como
 alt-key-normal = Normal
 alt-key-escape = Esc+
 alt-key-detail = AltGr compone caracteres y no cuenta como Alt.
+session-ended-quickly = [La sesión terminó al poco de empezar; revisa la orden del perfil]

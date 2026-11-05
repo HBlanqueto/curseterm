@@ -40,7 +40,7 @@ fn terminal_size(profile: Option<&str>) -> (u32, u32) {
     let defaults: Defaults = barrier_kit::app::load_defaults(APP_ID);
     let name = profile.map_or_else(|| defaults.default_profile_name(), str::to_string);
     let profile = defaults.profile(&name);
-    let fonts = Fonts::new(&profile.font_family, profile.font_size as f32);
+    let fonts = Fonts::new(&profile.font_family, profile.text_size(0));
     let tab_bar = if defaults.show_tab_bar {
         TAB_BAR.height + HAIRLINE
     } else {
