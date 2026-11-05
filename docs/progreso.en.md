@@ -584,3 +584,15 @@ closed from the "Close?" alert.
 - The history lives in the window: it is not shared between windows, not
   saved to disk, and does not show when each entry was copied. It keeps the
   20 most recent texts.
+
+## Phase 9 — Editable titles and Help menu
+
+### Plan
+
+1. **Window › Edit Tab Title and Edit Window Title:** a kit sheet with a
+   `TextField`. The typed title replaces the one the shell sets; an empty
+   field goes back to the automatic one. Enter accepts and Escape cancels.
+2. **Help › Copy Mode Shortcuts:** a sheet with a `Table` of keys and
+   actions. The table comes from the same list copy mode uses, so they
+   cannot drift apart.
+3. **Test** on headless sway and documentation in both languages.

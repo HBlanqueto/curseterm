@@ -581,3 +581,15 @@ cerrada desde el aviso «Close?».
 - El historial vive en la ventana: no se comparte entre ventanas, no se
   guarda en disco y no muestra cuándo se copió cada entrada. Guarda los 20
   textos más recientes.
+
+## Fase 9 — Títulos editables y menú Help
+
+### Plan
+
+1. **Window › Edit Tab Title y Edit Window Title:** una hoja del kit con un
+   `TextField`. El título escrito sustituye al que pone la shell; un campo
+   vacío vuelve al automático. Intro acepta y Escape cancela.
+2. **Help › Copy Mode Shortcuts:** una hoja con una `Table` de teclas y
+   acciones. La tabla sale de la misma lista que usa el modo copia, así que
+   no puede desincronizarse.
+3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
