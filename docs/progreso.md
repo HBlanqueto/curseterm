@@ -664,3 +664,17 @@ sesión que llega al límite del historial.
   carácter; las líneas que llegan en el mismo trozo comparten hora.
 - No hay formato relativo («hace 5 minutos») ni ajuste para elegirlo.
 - Las horas tapan el final de las líneas largas en lugar de apartarlas.
+
+## Fase 11 — Enlaces y guardar la selección
+
+### Plan
+
+1. **Super+clic en un enlace:** abre con `xdg-open` el enlace OSC 8 de la
+   celda o, si no hay, la URL (`http`, `https`, `ftp`, `file`, `mailto`) que
+   pasa por la columna pulsada. Los eventos de ratón de Freya no traen
+   modificadores, así que la ventana sigue Super con los eventos de teclado.
+2. **Edit › Open Selection:** abre con `xdg-open` el texto seleccionado.
+3. **Shell › Save Selected Text… (⌘S):** una hoja con la ruta del archivo
+   (empieza en la carpeta personal; `~/` se expande) que guarda la selección.
+4. **Prueba** en sway sin pantalla, con un `xdg-open` falso que anota lo que
+   recibe, y documentación en los dos idiomas.

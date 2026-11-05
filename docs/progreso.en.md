@@ -667,3 +667,17 @@ reaches the scrollback limit.
   each character; lines that arrive in the same chunk share a time.
 - There is no relative format ("5 minutes ago") nor a setting to choose it.
 - The times cover the end of long lines instead of moving them aside.
+
+## Phase 11 — Links and saving the selection
+
+### Plan
+
+1. **Super+click on a link:** opens with `xdg-open` the cell's OSC 8 link
+   or, when there is none, the URL (`http`, `https`, `ftp`, `file`,
+   `mailto`) that crosses the clicked column. Freya's mouse events carry no
+   modifiers, so the window tracks Super through the keyboard events.
+2. **Edit › Open Selection:** opens the selected text with `xdg-open`.
+3. **Shell › Save Selected Text… (⌘S):** a sheet with the file path (it
+   starts at the home folder; `~/` expands) that saves the selection.
+4. **Test** on headless sway, with a fake `xdg-open` that records what it
+   gets, and documentation in both languages.
