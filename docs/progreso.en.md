@@ -838,3 +838,17 @@ the same tab; blur, which sway does not do.
 - Transparency affects the default background; background colours a program
   sets stay opaque, without iTerm2's option to choose.
 - There is no own blur: it depends on the compositor.
+
+## Phase 15 — Open Quickly and Open Profiles
+
+### Plan
+
+1. **View › Open Quickly (⇧⌘O):** a sheet with a filter and the list of the
+   window's sessions ("title — profile"); Enter goes to the chosen tab and
+   pane.
+2. **Profiles › Open Profiles… (⌘O):** the same sheet with the list of
+   profiles; Enter opens a new tab with the chosen profile.
+3. **A single picker sheet:** the paste history, Open Quickly and Open
+   Profiles share the sheet (filter, table, arrows, Enter, Escape); each one
+   only brings its entries and what to do with the chosen one.
+4. **Test** on headless sway and documentation in both languages.

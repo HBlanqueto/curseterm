@@ -836,3 +836,17 @@ distintas en la misma pestaña; el desenfoque, que sway no hace.
 - La transparencia afecta al fondo por omisión; los colores de fondo que
   pone un programa siguen opacos, sin la opción de iTerm2 para elegirlo.
 - No hay desenfoque propio: depende del compositor.
+
+## Fase 15 — Open Quickly y Open Profiles
+
+### Plan
+
+1. **View › Open Quickly (⇧⌘O):** una hoja con filtro y la lista de las
+   sesiones de la ventana («título — perfil»); Intro lleva a la pestaña y al
+   panel elegidos.
+2. **Profiles › Open Profiles… (⌘O):** la misma hoja con la lista de
+   perfiles; Intro abre una pestaña nueva con el perfil elegido.
+3. **Una sola hoja de selección:** el historial de pegado, Open Quickly y
+   Open Profiles comparten la hoja (filtro, tabla, flechas, Intro, Escape);
+   cada uno solo aporta sus entradas y qué hacer con la elegida.
+4. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
