@@ -10,6 +10,7 @@ mod menu;
 mod osc;
 mod pane_view;
 mod panes;
+mod paste_history;
 mod preferences;
 mod session;
 mod terminal;

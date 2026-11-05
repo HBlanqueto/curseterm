@@ -37,6 +37,10 @@ pub const SPLIT_HORIZONTALLY: Action =
 pub const CLOSE: Action = Action::new("close", || tr!("close")).shortcut(super_key('w'));
 pub const CLOSE_WINDOW: Action =
     Action::new("close-window", || tr!("close-window")).shortcut(super_with(Modifiers::SHIFT, 'w'));
+pub const UNDO_CLOSE: Action =
+    Action::new("undo-close", || tr!("undo-close")).shortcut(super_with(Modifiers::SHIFT, 't'));
+pub const PASTE_HISTORY: Action = Action::new("paste-history", || tr!("paste-history"))
+    .shortcut(super_with(Modifiers::SHIFT, 'h'));
 pub const CLOSE_PANES: Action =
     Action::new("close-panes", || tr!("close-panes")).shortcut(super_with(Modifiers::ALT, 'w'));
 
@@ -142,6 +146,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 CLOSE.item(true),
                 CLOSE_WINDOW.item(true),
                 CLOSE_PANES.item(false),
+                UNDO_CLOSE.item(false),
                 MenuItem::Separator,
                 submenu(
                     BROADCAST_MENU,
@@ -206,6 +211,8 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
             tr!("menu-session"),
             vec![
                 RESTART_SESSION.item(true),
+                MenuItem::Separator,
+                PASTE_HISTORY.item(false),
                 MenuItem::Separator,
                 RESET.item(true),
                 MenuItem::Separator,

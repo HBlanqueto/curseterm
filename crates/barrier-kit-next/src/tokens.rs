@@ -61,4 +61,5 @@ pub const TERMINAL: TerminalMetrics = TerminalMetrics {
 };
 
 pub const SETTINGS_WINDOW_SIZE: (u32, u32) = (980, 600);
+pub const PASTE_HISTORY_SIZE: (u32, u32) = (480, 320);
 pub const ABOUT_WINDOW_SIZE: (u32, u32) = (320, 280);

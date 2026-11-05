@@ -549,3 +549,35 @@ salida del último comando tras un cambio de tamaño que reajusta las líneas.
    `SearchField` que filtra y una `Table` con las entradas: las flechas
    eligen, Intro pega y Escape cierra.
 3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla. `./dev.sh check` limpio en los dos modos del
+kit; 30 tests de la app y 1 del bloque. La hoja del historial reutiliza
+`sheet`, `SearchField` y `Table` del kit; no hizo falta ningún gap nuevo, y
+Intro difiere el cierre como el aviso de cierre (BK-027).
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Pestaña nueva, `X=vivo`, Super+W y ⇧⌘T: la pestaña vuelve y `echo $X` da `vivo` | ✓ | `fase8-deshacer-cierre.png` |
+| Super+W y seis segundos de espera: la shell cerrada termina y ⇧⌘T no hace nada | ✓ | — |
+| Panel dividido con `Y=panel`, Super+W y ⇧⌘T: vuelve como pestaña nueva y `echo $Y` da `panel` | ✓ | — |
+| Pegar `echo alfa` y `echo beta`, ⇧⌘H, escribir `alf` e Intro: pega `echo alfa` sin mandar Intro a la shell | ✓ | `fase8-historial-de-pegado.png` |
+| ⇧⌘H y Escape: cierra sin mandar `^[` a la shell | ✓ | — |
+
+**No probado:** las flechas dentro del historial; el estado activado de Undo
+Close y Open Paste History en el menú global (BK-018); deshacer una pestaña
+cerrada desde el aviso «Close?».
+
+**Difiere de iTerm2:**
+
+- Un panel cerrado vuelve como pestaña nueva, no a su sitio en la división.
+- Solo se puede deshacer el último cierre, y el plazo de cinco segundos no se
+  puede cambiar.
+- Cerrar la última pestaña cierra la ventana y no se puede deshacer (un
+  proceso por ventana, BK-001).
+- El historial vive en la ventana: no se comparte entre ventanas, no se
+  guarda en disco y no muestra cuándo se copió cada entrada. Guarda los 20
+  textos más recientes.

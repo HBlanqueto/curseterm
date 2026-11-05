@@ -11,6 +11,16 @@ pub struct Tab {
     pub zoomed: bool,
 }
 
+impl Tab {
+    pub fn single(id: SessionId) -> Self {
+        Self {
+            root: Pane::Leaf(id),
+            active: id,
+            zoomed: false,
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct Workspace {
     pub tabs: Vec<Tab>,
@@ -77,11 +87,11 @@ impl Workspace {
     }
 
     pub fn open_tab(&mut self, id: SessionId) {
-        self.tabs.push(Tab {
-            root: Pane::Leaf(id),
-            active: id,
-            zoomed: false,
-        });
+        self.restore(Tab::single(id));
+    }
+
+    pub fn restore(&mut self, tab: Tab) {
+        self.tabs.push(tab);
         self.active = self.tabs.len() - 1;
     }
 

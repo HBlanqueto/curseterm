@@ -16,15 +16,17 @@ use barrier_kit::style::{Palette, text};
 use barrier_kit::symbol::Symbol;
 use barrier_kit::theme::color;
 use barrier_kit::titlebar::Titlebar;
-use barrier_kit::views::feedback::Alert;
+use barrier_kit::views::feedback::{Alert, sheet};
+use barrier_kit::views::table::Table;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
+use barrier_kit_next::tokens::PASTE_HISTORY_SIZE;
 use barrier_kit_next::views::split_panes::SplitPanes;
 use barrier_kit_next::views::tab_bar::{Badge, TabBar};
 use freya_clipboard::copypasta::ClipboardProvider;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Size};
 
-use vow_design::{CAPTION, DURATION_FAST_MS, DURATION_SLOW_MS, SPACE_1};
+use vow_design::{CAPTION, DURATION_FAST_MS, DURATION_SLOW_MS, HEADLINE, SPACE_1, SPACE_2};
 
 use crate::config::{
     APP_ID, APP_NAME, AltKey, ClosePrompt, Defaults, Profile, SessionEnd, WorkingDirectory,
@@ -36,13 +38,15 @@ use crate::localize::tr;
 use crate::menu;
 use crate::pane_view::TerminalPane;
 use crate::panes::{Axis, Pane, Toward};
+use crate::paste_history;
 use crate::session::{GridSize, Launch, Listener, MarkJump, Session, SessionId};
 use crate::windows;
-use crate::workspace::{Broadcast, Closed, Workspace};
+use crate::workspace::{Broadcast, Closed, Tab, Workspace};
 
 const INITIAL_GRID: (u16, u16) = (80, 24);
 const QUICK_EXIT: Duration = Duration::from_secs(1);
 const DIVIDER_STEP: f32 = 0.05;
+const UNDO_CLOSE: Duration = Duration::from_secs(5);
 
 type Sessions = HashMap<SessionId, Rc<Session>>;
 type ClipboardState = State<Option<Box<dyn ClipboardProvider>>>;
@@ -65,6 +69,23 @@ struct Handles {
     find: Find,
     closing: State<Option<Closing>>,
     events: Rc<OnceCell<Events>>,
+    buried: State<Option<Buried>>,
+    pastes: State<Vec<String>>,
+    paste_history: PasteHistory,
+}
+
+struct Buried {
+    tab: Tab,
+    sessions: Vec<Rc<Session>>,
+    titles: Vec<(SessionId, String)>,
+    at: Instant,
+}
+
+#[derive(Clone, Copy)]
+struct PasteHistory {
+    open: State<bool>,
+    query: State<String>,
+    selected: State<usize>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -164,6 +185,13 @@ impl App for Terminal {
         let mut revision = use_state(|| 0u64);
         let broadcast = use_state(Broadcast::default);
         let closing = use_state(|| None::<Closing>);
+        let buried = use_state(|| None::<Buried>);
+        let pastes = use_state(Vec::<String>::new);
+        let paste_history = PasteHistory {
+            open: use_state(|| false),
+            query: use_state(String::new),
+            selected: use_state(|| 0),
+        };
         let find = Find {
             open: use_state(|| false),
             query: use_state(String::new),
@@ -184,6 +212,9 @@ impl App for Terminal {
             find,
             closing,
             events: Rc::default(),
+            buried,
+            pastes,
+            paste_history,
         });
         use_side_effect({
             let handles = handles.clone();
@@ -328,6 +359,8 @@ impl App for Terminal {
         let keyboard = handles.clone();
         let find_bar = (*find.open.read()).then(|| find_bar(&handles, revision));
         let alert = (*closing.read()).map(|pending| close_alert(&handles, pending));
+        let paste_sheet =
+            (*paste_history.open.read()).then(|| paste_history_sheet(&handles, revision));
         rect()
             .width(Size::fill())
             .height(Size::fill())
@@ -337,6 +370,13 @@ impl App for Terminal {
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
                 let data = event.data();
                 if keyboard.closing.peek().is_some() {
+                    return;
+                }
+                if *keyboard.paste_history.open.peek() {
+                    if data.key == Key::Named(NamedKey::Escape) {
+                        let mut open = keyboard.paste_history.open;
+                        open.set(false);
+                    }
                     return;
                 }
                 if *find.open.peek() && *find.focused.peek() {
@@ -351,7 +391,7 @@ impl App for Terminal {
                 if session.copy_mode() {
                     if let Some(command) = copy_command(&data.key, data.modifiers) {
                         if command == CopyCommand::Copy {
-                            copy(session, keyboard.clipboard);
+                            copy(&keyboard, session);
                         }
                         session.copy_mode_step(command);
                         *revision.write() += 1;
@@ -372,7 +412,7 @@ impl App for Terminal {
                             receiver.write(bytes.clone());
                         }
                     }
-                    KeyAction::Copy => copy(session, keyboard.clipboard),
+                    KeyAction::Copy => copy(&keyboard, session),
                     KeyAction::Paste => paste(&keyboard),
                     KeyAction::PageUp => session.scroll(Scroll::PageUp),
                     KeyAction::PageDown => session.scroll(Scroll::PageDown),
@@ -384,6 +424,7 @@ impl App for Terminal {
             .maybe_child(tab_bar)
             .maybe_child(find_bar)
             .maybe_child(alert)
+            .maybe_child(paste_sheet)
             .child(
                 rect()
                     .width(Size::fill())
@@ -496,6 +537,8 @@ fn use_live_menu(handles: &Handles) {
         .is_some_and(|session| session.has_scrollback());
     use_menu_enabled(menu::CLEAR_SCROLLBACK.id, scrollback);
     use_menu_enabled(menu::CLOSE_PANES.id, split);
+    use_menu_enabled(menu::UNDO_CLOSE.id, handles.buried.read().is_some());
+    use_menu_enabled(menu::PASTE_HISTORY.id, !handles.pastes.read().is_empty());
     use_menu_enabled(menu::MAXIMIZE_PANE, split);
     use_menu_checked(menu::MAXIMIZE_PANE, zoomed);
     use_menu_checked(menu::SHOW_TAB_BAR.id, handles.defaults.read().show_tab_bar);
@@ -532,10 +575,16 @@ fn use_profiles_menu(names: Vec<String>) {
     }
 }
 
-fn copy(session: &Session, clipboard: ClipboardState) {
+fn copy(handles: &Handles, session: &Session) {
     if let Some(text) = session.selected_text() {
-        set_clipboard(clipboard, text);
+        remember_paste(handles, text.clone());
+        set_clipboard(handles.clipboard, text);
     }
+}
+
+fn remember_paste(handles: &Handles, text: String) {
+    let mut pastes = handles.pastes;
+    paste_history::remember(&mut pastes.write(), text);
 }
 
 fn set_clipboard(mut clipboard: ClipboardState, text: String) {
@@ -554,12 +603,78 @@ fn clipboard_text(mut clipboard: ClipboardState) -> Option<String> {
 
 fn paste(handles: &Handles) {
     match clipboard_text(handles.clipboard) {
-        Some(text) => handles
-            .receivers()
-            .iter()
-            .for_each(|session| session.paste(&text)),
+        Some(text) => paste_text(handles, text),
         None => tracing::warn!("could not read the clipboard"),
     }
+}
+
+fn paste_text(handles: &Handles, text: String) {
+    for session in handles.receivers() {
+        session.paste(&text);
+    }
+    remember_paste(handles, text);
+}
+
+fn paste_history_sheet(handles: &Handles, mut revision: State<u64>) -> Element {
+    let history = handles.paste_history;
+    let entries = paste_history::matching(&handles.pastes.read(), &history.query.read());
+    let selected = (*history.selected.read()).min(entries.len().saturating_sub(1));
+    let rows = entries
+        .iter()
+        .map(|entry| vec![paste_history::one_line(entry)])
+        .collect();
+    let (chosen, navigate) = (handles.clone(), entries.clone());
+    let palette = Palette::current();
+    let (width, height) = PASTE_HISTORY_SIZE;
+    sheet(
+        rect()
+            .width(Size::px(width as f32))
+            .height(Size::px(height as f32))
+            .direction(Direction::Vertical)
+            .content(Content::flex())
+            .spacing(SPACE_2)
+            .child(text(tr!("paste-history"), HEADLINE, palette.label))
+            .child(
+                SearchField::new(history.query, tr!("paste-history-filter"))
+                    .auto_focus(true)
+                    .on_navigate(move |key| {
+                        let mut selected = history.selected;
+                        match key {
+                            NamedKey::ArrowDown => selected
+                                .set((*selected.peek() + 1).min(navigate.len().saturating_sub(1))),
+                            NamedKey::ArrowUp => selected.set(selected.peek().saturating_sub(1)),
+                            _ => {
+                                if let Some(text) = navigate.get(*selected.peek()).cloned() {
+                                    paste_later(&chosen, text);
+                                }
+                            }
+                        }
+                        *revision.write() += 1;
+                    }),
+            )
+            .child(
+                rect().width(Size::fill()).height(Size::flex(1.0)).child(
+                    Table::new(tr!("paste-history"), vec![tr!("paste-history-text")])
+                        .rows(rows)
+                        .selected((!entries.is_empty()).then_some(selected))
+                        .on_select(move |index: usize| {
+                            let mut selected = history.selected;
+                            selected.set(index);
+                        }),
+                ),
+            ),
+    )
+    .into_element()
+}
+
+// BK-027: Enter also reaches the global handler, so the sheet closes one loop later.
+fn paste_later(handles: &Handles, text: String) {
+    let handles_later = handles.clone();
+    handles.timers.after(Duration::ZERO, move || {
+        let mut open = handles_later.paste_history.open;
+        open.set(false);
+        paste_text(&handles_later, text.clone());
+    });
 }
 
 fn find_bar(handles: &Handles, mut revision: State<u64>) -> Element {
@@ -784,16 +899,77 @@ fn request_close(handles: &Handles, closing: Closing) {
 }
 
 fn close_now(handles: &Handles, closing: Closing) {
-    match closing {
-        Closing::Session(id) => close_session(handles, id),
-        Closing::TabOf(id) => {
-            let index = handles.workspace.peek().tab_of(id);
-            if let Some(index) = index {
-                close_tab(handles, index);
-            }
+    let workspace = handles.workspace.peek();
+    let index = match closing {
+        Closing::Session(id) | Closing::TabOf(id) => workspace.tab_of(id),
+        Closing::Window => None,
+    };
+    let tab = index.map(|index| workspace.tabs[index].clone());
+    drop(workspace);
+    match (closing, tab, index) {
+        (Closing::Session(id), Some(tab), _) => {
+            bury(
+                handles,
+                if tab.root.is_split() {
+                    Tab::single(id)
+                } else {
+                    tab
+                },
+            );
+            close_session(handles, id);
         }
-        Closing::Window => handles.controls.close(),
+        (Closing::TabOf(_), Some(tab), Some(index)) => {
+            bury(handles, tab);
+            close_tab(handles, index);
+        }
+        (Closing::Window, ..) => handles.controls.close(),
+        _ => {}
     }
+}
+
+fn bury(handles: &Handles, tab: Tab) {
+    let ids = tab.root.leaves();
+    let sessions = ids
+        .iter()
+        .filter_map(|id| handles.sessions.peek().get(id).cloned())
+        .collect();
+    let workspace = handles.workspace.peek();
+    let titles = ids
+        .iter()
+        .map(|id| (*id, workspace.title(*id).to_string()))
+        .collect();
+    drop(workspace);
+    let at = Instant::now();
+    let mut buried = handles.buried;
+    buried.set(Some(Buried {
+        tab,
+        sessions,
+        titles,
+        at,
+    }));
+    handles.timers.after(UNDO_CLOSE, move || {
+        if buried.peek().as_ref().is_some_and(|buried| buried.at == at) {
+            let mut buried = buried;
+            buried.set(None);
+        }
+    });
+}
+
+fn undo_close(handles: &Handles) {
+    let mut buried = handles.buried;
+    let Some(buried) = buried.write().take() else {
+        return;
+    };
+    let mut sessions = handles.sessions;
+    for session in buried.sessions {
+        sessions.write().insert(session.id, session);
+    }
+    let mut workspace = handles.workspace;
+    let mut workspace = workspace.write();
+    for (id, title) in buried.titles {
+        workspace.set_title(id, Some(title));
+    }
+    workspace.restore(buried.tab);
 }
 
 // BK-027: the Alert's key also reaches the global handler, so the alert goes one loop later.
@@ -889,6 +1065,15 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             }
         }
         _ if id == menu::CLOSE_WINDOW.id => request_close(handles, Closing::Window),
+        _ if id == menu::UNDO_CLOSE.id => undo_close(handles),
+        _ if id == menu::PASTE_HISTORY.id => {
+            let history = handles.paste_history;
+            let (mut open, mut query, mut selected) =
+                (history.open, history.query, history.selected);
+            query.set(String::new());
+            selected.set(0);
+            open.set(true);
+        }
         _ if id == menu::CLOSE_PANES.id => {
             if let Some(session) = active {
                 request_close(handles, Closing::TabOf(session.id));
@@ -896,7 +1081,7 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         }
         _ if id == menu::COPY.id => {
             if let Some(session) = &active {
-                copy(session, handles.clipboard);
+                copy(handles, session);
             }
         }
         _ if id == menu::PASTE.id => paste(handles),

@@ -552,3 +552,35 @@ last command's output after a resize that reflows the lines.
    `SearchField` that filters and a `Table` with the entries: the arrows
    choose, Enter pastes and Escape closes.
 3. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-05)
+
+Tested on headless sway. `./dev.sh check` clean in both kit modes; 30 app
+tests and 1 block test. The history sheet reuses the kit's `sheet`,
+`SearchField` and `Table`; no new gap was needed, and Enter defers the close
+like the close alert (BK-027).
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| New tab, `X=vivo`, Super+W and ⇧⌘T: the tab comes back and `echo $X` prints `vivo` | ✓ | `fase8-deshacer-cierre.png` |
+| Super+W and a six-second wait: the closed shell ends and ⇧⌘T does nothing | ✓ | — |
+| Split pane with `Y=panel`, Super+W and ⇧⌘T: it comes back as a new tab and `echo $Y` prints `panel` | ✓ | — |
+| Paste `echo alfa` and `echo beta`, ⇧⌘H, type `alf` and Enter: pastes `echo alfa` without sending Enter to the shell | ✓ | `fase8-historial-de-pegado.png` |
+| ⇧⌘H and Escape: closes without sending `^[` to the shell | ✓ | — |
+
+**Not tested:** the arrows inside the history; the enabled state of Undo
+Close and Open Paste History in the global menu (BK-018); undoing a tab
+closed from the "Close?" alert.
+
+**Differs from iTerm2:**
+
+- A closed pane comes back as a new tab, not in its place in the split.
+- Only the last close can be undone, and the five-second window cannot be
+  changed.
+- Closing the last tab closes the window and cannot be undone (one process
+  per window, BK-001).
+- The history lives in the window: it is not shared between windows, not
+  saved to disk, and does not show when each entry was copied. It keeps the
+  20 most recent texts.
