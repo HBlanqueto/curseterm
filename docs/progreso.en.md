@@ -914,3 +914,18 @@ only shows and changes the mode.
 - Terminal State has no "Standard Key Reporting", "Literal mode" nor a reset
   of the whole state.
 - Help opens the repository; there is no built-in manual.
+
+## Phase 17 — Mouse and focus for programs
+
+### Plan
+
+1. **Mouse reporting:** when the program asks for it (modes 1000, 1002 and
+   1003), clicks, drags, motion and the wheel reach it as sequences, in the
+   classic format or in SGR (1006) when asked. With Shift held, the mouse
+   selects text again, as in iTerm2.
+2. **Modifiers:** the window tracks Shift, Ctrl and Alt like Super (BK-030),
+   for the Shift bypass and to add them to the report.
+3. **Focus reporting (1004):** when the window gains or loses focus, the
+   active session gets `CSI I` or `CSI O`.
+4. **Test** on headless sway with a reader that shows what arrives, and
+   documentation in both languages.

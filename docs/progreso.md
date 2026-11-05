@@ -915,3 +915,18 @@ solo muestra y cambia el modo.
 - Terminal State no tiene «Standard Key Reporting», «Literal mode» ni el
   restablecimiento de todo el estado.
 - La ayuda abre el repositorio; no hay manual integrado.
+
+## Fase 17 — Ratón y foco para las aplicaciones
+
+### Plan
+
+1. **Informe del ratón:** si el programa lo pide (modos 1000, 1002 y 1003),
+   los clics, el arrastre, el movimiento y la rueda le llegan como
+   secuencias, en el formato clásico o en SGR (1006) si lo pide. Con Mayús
+   pulsada, el ratón vuelve a seleccionar texto, como en iTerm2.
+2. **Modificadores:** la ventana sigue Mayús, Ctrl y Alt igual que Super
+   (BK-030), para el salto con Mayús y para añadirlos al informe.
+3. **Informe del foco (1004):** al ganar o perder el foco la ventana, la
+   sesión activa recibe `CSI I` o `CSI O`.
+4. **Prueba** en sway sin pantalla con un lector que muestra lo que llega, y
+   documentación en los dos idiomas.
