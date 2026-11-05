@@ -2,7 +2,7 @@
 
 BarrierKit version/commit used: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Summary: living document; state at the close of phase 8 (2026-11-05), tested on
+Summary: living document; state at the close of phase 9 (2026-11-05), tested on
 headless sway with lavapipe (`progreso.en.md`). The most serious: the
 `use_menu_action` handlers run outside Freya's context and abort the app if
 they touch the clipboard or `WindowControls::get()` (BK-017); the menu is only
@@ -58,6 +58,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-026 | app / platform | No bell, attention request or notifications | low | Tested workaround: visual bell |
 | BK-027 | controls / input | A view with global keyboard does not know whether a text field or an `Alert` keeps the key | low | Tested workaround: tracked focus and deferred `Alert` dismissal |
 | BK-028 | controls | `SegmentedControl` labels wrap onto two lines | low | Workaround: Settings at 980 px |
+| BK-029 | controls | `TextField` cannot take the focus when it opens | medium | Patch 0006 tested |
 
 ## Gaps
 
@@ -611,6 +612,23 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Proposed kit API**: `label().max_lines(1)` in the segment and widths by content.
 - **Severity**: low
 - **How to reproduce**: CurseTerm Settings with `SETTINGS_WINDOW_SIZE` at 860 × 560, Profiles.
+
+### BK-029 — `TextField` cannot take the focus when it opens
+- **Area**: controls
+- **What CurseTerm needed**: Window › Edit Tab Title and Edit Window Title,
+  a sheet with a single field that takes typing as soon as it opens.
+- **What BarrierKit offers today**: `SearchField::auto_focus`, but
+  `TextField` (`controls.rs:805`) does not pass `auto_focus` to its `Input`.
+- **What is missing**: `TextField::auto_focus(bool)`, as in `SearchField`.
+- **How CurseTerm solves it**: the patch
+  [`kit-parches/0006-textfield-auto-focus.patch`](../kit-parches/0006-textfield-auto-focus.patch)
+  adds the method and its documentation. With the kit as is, the field only
+  takes the focus on a click.
+- **Workaround cost**: without the patch, whatever is typed before the
+  click is lost.
+- **Proposed kit API**: `TextField::auto_focus(bool)`.
+- **Severity**: medium
+- **How to reproduce**: Window › Edit Tab Title with `./dev.sh kit-tal-cual` and type without clicking.
 
 ## Things that worked well
 

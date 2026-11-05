@@ -52,48 +52,61 @@ pub enum CopyCommand {
     Exit,
 }
 
-pub fn copy_command(key: &Key, modifiers: Modifiers) -> Option<CopyCommand> {
+pub const COPY_KEYS: [(&str, CopyCommand); 30] = {
     use CopyCommand::*;
     use ViMotion::*;
-    let command = match key {
-        Key::Named(NamedKey::Escape) => Exit,
-        Key::Named(NamedKey::ArrowLeft) => Move(Left),
-        Key::Named(NamedKey::ArrowDown) => Move(Down),
-        Key::Named(NamedKey::ArrowUp) => Move(Up),
-        Key::Named(NamedKey::ArrowRight) => Move(Right),
-        Key::Character(text) if modifiers.contains(Modifiers::CONTROL) => match text.as_str() {
-            "b" => PageUp,
-            "f" => PageDown,
-            _ => return None,
-        },
-        Key::Character(text) => match text.as_str() {
-            "h" => Move(Left),
-            "j" => Move(Down),
-            "k" => Move(Up),
-            "l" => Move(Right),
-            "w" => Move(SemanticRight),
-            "b" => Move(SemanticLeft),
-            "e" => Move(SemanticRightEnd),
-            "W" => Move(WordRight),
-            "B" => Move(WordLeft),
-            "E" => Move(WordRightEnd),
-            "0" => Move(First),
-            "^" => Move(FirstOccupied),
-            "$" => Move(Last),
-            "H" => Move(High),
-            "M" => Move(Middle),
-            "L" => Move(Low),
-            "g" => Top,
-            "G" => Bottom,
-            "v" | " " => Select(SelectionType::Simple),
-            "V" => Select(SelectionType::Lines),
-            "y" => Copy,
-            "q" => Exit,
-            _ => return None,
-        },
+    [
+        ("h", Move(Left)),
+        ("←", Move(Left)),
+        ("j", Move(Down)),
+        ("↓", Move(Down)),
+        ("k", Move(Up)),
+        ("↑", Move(Up)),
+        ("l", Move(Right)),
+        ("→", Move(Right)),
+        ("w", Move(SemanticRight)),
+        ("b", Move(SemanticLeft)),
+        ("e", Move(SemanticRightEnd)),
+        ("W", Move(WordRight)),
+        ("B", Move(WordLeft)),
+        ("E", Move(WordRightEnd)),
+        ("0", Move(First)),
+        ("^", Move(FirstOccupied)),
+        ("$", Move(Last)),
+        ("H", Move(High)),
+        ("M", Move(Middle)),
+        ("L", Move(Low)),
+        ("g", Top),
+        ("G", Bottom),
+        ("Ctrl+B", PageUp),
+        ("Ctrl+F", PageDown),
+        ("v", Select(SelectionType::Simple)),
+        ("Space", Select(SelectionType::Simple)),
+        ("V", Select(SelectionType::Lines)),
+        ("y", Copy),
+        ("Escape", Exit),
+        ("q", Exit),
+    ]
+};
+
+pub fn copy_command(key: &Key, modifiers: Modifiers) -> Option<CopyCommand> {
+    let name = match key {
+        Key::Named(NamedKey::Escape) => "Escape".to_string(),
+        Key::Named(NamedKey::ArrowLeft) => "←".to_string(),
+        Key::Named(NamedKey::ArrowDown) => "↓".to_string(),
+        Key::Named(NamedKey::ArrowUp) => "↑".to_string(),
+        Key::Named(NamedKey::ArrowRight) => "→".to_string(),
+        Key::Character(text) if modifiers.contains(Modifiers::CONTROL) => {
+            format!("Ctrl+{}", text.to_uppercase())
+        }
+        Key::Character(text) if text == " " => "Space".to_string(),
+        Key::Character(text) => text.to_string(),
         _ => return None,
     };
-    Some(command)
+    COPY_KEYS
+        .iter()
+        .find(|(key, _)| *key == name)
+        .map(|(_, command)| *command)
 }
 
 fn modifier_param(modifiers: Modifiers) -> u8 {

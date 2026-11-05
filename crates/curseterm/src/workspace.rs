@@ -9,6 +9,7 @@ pub struct Tab {
     pub root: Pane,
     pub active: SessionId,
     pub zoomed: bool,
+    pub title: Option<String>,
 }
 
 impl Tab {
@@ -17,6 +18,7 @@ impl Tab {
             root: Pane::Leaf(id),
             active: id,
             zoomed: false,
+            title: None,
         }
     }
 }
@@ -25,6 +27,7 @@ impl Tab {
 pub struct Workspace {
     pub tabs: Vec<Tab>,
     pub active: usize,
+    pub window_title: Option<String>,
     titles: HashMap<SessionId, String>,
     bells: HashSet<SessionId>,
 }
@@ -82,8 +85,32 @@ impl Workspace {
     pub fn tab_titles(&self) -> Vec<String> {
         self.tabs
             .iter()
-            .map(|tab| self.title(tab.active).to_string())
+            .map(|tab| self.tab_title(tab).to_string())
             .collect()
+    }
+
+    fn tab_title<'a>(&'a self, tab: &'a Tab) -> &'a str {
+        tab.title
+            .as_deref()
+            .unwrap_or_else(|| self.title(tab.active))
+    }
+
+    pub fn window_title(&self) -> &str {
+        match (&self.window_title, self.active_tab()) {
+            (Some(title), _) => title,
+            (None, Some(tab)) => self.tab_title(tab),
+            (None, None) => APP_NAME,
+        }
+    }
+
+    pub fn rename_tab(&mut self, of: SessionId, title: &str) {
+        if let Some(index) = self.tab_of(of) {
+            self.tabs[index].title = typed_title(title);
+        }
+    }
+
+    pub fn rename_window(&mut self, title: &str) {
+        self.window_title = typed_title(title);
     }
 
     pub fn open_tab(&mut self, id: SessionId) {
@@ -246,6 +273,11 @@ impl Workspace {
     }
 }
 
+fn typed_title(title: &str) -> Option<String> {
+    let title = title.trim();
+    (!title.is_empty()).then(|| title.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,5 +331,20 @@ mod tests {
         assert_eq!(workspace.active_session(), Some(3));
         workspace.step_tab(-1);
         assert_eq!(workspace.active, 2);
+    }
+
+    #[test]
+    fn a_typed_title_wins_over_the_shell_and_a_blank_one_gives_it_back() {
+        let mut workspace = Workspace::default();
+        workspace.open_tab(1);
+        workspace.set_title(1, Some("vim".to_string()));
+        workspace.rename_tab(1, " notas ");
+        assert_eq!(workspace.tab_titles(), vec!["notas".to_string()]);
+        assert_eq!(workspace.window_title(), "notas");
+        workspace.rename_window("proyecto");
+        assert_eq!(workspace.window_title(), "proyecto");
+        workspace.rename_tab(1, "  ");
+        workspace.rename_window("");
+        assert_eq!(workspace.window_title(), "vim");
     }
 }

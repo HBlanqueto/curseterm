@@ -10,7 +10,7 @@ use alacritty_terminal::grid::Scroll;
 use alacritty_terminal::index::Direction as SearchDirection;
 use barrier_kit::app::use_menu_action;
 use barrier_kit::app_menu::MenuHandle;
-use barrier_kit::controls::{Button, SearchField};
+use barrier_kit::controls::{Button, ButtonStyle, SearchField, TextField};
 use barrier_kit::platform::{Timers, WakeHandle, WindowControls};
 use barrier_kit::style::{Palette, text};
 use barrier_kit::symbol::Symbol;
@@ -19,7 +19,7 @@ use barrier_kit::titlebar::Titlebar;
 use barrier_kit::views::feedback::{Alert, sheet};
 use barrier_kit::views::table::Table;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
-use barrier_kit_next::tokens::PASTE_HISTORY_SIZE;
+use barrier_kit_next::tokens::{PASTE_HISTORY_SIZE, RENAME_WIDTH};
 use barrier_kit_next::views::split_panes::SplitPanes;
 use barrier_kit_next::views::tab_bar::{Badge, TabBar};
 use freya_clipboard::copypasta::ClipboardProvider;
@@ -29,11 +29,10 @@ use torin::prelude::{Alignment, Content, Direction, Size};
 use vow_design::{CAPTION, DURATION_FAST_MS, DURATION_SLOW_MS, HEADLINE, SPACE_1, SPACE_2};
 
 use crate::config::{
-    APP_ID, APP_NAME, AltKey, ClosePrompt, Defaults, Profile, SessionEnd, WorkingDirectory,
-    change_defaults,
+    APP_ID, AltKey, ClosePrompt, Defaults, Profile, SessionEnd, WorkingDirectory, change_defaults,
 };
 use crate::grid::Fonts;
-use crate::keys::{CopyCommand, KeyAction, copy_command, encode};
+use crate::keys::{COPY_KEYS, CopyCommand, KeyAction, copy_command, encode};
 use crate::localize::tr;
 use crate::menu;
 use crate::pane_view::TerminalPane;
@@ -72,6 +71,16 @@ struct Handles {
     buried: State<Option<Buried>>,
     pastes: State<Vec<String>>,
     paste_history: PasteHistory,
+    sheet: State<Option<Sheet>>,
+    draft: State<String>,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Sheet {
+    PasteHistory,
+    RenameTab(SessionId),
+    RenameWindow,
+    CopyModeKeys,
 }
 
 struct Buried {
@@ -83,7 +92,6 @@ struct Buried {
 
 #[derive(Clone, Copy)]
 struct PasteHistory {
-    open: State<bool>,
     query: State<String>,
     selected: State<usize>,
 }
@@ -187,8 +195,9 @@ impl App for Terminal {
         let closing = use_state(|| None::<Closing>);
         let buried = use_state(|| None::<Buried>);
         let pastes = use_state(Vec::<String>::new);
+        let sheet = use_state(|| None::<Sheet>);
+        let draft = use_state(String::new);
         let paste_history = PasteHistory {
-            open: use_state(|| false),
             query: use_state(String::new),
             selected: use_state(|| 0),
         };
@@ -215,6 +224,8 @@ impl App for Terminal {
             buried,
             pastes,
             paste_history,
+            sheet,
+            draft,
         });
         use_side_effect({
             let handles = handles.clone();
@@ -280,10 +291,7 @@ impl App for Terminal {
         let window_focused = handles.controls.status.read().activated;
         let palette = Palette::current();
         let state = workspace.read();
-        let title = state
-            .active_session()
-            .map_or(APP_NAME, |id| state.title(id))
-            .to_string();
+        let title = state.window_title().to_string();
         let show_tab_bar = defaults.read().show_tab_bar;
         let tab_bar = (state.tabs.len() > 1 || show_tab_bar).then(|| {
             let (on_close, on_add) = (handles.clone(), handles.clone());
@@ -359,8 +367,11 @@ impl App for Terminal {
         let keyboard = handles.clone();
         let find_bar = (*find.open.read()).then(|| find_bar(&handles, revision));
         let alert = (*closing.read()).map(|pending| close_alert(&handles, pending));
-        let paste_sheet =
-            (*paste_history.open.read()).then(|| paste_history_sheet(&handles, revision));
+        let sheet_view = (*sheet.read()).map(|open| match open {
+            Sheet::PasteHistory => paste_history_sheet(&handles, revision),
+            Sheet::RenameTab(_) | Sheet::RenameWindow => rename_sheet(&handles, open),
+            Sheet::CopyModeKeys => copy_mode_keys_sheet(&handles),
+        });
         rect()
             .width(Size::fill())
             .height(Size::fill())
@@ -372,10 +383,10 @@ impl App for Terminal {
                 if keyboard.closing.peek().is_some() {
                     return;
                 }
-                if *keyboard.paste_history.open.peek() {
+                if keyboard.sheet.peek().is_some() {
                     if data.key == Key::Named(NamedKey::Escape) {
-                        let mut open = keyboard.paste_history.open;
-                        open.set(false);
+                        let mut sheet = keyboard.sheet;
+                        sheet.set(None);
                     }
                     return;
                 }
@@ -424,7 +435,7 @@ impl App for Terminal {
             .maybe_child(tab_bar)
             .maybe_child(find_bar)
             .maybe_child(alert)
-            .maybe_child(paste_sheet)
+            .maybe_child(sheet_view)
             .child(
                 rect()
                     .width(Size::fill())
@@ -671,10 +682,153 @@ fn paste_history_sheet(handles: &Handles, mut revision: State<u64>) -> Element {
 fn paste_later(handles: &Handles, text: String) {
     let handles_later = handles.clone();
     handles.timers.after(Duration::ZERO, move || {
-        let mut open = handles_later.paste_history.open;
-        open.set(false);
+        let mut sheet = handles_later.sheet;
+        sheet.set(None);
         paste_text(&handles_later, text.clone());
     });
+}
+
+fn open_sheet(handles: &Handles, open: Sheet) {
+    let mut sheet = handles.sheet;
+    sheet.set(Some(open));
+}
+
+fn rename_sheet(handles: &Handles, target: Sheet) -> Element {
+    let heading = match target {
+        Sheet::RenameTab(_) => tr!("edit-tab-title"),
+        _ => tr!("edit-window-title"),
+    };
+    let (enter, confirm) = (handles.clone(), handles.clone());
+    let mut shown = handles.sheet;
+    sheet(
+        rect()
+            .width(Size::px(RENAME_WIDTH))
+            .direction(Direction::Vertical)
+            .spacing(SPACE_2)
+            .on_global_key_down(move |event: Event<KeyboardEventData>| {
+                if event.key == Key::Named(NamedKey::Enter) {
+                    rename_later(&enter, target);
+                }
+            })
+            .child(text(heading, HEADLINE, Palette::current().label))
+            .child(rename_field(handles.draft))
+            .child(
+                rect()
+                    .width(Size::fill())
+                    .direction(Direction::Horizontal)
+                    .main_align(Alignment::End)
+                    .spacing(SPACE_2)
+                    .child(Button::new(tr!("close-cancel")).on_press(move |_| shown.set(None)))
+                    .child(
+                        Button::new(tr!("rename-confirm"))
+                            .style(ButtonStyle::Primary)
+                            .on_press(move |_| rename_later(&confirm, target)),
+                    ),
+            ),
+    )
+    .into_element()
+}
+
+#[cfg(feature = "kit-parcheado")]
+fn rename_field(draft: State<String>) -> TextField {
+    TextField::new(draft, tr!("title-automatic")).auto_focus(true)
+}
+
+// BK-029: without patch 0006 the field only takes the focus when clicked.
+#[cfg(not(feature = "kit-parcheado"))]
+fn rename_field(draft: State<String>) -> TextField {
+    TextField::new(draft, tr!("title-automatic"))
+}
+
+// BK-027: Enter also reaches the global handler, so the sheet closes one loop later.
+fn rename_later(handles: &Handles, target: Sheet) {
+    let later = handles.clone();
+    handles.timers.after(Duration::ZERO, move || {
+        let title = later.draft.peek().clone();
+        let mut workspace = later.workspace;
+        match target {
+            Sheet::RenameTab(of) => workspace.write().rename_tab(of, &title),
+            _ => workspace.write().rename_window(&title),
+        }
+        let mut sheet = later.sheet;
+        sheet.set(None);
+    });
+}
+
+fn copy_mode_keys_sheet(handles: &Handles) -> Element {
+    let rows = COPY_KEYS
+        .iter()
+        .map(|(key, command)| vec![key.to_string(), copy_command_label(*command).to_string()])
+        .collect();
+    let mut shown = handles.sheet;
+    let (width, height) = PASTE_HISTORY_SIZE;
+    sheet(
+        rect()
+            .width(Size::px(width as f32))
+            .height(Size::px(height as f32))
+            .direction(Direction::Vertical)
+            .content(Content::flex())
+            .spacing(SPACE_2)
+            .child(text(
+                tr!("copy-mode-keys"),
+                HEADLINE,
+                Palette::current().label,
+            ))
+            .child(
+                rect().width(Size::fill()).height(Size::flex(1.0)).child(
+                    Table::new(
+                        tr!("copy-mode-keys"),
+                        vec![tr!("copy-mode-key"), tr!("copy-mode-action")],
+                    )
+                    .rows(rows),
+                ),
+            )
+            .child(
+                rect()
+                    .width(Size::fill())
+                    .direction(Direction::Horizontal)
+                    .main_align(Alignment::End)
+                    .child(
+                        Button::new(tr!("done"))
+                            .style(ButtonStyle::Primary)
+                            .on_press(move |_| shown.set(None)),
+                    ),
+            ),
+    )
+    .into_element()
+}
+
+fn copy_command_label(command: CopyCommand) -> &'static str {
+    use alacritty_terminal::vi_mode::ViMotion::*;
+    match command {
+        CopyCommand::Move(Left) => tr!("copy-left"),
+        CopyCommand::Move(Down) => tr!("copy-down"),
+        CopyCommand::Move(Up) => tr!("copy-up"),
+        CopyCommand::Move(Right) => tr!("copy-right"),
+        CopyCommand::Move(SemanticRight) => tr!("copy-next-word"),
+        CopyCommand::Move(SemanticLeft) => tr!("copy-previous-word"),
+        CopyCommand::Move(SemanticRightEnd) => tr!("copy-word-end"),
+        CopyCommand::Move(WordRight) => tr!("copy-next-big-word"),
+        CopyCommand::Move(WordLeft) => tr!("copy-previous-big-word"),
+        CopyCommand::Move(WordRightEnd) => tr!("copy-big-word-end"),
+        CopyCommand::Move(First) => tr!("copy-line-start"),
+        CopyCommand::Move(FirstOccupied) => tr!("copy-first-character"),
+        CopyCommand::Move(Last) => tr!("copy-line-end"),
+        CopyCommand::Move(High) => tr!("copy-screen-top"),
+        CopyCommand::Move(Middle) => tr!("copy-screen-middle"),
+        CopyCommand::Move(Low) => tr!("copy-screen-bottom"),
+        CopyCommand::Move(_) => tr!("copy-move"),
+        CopyCommand::Top => tr!("copy-buffer-start"),
+        CopyCommand::Bottom => tr!("copy-buffer-end"),
+        CopyCommand::PageUp => tr!("copy-page-up"),
+        CopyCommand::PageDown => tr!("copy-page-down"),
+        CopyCommand::Select(alacritty_terminal::selection::SelectionType::Lines) => {
+            tr!("copy-select-lines")
+        }
+        CopyCommand::Select(_) => tr!("copy-select-characters"),
+        CopyCommand::Copy => tr!("copy-and-leave"),
+        CopyCommand::Exit => tr!("copy-leave"),
+    }
 }
 
 fn find_bar(handles: &Handles, mut revision: State<u64>) -> Element {
@@ -1068,12 +1222,29 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         _ if id == menu::UNDO_CLOSE.id => undo_close(handles),
         _ if id == menu::PASTE_HISTORY.id => {
             let history = handles.paste_history;
-            let (mut open, mut query, mut selected) =
-                (history.open, history.query, history.selected);
+            let (mut query, mut selected) = (history.query, history.selected);
             query.set(String::new());
             selected.set(0);
-            open.set(true);
+            open_sheet(handles, Sheet::PasteHistory);
         }
+        _ if id == menu::EDIT_TAB_TITLE.id => {
+            if let Some(session) = active {
+                let workspace = handles.workspace.peek();
+                let title = workspace
+                    .tab_of(session.id)
+                    .and_then(|index| workspace.tabs[index].title.clone())
+                    .unwrap_or_default();
+                drop(workspace);
+                handles.draft.clone().set(title);
+                open_sheet(handles, Sheet::RenameTab(session.id));
+            }
+        }
+        _ if id == menu::EDIT_WINDOW_TITLE.id => {
+            let title = handles.workspace.peek().window_title.clone();
+            handles.draft.clone().set(title.unwrap_or_default());
+            open_sheet(handles, Sheet::RenameWindow);
+        }
+        _ if id == menu::COPY_MODE_KEYS.id => open_sheet(handles, Sheet::CopyModeKeys),
         _ if id == menu::CLOSE_PANES.id => {
             if let Some(session) = active {
                 request_close(handles, Closing::TabOf(session.id));

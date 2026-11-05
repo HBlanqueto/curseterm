@@ -596,3 +596,37 @@ closed from the "Close?" alert.
    actions. The table comes from the same list copy mode uses, so they
    cannot drift apart.
 3. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-05)
+
+Tested on headless sway with the patched kit, to trigger the items without a
+shortcut from the D-Bus menu (patch 0003). `./dev.sh check` clean in both kit
+modes; 31 app tests and 1 block test. One new gap: BK-029, `TextField`
+without `auto_focus`, solved with patch 0006.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Edit Tab Title, type `notas` and Enter: the tab is called "notas" and so is the window | ✓ with the field focused on open (patch 0006) | `fase9-editar-titulo.png` |
+| Edit Window Title, `proyecto` and Enter: the window is called "proyecto" and the tab stays "notas"; `echo sin-fugas` shows the Enter did not reach the shell | ✓ | — |
+| Edit Tab Title with an empty field: the tab goes back to "root@vm: ~" | ✓ | — |
+| Help › Copy Mode Shortcuts: table of keys and actions | ✓ | `fase9-atajos-modo-copia.png` |
+
+The D-Bus menu also closed pending tests from phases 7 and 8:
+
+| Test | Result |
+|---|---|
+| "Select Output of Last Command" disabled without integration and enabled after `echo hola` with integration | ✓ |
+| "Copy Mode" checked while the mode lasts | ✓ |
+| "Undo Close" enabled after closing a tab and disabled after five seconds | ✓ |
+| "Paste History" disabled at start and enabled after pasting | ✓ |
+
+**Not tested:** with the kit as is, the field without focus until clicked
+(BK-029); the "Cancel" and "Rename" buttons with the mouse.
+
+**Differs from iTerm2:**
+
+- The title does not accept variables such as `\(session.name)`; it is fixed
+  text.
+- Help has no online help and no open source licenses.

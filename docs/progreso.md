@@ -593,3 +593,36 @@ cerrada desde el aviso «Close?».
    acciones. La tabla sale de la misma lista que usa el modo copia, así que
    no puede desincronizarse.
 3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla con el kit parcheado, para disparar las entradas
+sin atajo desde el menú en D-Bus (parche 0003). `./dev.sh check` limpio en los
+dos modos del kit; 31 tests de la app y 1 del bloque. Un gap nuevo: BK-029,
+`TextField` sin `auto_focus`, resuelto con el parche 0006.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Edit Tab Title, escribir `notas` e Intro: la pestaña se llama «notas» y la ventana también | ✓ con el campo enfocado al abrir (parche 0006) | `fase9-editar-titulo.png` |
+| Edit Window Title, `proyecto` e Intro: la ventana se llama «proyecto» y la pestaña sigue «notas»; `echo sin-fugas` muestra que el Intro no llegó a la shell | ✓ | — |
+| Edit Tab Title con el campo vacío: la pestaña vuelve a «root@vm: ~» | ✓ | — |
+| Help › Copy Mode Shortcuts: tabla de teclas y acciones | ✓ | `fase9-atajos-modo-copia.png` |
+
+El menú en D-Bus también cerró pruebas pendientes de las fases 7 y 8:
+
+| Prueba | Resultado |
+|---|---|
+| «Select Output of Last Command» desactivada sin integración y activada tras `echo hola` con integración | ✓ |
+| «Copy Mode» marcada mientras dura el modo | ✓ |
+| «Undo Close» activada tras cerrar una pestaña y desactivada a los cinco segundos | ✓ |
+| «Paste History» desactivada al empezar y activada tras pegar | ✓ |
+
+**No probado:** con el kit tal cual, el campo sin foco hasta el clic
+(BK-029); los botones «Cancel» y «Rename» con el ratón.
+
+**Difiere de iTerm2:**
+
+- El título no admite variables como `\(session.name)`; es texto fijo.
+- Help no tiene la ayuda en línea ni las licencias de código abierto.

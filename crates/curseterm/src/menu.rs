@@ -97,6 +97,9 @@ pub const TEXT_NORMAL: Action =
 pub const TEXT_SMALLER: Action =
     Action::new("text-smaller", || tr!("text-smaller")).shortcut(super_key('-'));
 
+pub const EDIT_TAB_TITLE: Action = Action::new("edit-tab-title", || tr!("edit-tab-title"));
+pub const EDIT_WINDOW_TITLE: Action = Action::new("edit-window-title", || tr!("edit-window-title"));
+pub const COPY_MODE_KEYS: Action = Action::new("copy-mode-keys", || tr!("copy-mode-keys"));
 pub const MINIMIZE: Action = Action::new("minimize", || tr!("minimize")).shortcut(super_key('m'));
 pub const ZOOM: &str = "zoom";
 pub const TAB_MENU: &str = "tab-menu";
@@ -233,6 +236,9 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 MINIMIZE.item(true),
                 keyed(ZOOM, tr!("zoom"), "Super+Shift+)"),
                 MenuItem::Separator,
+                EDIT_WINDOW_TITLE.item(true),
+                EDIT_TAB_TITLE.item(true),
+                MenuItem::Separator,
                 submenu(
                     TAB_MENU,
                     tr!("tab-menu"),
@@ -250,6 +256,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 submenu(SPLIT_PANE, tr!("split-pane"), split_pane_items()),
             ],
         ),
+        Menu::new(tr!("menu-help"), vec![COPY_MODE_KEYS.item(true)]),
     ])
 }
 
