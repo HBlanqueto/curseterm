@@ -1027,3 +1027,20 @@ cuatro clics en una ruta fuera del test de `word_span`.
   la barra.
 - La selección inteligente usa dos reglas fijas (URL o palabra entre
   espacios); iTerm2 trae una lista de reglas editable por perfil.
+
+## Fase 20 — Varias ventanas en un proceso
+
+### Plan
+
+1. **Parche 0008:** `WindowControls::open_window(app, opciones)` abre otra
+   ventana en el mismo proceso (BK-001). El runner ya guardaba varias
+   ventanas y termina al cerrar la última.
+2. **Una sola descripción de cada ventana:** terminal, Ajustes y Acerca de
+   se describen una vez (`windows::describe`); `main` y las ventanas nuevas
+   la usan.
+3. **Con el parche:** New Window, las ventanas de perfil, Ajustes, Acerca de
+   y Edit Session se abren en el mismo proceso, y Quit cierra todas. Sin el
+   parche sigue un proceso por ventana.
+4. **Lo que gana la ventana compartida:** el historial de pegado es común a
+   todas las ventanas del proceso.
+5. **Prueba** en sway sin pantalla y documentación en los dos idiomas.

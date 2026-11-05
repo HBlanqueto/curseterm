@@ -1025,3 +1025,19 @@ indicator); four clicks on a path outside the `word_span` test.
   the bar.
 - Smart selection uses two fixed rules (URL or space-separated word); iTerm2
   ships a list of rules editable per profile.
+
+## Phase 20 — Several windows in one process
+
+### Plan
+
+1. **Patch 0008:** `WindowControls::open_window(app, options)` opens another
+   window in the same process (BK-001). The runner already kept several
+   windows and ends when the last one closes.
+2. **One description per window:** terminal, Settings and About are
+   described once (`windows::describe`); `main` and new windows use it.
+3. **With the patch:** New Window, profile windows, Settings, About and Edit
+   Session open in the same process, and Quit closes them all. Without the
+   patch it stays one process per window.
+4. **What sharing the process brings:** the paste history is common to all
+   the process's windows.
+5. **Test** on headless sway and documentation in both languages.
