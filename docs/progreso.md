@@ -503,3 +503,35 @@ y termina `sleep`; escribir en una sesión terminada no deja avisos; «13 of
 3. **View › Find Cursor (⌘/):** oscurece el panel salvo un círculo alrededor
    del cursor durante `DURATION_SLOW_MS`.
 4. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla con una integración mínima en bash: `PS0` emite
+OSC 133;C y `PROMPT_COMMAND` emite 133;D y 133;A. `./dev.sh check` limpio en
+los dos modos del kit; 28 tests de la app y 1 del bloque. Ninguna función
+nueva necesitó un gap del kit.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `seq 1 5`, `echo hola` y ⇧⌘A con ⌘C: el portapapeles tiene `hola` | ✓ | — |
+| ⇧⌘C, k k k, v, j y $: la selección va del cursor de copia al final de la línea; y copia y sale; la x siguiente llega a la shell | ✓ | `fase7-modo-copia.png` |
+| ⇧⌘C, g, V, j e y: copia las dos primeras líneas enteras | ✓ | — |
+| ⇧⌘C, k y Escape: sale sin escribir nada; la z siguiente llega a la shell | ✓ | — |
+| ⌘/: el panel se oscurece salvo un círculo en el cursor y vuelve a la normalidad tras `DURATION_SLOW_MS` | ✓ | `fase7-buscar-cursor.png` |
+
+**No probado:** la entrada «Copy Mode» marcada en el menú global y «Select
+Output of Last Command» desactivada sin integración (la prueba usó el kit tal
+cual, sin menú en D-Bus, BK-018); Ctrl+B y Ctrl+F en el modo copia; la
+salida del último comando tras un cambio de tamaño que reajusta las líneas.
+
+**Difiere de iTerm2:**
+
+- Copy Mode no tiene selección rectangular (Ctrl+V) ni búsqueda dentro del
+  modo, y sus atajos no se pueden cambiar.
+- Find Cursor es un círculo fijo que dura `DURATION_SLOW_MS`; iTerm2 anima el
+  foco y lo mantiene mientras se pulsa ⌘/.
+- La salida solo termina con OSC 133;D. El plan contaba también con el
+  siguiente prompt (133;A), pero 133;A y `SetMark` llegan como la misma marca;
+  una shell que no emite 133;D deja la entrada desactivada.

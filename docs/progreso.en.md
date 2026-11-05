@@ -506,3 +506,35 @@ pause.
 3. **View › Find Cursor (⌘/):** dims the pane except for a circle around the
    cursor for `DURATION_SLOW_MS`.
 4. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-05)
+
+Tested on headless sway with a minimal bash integration: `PS0` emits OSC
+133;C and `PROMPT_COMMAND` emits 133;D and 133;A. `./dev.sh check` clean in
+both kit modes; 28 app tests and 1 block test. No new feature needed a kit
+gap.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `seq 1 5`, `echo hola` and ⇧⌘A with ⌘C: the clipboard holds `hola` | ✓ | — |
+| ⇧⌘C, k k k, v, j and $: the selection runs from the copy cursor to the end of the line; y copies and leaves; the next x reaches the shell | ✓ | `fase7-modo-copia.png` |
+| ⇧⌘C, g, V, j and y: copies the first two whole lines | ✓ | — |
+| ⇧⌘C, k and Escape: leaves without writing anything; the next z reaches the shell | ✓ | — |
+| ⌘/: the pane dims except for a circle at the cursor and goes back to normal after `DURATION_SLOW_MS` | ✓ | `fase7-buscar-cursor.png` |
+
+**Not tested:** the "Copy Mode" item checked in the global menu and "Select
+Output of Last Command" disabled without integration (the test used the kit
+as is, with no menu on D-Bus, BK-018); Ctrl+B and Ctrl+F in copy mode; the
+last command's output after a resize that reflows the lines.
+
+**Differs from iTerm2:**
+
+- Copy Mode has no rectangular selection (Ctrl+V) and no search inside the
+  mode, and its keys cannot be changed.
+- Find Cursor is a fixed circle that lasts `DURATION_SLOW_MS`; iTerm2
+  animates the spotlight and keeps it while ⌘/ is held.
+- The output only ends with OSC 133;D. The plan also counted on the next
+  prompt (133;A), but 133;A and `SetMark` arrive as the same mark; a shell
+  that does not emit 133;D leaves the item disabled.

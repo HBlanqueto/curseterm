@@ -43,6 +43,8 @@ pub struct TerminalMetrics {
     pub broadcast_stripe: f32,
     pub highlight_alpha: f32,
     pub bell_alpha: f32,
+    pub spotlight_alpha: f32,
+    pub spotlight_radius: f32,
     pub multi_click_ms: u64,
     pub font_sizes: (u32, u32),
 }
@@ -52,6 +54,8 @@ pub const TERMINAL: TerminalMetrics = TerminalMetrics {
     broadcast_stripe: 6.0,
     highlight_alpha: 0.45,
     bell_alpha: 0.2,
+    spotlight_alpha: 0.6,
+    spotlight_radius: 48.0,
     multi_click_ms: 400,
     font_sizes: (6, 72),
 };

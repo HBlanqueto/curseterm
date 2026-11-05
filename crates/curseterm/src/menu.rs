@@ -53,6 +53,10 @@ pub const EDIT_TRIGGERS: Action = Action::new("edit-triggers", || tr!("edit-trig
 pub const RESET: Action = Action::new("reset", || tr!("reset")).shortcut(super_key('r'));
 pub const SELECT_ALL: Action =
     Action::new("select-all", || tr!("select-all")).shortcut(super_key('a'));
+pub const SELECT_OUTPUT: Action = Action::new("select-output", || tr!("select-output"))
+    .shortcut(super_with(Modifiers::SHIFT, 'a'));
+pub const COPY_MODE: Action =
+    Action::new("copy-mode", || tr!("copy-mode")).shortcut(super_with(Modifiers::SHIFT, 'c'));
 
 pub const FIND_MENU: &str = "find-menu";
 pub const FIND: Action = Action::new("find", || tr!("find")).shortcut(super_key('f'));
@@ -79,6 +83,8 @@ pub const BROADCAST_CURRENT_TAB: &str = "broadcast-current-tab";
 pub const SHOW_TAB_BAR: Action = Action::new("show-tab-bar", || tr!("show-tab-bar"));
 pub const FULL_SCREEN: Action =
     Action::new("full-screen", || tr!("full-screen")).shortcut(super_with(Modifiers::CONTROL, 'f'));
+pub const FIND_CURSOR: Action =
+    Action::new("find-cursor", || tr!("find-cursor")).shortcut(super_key('/'));
 pub const MAXIMIZE_PANE: &str = "maximize-pane";
 pub const TEXT_BIGGER: Action =
     Action::new("text-bigger", || tr!("text-bigger")).shortcut(super_key('='));
@@ -148,9 +154,11 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
             tr!("menu-edit"),
             vec![
                 COPY.item(false),
+                COPY_MODE.item_with(true, CheckState::Checkbox(false)),
                 PASTE.item(true),
                 MenuItem::Separator,
                 SELECT_ALL.item(true),
+                SELECT_OUTPUT.item(false),
                 MenuItem::Separator,
                 submenu(
                     FIND_MENU,
@@ -184,6 +192,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 SHOW_TAB_BAR.item_with(true, CheckState::Checkbox(false)),
                 FULL_SCREEN.item(true),
                 MenuItem::Separator,
+                FIND_CURSOR.item(true),
                 keyed(MAXIMIZE_PANE, tr!("maximize-pane"), "Super+Shift+Return")
                     .with_enabled(false)
                     .with_check(CheckState::Checkbox(false)),

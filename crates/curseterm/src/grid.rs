@@ -12,10 +12,10 @@ use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Rgb};
 use barrier_kit_next::canvas::CanvasContext;
 use barrier_kit_next::tokens::TERMINAL;
 use freya_engine::prelude::{
-    Color4f, Font, FontEdging, FontMgr, FontStyle, Paint, PaintStyle, PathBuilder, Rect as SkRect,
-    Typeface,
+    ClipOp, Color4f, Font, FontEdging, FontMgr, FontStyle, Paint, PaintStyle, PathBuilder, RRect,
+    Rect as SkRect, Typeface,
 };
-use vow_design::DURATION_FAST_MS;
+use vow_design::{DURATION_FAST_MS, DURATION_SLOW_MS};
 
 use crate::config::Scheme;
 use crate::io::Extras;
@@ -233,6 +233,10 @@ pub fn draw(
             selected,
         );
     }
+    let spotlight = (
+        overlay.inset + (cursor.point.column.0 as f32 + 0.5) * fonts.cell_width,
+        overlay.inset + ((cursor.point.line.0 + offset) as f32 + 0.5) * fonts.cell_height,
+    );
     draw_cursor(ctx, term, cursor, offset, &frame.palette, fonts, focused);
     draw_images(ctx, overlay.extras, top, fonts);
     draw_marks(ctx, overlay, top, term.screen_lines() as i64, fonts, scheme);
@@ -247,6 +251,25 @@ pub fn draw(
         ctx.canvas
             .draw_rect(SkRect::new(0.0, 0.0, ctx.width, ctx.height), &flash);
     }
+    let finding_cursor = overlay
+        .extras
+        .cursor_spotlight
+        .is_some_and(|found| found.elapsed() < Duration::from_millis(DURATION_SLOW_MS));
+    if finding_cursor {
+        draw_spotlight(ctx, spotlight, scheme);
+    }
+}
+
+fn draw_spotlight(ctx: &mut CanvasContext, (x, y): (f32, f32), scheme: &Scheme) {
+    let radius = TERMINAL.spotlight_radius;
+    let circle = RRect::new_oval(SkRect::new(x - radius, y - radius, x + radius, y + radius));
+    let mut dim = paint(scheme.background);
+    dim.set_alpha_f(TERMINAL.spotlight_alpha);
+    ctx.canvas.save();
+    ctx.canvas.clip_rrect(circle, ClipOp::Difference, true);
+    ctx.canvas
+        .draw_rect(SkRect::new(0.0, 0.0, ctx.width, ctx.height), &dim);
+    ctx.canvas.restore();
 }
 
 fn draw_matches(

@@ -51,10 +51,13 @@ struct Compiled {
 pub struct Extras {
     pub directory: Option<PathBuf>,
     pub marks: Vec<i64>,
+    pub output: Option<[i64; 2]>,
+    output_start: Option<i64>,
     pub images: Vec<Placed>,
     pub highlights: Vec<Highlight>,
     pub cell: (f32, f32),
     pub bell: Option<Instant>,
+    pub cursor_spotlight: Option<Instant>,
     pub triggers_enabled: bool,
     triggers: Vec<Trigger>,
     compiled: Vec<Compiled>,
@@ -73,6 +76,14 @@ impl Extras {
         if let Err(at) = self.marks.binary_search(&line) {
             self.marks.insert(at, line);
         }
+    }
+
+    fn end_output(&mut self, line: i64, column: usize) {
+        let Some(start) = self.output_start.take() else {
+            return;
+        };
+        let end = if column == 0 { line - 1 } else { line };
+        self.output = (end >= start).then_some([start, end]);
     }
 
     pub fn set_triggers(&mut self, triggers: &[Trigger]) {
@@ -94,6 +105,8 @@ impl Extras {
 
     pub fn forget_everything(&mut self) {
         self.marks.clear();
+        self.output = None;
+        self.output_start = None;
         self.images.clear();
         self.highlights.clear();
     }
@@ -104,11 +117,19 @@ impl Extras {
             .highlights
             .iter_mut()
             .map(|highlight| &mut highlight.line);
-        self.marks.iter_mut().chain(images).chain(highlights)
+        let output = self.output.iter_mut().flatten();
+        self.marks
+            .iter_mut()
+            .chain(output)
+            .chain(self.output_start.iter_mut())
+            .chain(images)
+            .chain(highlights)
     }
 
     pub fn forget_lines_above(&mut self, line: i64) {
         self.marks.retain(|mark| *mark >= line);
+        self.output = self.output.filter(|[start, _]| *start >= line);
+        self.output_start = self.output_start.filter(|start| *start >= line);
         self.images.retain(|image| image.line >= line);
         self.highlights.retain(|highlight| highlight.line >= line);
         self.anchored_lines().for_each(|anchored| *anchored -= line);
@@ -329,6 +350,10 @@ fn apply(term: &mut Term<Listener>, extras: &Mutex<Extras>, report: Report) {
     match report {
         Report::Directory(path) => extras.directory = Some(path),
         Report::Mark => extras.add_mark(absolute_line(term)),
+        Report::OutputStart => extras.output_start = Some(absolute_line(term)),
+        Report::CommandEnd => {
+            extras.end_output(absolute_line(term), term.grid().cursor.point.column.0)
+        }
         Report::Image(image) => {
             if let Some(placed) = place(term, extras.cell, &image) {
                 let lines = (placed.height / extras.cell.1).ceil() as usize;

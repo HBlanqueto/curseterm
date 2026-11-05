@@ -24,14 +24,14 @@ use freya_clipboard::copypasta::ClipboardProvider;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Size};
 
-use vow_design::{CAPTION, DURATION_FAST_MS, SPACE_1};
+use vow_design::{CAPTION, DURATION_FAST_MS, DURATION_SLOW_MS, SPACE_1};
 
 use crate::config::{
     APP_ID, APP_NAME, AltKey, ClosePrompt, Defaults, Profile, SessionEnd, WorkingDirectory,
     change_defaults,
 };
 use crate::grid::Fonts;
-use crate::keys::{KeyAction, encode};
+use crate::keys::{CopyCommand, KeyAction, copy_command, encode};
 use crate::localize::tr;
 use crate::menu;
 use crate::pane_view::TerminalPane;
@@ -239,7 +239,7 @@ impl App for Terminal {
         use_menu_action({
             let handles = handles.clone();
             move |id| {
-                on_action(id, &handles, &events);
+                on_action(id, &handles, &events, revision);
                 let mut revision = revision;
                 *revision.write() += 1;
             }
@@ -348,6 +348,16 @@ impl App for Terminal {
                 let Some(session) = &keyboard.active() else {
                     return;
                 };
+                if session.copy_mode() {
+                    if let Some(command) = copy_command(&data.key, data.modifiers) {
+                        if command == CopyCommand::Copy {
+                            copy(session, keyboard.clipboard);
+                        }
+                        session.copy_mode_step(command);
+                        *revision.write() += 1;
+                    }
+                    return;
+                }
                 let alt_key = keyboard.defaults.peek().profile(&session.profile).alt_key;
                 let modifiers = match (&data.key, alt_key) {
                     (Key::Character(_), AltKey::Normal) => {
@@ -465,6 +475,10 @@ fn use_live_menu(handles: &Handles) {
         .is_some_and(|session| session.selected_text().is_some());
     use_menu_enabled(menu::COPY.id, selection);
     use_menu_enabled(menu::USE_SELECTION_FOR_FIND.id, selection);
+    let output = handles.active().is_some_and(|session| session.has_output());
+    use_menu_enabled(menu::SELECT_OUTPUT.id, output);
+    let copy_mode = handles.active().is_some_and(|session| session.copy_mode());
+    use_menu_checked(menu::COPY_MODE.id, copy_mode);
     let marks = handles.active().is_some_and(|session| session.has_marks());
     let triggers = handles
         .active()
@@ -824,7 +838,7 @@ fn close_tab(handles: &Handles, index: usize) {
     }
 }
 
-fn on_action(id: &str, handles: &Handles, events: &Events) {
+fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>) {
     let mut workspace = handles.workspace;
     let active = handles.active();
     let toward = match id {
@@ -913,6 +927,27 @@ fn on_action(id: &str, handles: &Handles, events: &Events) {
         _ if id == menu::SELECT_ALL.id => {
             if let Some(session) = &active {
                 session.select_all();
+            }
+        }
+        _ if id == menu::SELECT_OUTPUT.id => {
+            if let Some(session) = &active {
+                session.select_output();
+            }
+        }
+        _ if id == menu::COPY_MODE.id => {
+            if let Some(session) = &active {
+                session.toggle_copy_mode();
+            }
+        }
+        _ if id == menu::FIND_CURSOR.id => {
+            if let Some(session) = &active {
+                session.extras().cursor_spotlight = Some(Instant::now());
+                handles
+                    .timers
+                    .after(Duration::from_millis(DURATION_SLOW_MS), move || {
+                        let mut revision = revision;
+                        *revision.write() += 1;
+                    });
             }
         }
         _ if id == menu::SHOW_TAB_BAR.id => {

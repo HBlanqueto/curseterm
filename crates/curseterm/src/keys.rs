@@ -1,4 +1,6 @@
+use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::TermMode;
+use alacritty_terminal::vi_mode::ViMotion;
 use freya_core::prelude::{Key, Modifiers, NamedKey};
 
 #[derive(Debug, PartialEq, Eq)]
@@ -36,6 +38,62 @@ pub fn encode(key: &Key, modifiers: Modifiers, mode: TermMode) -> KeyAction {
         Key::Named(NamedKey::PageDown) if shift => KeyAction::PageDown,
         Key::Named(named) => named_key(*named, modifier_param(modifiers), mode, alt, ctrl, shift),
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CopyCommand {
+    Move(ViMotion),
+    Top,
+    Bottom,
+    PageUp,
+    PageDown,
+    Select(SelectionType),
+    Copy,
+    Exit,
+}
+
+pub fn copy_command(key: &Key, modifiers: Modifiers) -> Option<CopyCommand> {
+    use CopyCommand::*;
+    use ViMotion::*;
+    let command = match key {
+        Key::Named(NamedKey::Escape) => Exit,
+        Key::Named(NamedKey::ArrowLeft) => Move(Left),
+        Key::Named(NamedKey::ArrowDown) => Move(Down),
+        Key::Named(NamedKey::ArrowUp) => Move(Up),
+        Key::Named(NamedKey::ArrowRight) => Move(Right),
+        Key::Character(text) if modifiers.contains(Modifiers::CONTROL) => match text.as_str() {
+            "b" => PageUp,
+            "f" => PageDown,
+            _ => return None,
+        },
+        Key::Character(text) => match text.as_str() {
+            "h" => Move(Left),
+            "j" => Move(Down),
+            "k" => Move(Up),
+            "l" => Move(Right),
+            "w" => Move(SemanticRight),
+            "b" => Move(SemanticLeft),
+            "e" => Move(SemanticRightEnd),
+            "W" => Move(WordRight),
+            "B" => Move(WordLeft),
+            "E" => Move(WordRightEnd),
+            "0" => Move(First),
+            "^" => Move(FirstOccupied),
+            "$" => Move(Last),
+            "H" => Move(High),
+            "M" => Move(Middle),
+            "L" => Move(Low),
+            "g" => Top,
+            "G" => Bottom,
+            "v" | " " => Select(SelectionType::Simple),
+            "V" => Select(SelectionType::Lines),
+            "y" => Copy,
+            "q" => Exit,
+            _ => return None,
+        },
+        _ => return None,
+    };
+    Some(command)
 }
 
 fn modifier_param(modifiers: Modifiers) -> u8 {
@@ -213,5 +271,17 @@ mod tests {
             write(Key::Named(NamedKey::Tab), Modifiers::SHIFT, none),
             b"\x1b[Z"
         );
+    }
+
+    #[test]
+    fn copy_mode_reads_vi_keys_with_control_for_pages_and_ignores_the_rest() {
+        let command = |text, modifiers| copy_command(&character(text), modifiers);
+        assert_eq!(command("G", Modifiers::SHIFT), Some(CopyCommand::Bottom));
+        assert_eq!(
+            command("b", Modifiers::empty()),
+            Some(CopyCommand::Move(ViMotion::SemanticLeft))
+        );
+        assert_eq!(command("b", Modifiers::CONTROL), Some(CopyCommand::PageUp));
+        assert_eq!(command("x", Modifiers::empty()), None);
     }
 }

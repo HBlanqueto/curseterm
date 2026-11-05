@@ -21,6 +21,7 @@ use barrier_kit::platform::WakeHandle;
 
 use crate::config::{APP_NAME, Profile, SCROLLBACK_LIMIT};
 use crate::io::{self as pty_io, Extras};
+use crate::keys::CopyCommand;
 
 pub type SessionId = u64;
 
@@ -300,6 +301,52 @@ impl Session {
         self.extras().add_mark(line);
     }
 
+    pub fn has_output(&self) -> bool {
+        self.extras().output.is_some()
+    }
+
+    pub fn select_output(&self) {
+        let Some([start, end]) = self.extras().output else {
+            return;
+        };
+        let mut term = self.term.lock();
+        let history = term.history_size() as i64;
+        let point = |line: i64| Point::new(Line((line - history) as i32), Column(0));
+        let mut selection = Selection::new(SelectionType::Lines, point(start), Side::Left);
+        selection.update(point(end), Side::Right);
+        term.selection = Some(selection);
+        term.scroll_to_point(point(start));
+    }
+
+    pub fn copy_mode(&self) -> bool {
+        self.mode().contains(TermMode::VI)
+    }
+
+    pub fn toggle_copy_mode(&self) {
+        self.term.lock().toggle_vi_mode();
+    }
+
+    pub fn copy_mode_step(&self, command: CopyCommand) {
+        let mut term = self.term.lock();
+        match command {
+            CopyCommand::Move(motion) => term.vi_motion(motion),
+            CopyCommand::Top => {
+                let top = Point::new(Line(-(term.history_size() as i32)), Column(0));
+                term.vi_goto_point(top);
+            }
+            CopyCommand::Bottom => {
+                let bottom = Point::new(Line(term.screen_lines() as i32 - 1), Column(0));
+                term.vi_goto_point(bottom);
+            }
+            CopyCommand::PageUp => term.scroll_display(Scroll::PageUp),
+            CopyCommand::PageDown => term.scroll_display(Scroll::PageDown),
+            CopyCommand::Select(kind) => toggle_vi_selection(&mut term, kind),
+            CopyCommand::Copy | CopyCommand::Exit => term.toggle_vi_mode(),
+        }
+        let cursor = term.vi_mode_cursor.point;
+        term.scroll_to_point(cursor);
+    }
+
     pub fn has_marks(&self) -> bool {
         !self.extras().marks.is_empty()
     }
@@ -446,6 +493,18 @@ fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
     } else {
         text.replace("\r\n", "\r").replace('\n', "\r").into_bytes()
     }
+}
+
+fn toggle_vi_selection(term: &mut Term<Listener>, kind: SelectionType) {
+    let same = term
+        .selection
+        .as_ref()
+        .is_some_and(|selection| selection.ty == kind && !selection.is_empty());
+    term.selection = (!same).then(|| {
+        let mut selection = Selection::new(kind, term.vi_mode_cursor.point, Side::Left);
+        selection.include_all();
+        selection
+    });
 }
 
 #[cfg(test)]
