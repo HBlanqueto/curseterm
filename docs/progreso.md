@@ -798,3 +798,17 @@ puede salirse por la izquierda.
 - Super+clic en una ruta abre el archivo con `xdg-open`; iTerm2 deja elegir
   el editor y salta a la línea.
 - Sin Use Transparency (BK-031).
+
+## Fase 14 — Transparencia
+
+### Plan
+
+1. **Parche 0007:** `WindowControls::set_background_alpha` multiplica el alfa
+   del fondo con que el runner limpia la ventana (BK-031).
+2. **Profiles › Window › Transparency:** de 0 % a 90 % en pasos de 10. Cada
+   panel pinta su fondo por omisión con la opacidad de su perfil; la barra de
+   título y la de pestañas siguen opacas.
+3. **View › Use Transparency (⌘U):** activa o apaga la transparencia de la
+   ventana. Con el kit tal cual la entrada queda desactivada.
+4. **Prueba** en sway sin pantalla, que compone el alfa sobre el fondo del
+   escritorio, y documentación en los dos idiomas.

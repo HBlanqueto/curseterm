@@ -800,3 +800,17 @@ out on the left.
 - Super+click on a path opens the file with `xdg-open`; iTerm2 lets you
   choose the editor and jumps to the line.
 - No Use Transparency (BK-031).
+
+## Phase 14 — Transparency
+
+### Plan
+
+1. **Patch 0007:** `WindowControls::set_background_alpha` multiplies the
+   alpha of the background the runner clears the window with (BK-031).
+2. **Profiles › Window › Transparency:** from 0 % to 90 % in steps of 10.
+   Each pane paints its default background with its profile's opacity; the
+   title bar and the tab bar stay opaque.
+3. **View › Use Transparency (⌘U):** turns the window's transparency on or
+   off. With the kit as is the item stays disabled.
+4. **Test** on headless sway, which composes the alpha over the desktop
+   background, and documentation in both languages.
