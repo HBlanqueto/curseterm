@@ -626,3 +626,16 @@ El menú en D-Bus también cerró pruebas pendientes de las fases 7 y 8:
 
 - El título no admite variables como `\(session.name)`; es texto fijo.
 - Help no tiene la ayuda en línea ni las licencias de código abierto.
+
+## Fase 10 — Marcas de tiempo y Reset Character Set
+
+### Plan
+
+1. **View › Show Timestamps (⇧⌘E):** cada sesión guarda cuándo cambió cada
+   línea por última vez; con la opción activa, la hora local (`HH:MM:SS`) se
+   dibuja a la derecha de cada línea. Las marcas siguen a sus líneas al
+   redimensionar, como las marcas de prompt, y se limitan al tamaño del
+   historial.
+2. **Session › Reset Character Set:** devuelve G0 y G1 a ASCII, para cuando
+   un programa deja la pantalla con caracteres de dibujo de líneas.
+3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.

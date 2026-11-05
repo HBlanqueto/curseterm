@@ -630,3 +630,15 @@ The D-Bus menu also closed pending tests from phases 7 and 8:
 - The title does not accept variables such as `\(session.name)`; it is fixed
   text.
 - Help has no online help and no open source licenses.
+
+## Phase 10 — Timestamps and Reset Character Set
+
+### Plan
+
+1. **View › Show Timestamps (⇧⌘E):** each session records when each line
+   last changed; with the option on, the local time (`HH:MM:SS`) is drawn at
+   the right of each line. The stamps follow their lines on resize, like the
+   prompt marks, and are capped at the scrollback size.
+2. **Session › Reset Character Set:** sets G0 and G1 back to ASCII, for when
+   a program leaves the screen with line-drawing characters.
+3. **Test** on headless sway and documentation in both languages.
