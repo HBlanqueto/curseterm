@@ -1,77 +1,58 @@
 use std::cell::RefCell;
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::mpsc::{Receiver, channel};
-use std::time::{Duration, Instant};
+use std::sync::mpsc::{Receiver, Sender, channel};
 
-use alacritty_terminal::event::Event as TermEvent;
+use alacritty_terminal::event::{Event as TermEvent, WindowSize};
 use alacritty_terminal::grid::Scroll;
-use alacritty_terminal::index::{Column, Line, Point, Side};
-use alacritty_terminal::selection::SelectionType;
-use alacritty_terminal::term::TermMode;
 use barrier_kit::app::use_menu_action;
-use barrier_kit::platform::{Timers, WindowControls};
+use barrier_kit::platform::{Timers, WakeHandle, WindowControls};
 use barrier_kit::style::Palette;
 use barrier_kit::theme::color;
 use barrier_kit::titlebar::Titlebar;
-use barrier_kit_next::app_menu::use_menu_enabled;
-use barrier_kit_next::canvas::canvas;
+use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
+use barrier_kit_next::views::split_panes::SplitPanes;
 use barrier_kit_next::views::tab_bar::TabBar;
 use freya_clipboard::copypasta::ClipboardProvider;
 use freya_core::prelude::*;
-use torin::prelude::{Direction, Gaps, Size};
-use vow_design::SPACE_1;
+use torin::prelude::{Content, Direction, Size};
 
 use crate::config::{APP_ID, Defaults, Scheme};
-use crate::grid::{self, Fonts};
+use crate::grid::Fonts;
 use crate::keys::{KeyAction, encode};
 use crate::localize::tr;
 use crate::menu;
+use crate::pane_view::TerminalPane;
+use crate::panes::{Axis, Pane, Toward};
 use crate::session::{GridSize, Listener, Session, SessionId};
 use crate::windows;
+use crate::workspace::{Closed, Workspace};
 
-const MULTI_CLICK: Duration = Duration::from_millis(400);
 const INITIAL_GRID: (u16, u16) = (80, 24);
+const DIVIDER_STEP: f32 = 0.05;
+const TEXT_SIZE_RANGE: (i32, i32) = (6, 72);
 
-struct Tab {
-    session: Rc<Session>,
-    title: String,
-}
-
-#[derive(Default)]
-struct Tabs {
-    tabs: Vec<Tab>,
-    active: usize,
-    next_id: SessionId,
-    grid: Option<GridSize>,
-    area: Option<(f32, f32)>,
-}
-
-impl Tabs {
-    fn active(&self) -> Option<&Rc<Session>> {
-        self.tabs.get(self.active).map(|tab| &tab.session)
-    }
-
-    fn index_of(&self, id: SessionId) -> Option<usize> {
-        self.tabs.iter().position(|tab| tab.session.id == id)
-    }
-}
-
-#[derive(Clone, Copy, PartialEq)]
-struct Click {
-    at: Instant,
-    point: Point,
-    count: u8,
-}
-
+type Sessions = HashMap<SessionId, Rc<Session>>;
 type ClipboardState = State<Option<Box<dyn ClipboardProvider>>>;
+type Events = Rc<(Sender<(SessionId, TermEvent)>, WakeHandle)>;
 
 // Menu actions and wake-ups run outside Freya's context (BK-017): they use handles taken in render.
 #[derive(Clone)]
 struct Handles {
-    tabs: State<Tabs>,
+    workspace: State<Workspace>,
+    sessions: State<Sessions>,
+    next_id: State<SessionId>,
+    show_tab_bar: State<bool>,
+    text_zoom: State<i32>,
     controls: WindowControls,
     clipboard: ClipboardState,
+}
+
+impl Handles {
+    fn active(&self) -> Option<Rc<Session>> {
+        let id = self.workspace.peek().active_session()?;
+        self.sessions.peek().get(&id).cloned()
+    }
 }
 
 pub struct Terminal;
@@ -81,27 +62,31 @@ impl App for Terminal {
         let defaults = barrier_kit::app::use_defaults::<Defaults>(APP_ID);
         let dark = barrier_kit::theme::resolved().scheme.is_dark();
         let scheme: &'static Scheme = defaults.read().scheme(dark);
+        let workspace = use_state(Workspace::default);
+        let sessions = use_state(Sessions::new);
+        let next_id = use_state(|| 0);
+        let show_tab_bar = use_state(|| false);
+        let text_zoom = use_state(|| 0i32);
+        let mut revision = use_state(|| 0u64);
         let fonts = use_memo(move || {
             let defaults = defaults.read();
-            Rc::new(Fonts::new(
-                defaults.font_family(),
-                defaults.font_size() as f32,
-            ))
+            let (smallest, largest) = TEXT_SIZE_RANGE;
+            let size = (defaults.font_size() as i32 + *text_zoom.read()).clamp(smallest, largest);
+            Rc::new(Fonts::new(defaults.font_family(), size as f32))
         });
-        let mut tabs = use_state(Tabs::default);
-        let mut revision = use_state(|| 0u64);
-        let mut dragging = use_state(|| false);
-        let mut last_click = use_state(|| None::<Click>);
         let handles = use_hook(move || Handles {
-            tabs,
+            workspace,
+            sessions,
+            next_id,
+            show_tab_bar,
+            text_zoom,
             controls: WindowControls::get(),
             clipboard: consume_root_context(),
         });
         use_side_effect(move || {
             let fonts = fonts.read().clone();
-            let area = tabs.peek().area;
-            if let Some((width, height)) = area {
-                resize(tabs, &fonts, width, height);
+            for session in sessions.peek().values() {
+                session.refit(fonts.cell_width, fonts.cell_height);
             }
             *revision.write() += 1;
         });
@@ -109,11 +94,11 @@ impl App for Terminal {
             let handles = handles.clone();
             move || listen(handles, revision)
         });
-
         use_hook({
-            let events = events.clone();
-            move || open_tab(tabs, &events)
+            let (handles, events) = (handles.clone(), events.clone());
+            move || new_tab(&handles, &events, None)
         });
+        let add_events = events.clone();
         use_menu_action({
             let handles = handles.clone();
             move |id| {
@@ -122,103 +107,78 @@ impl App for Terminal {
                 *revision.write() += 1;
             }
         });
-        use_menu_enabled(
-            menu::COPY.id,
-            tabs.read()
-                .active()
-                .is_some_and(|session| session.selected_text().is_some()),
-        );
+        use_live_menu(&handles);
 
-        let focused = handles.controls.status.read().activated;
-        let clipboard = handles.clipboard;
+        let window_focused = handles.controls.status.read().activated;
         let palette = Palette::current();
-        let tabs_now = tabs.read();
-        let title = tabs_now
-            .tabs
-            .get(tabs_now.active)
-            .map_or_else(|| "CurseTerm".to_string(), |tab| tab.title.clone());
-        let tab_bar = (tabs_now.tabs.len() > 1).then(|| {
-            tabs_now
-                .tabs
-                .iter()
-                .fold(TabBar::new(tr!("tabs"), tr!("close-tab")), |bar, tab| {
-                    bar.tab(tab.title.clone())
-                })
-                .selected(tabs_now.active)
+        let state = workspace.read();
+        let title = state
+            .active_session()
+            .map_or(crate::workspace::DEFAULT_TITLE, |id| state.title(id))
+            .to_string();
+        let tab_bar = (state.tabs.len() > 1 || *show_tab_bar.read()).then(|| {
+            let (on_close, on_add) = (handles.clone(), handles.clone());
+            state
+                .tab_titles()
+                .into_iter()
+                .fold(TabBar::new(tr!("tabs"), tr!("close-tab")), TabBar::tab)
+                .selected(state.active)
                 .on_select(move |index| {
-                    tabs.write().active = index;
+                    let mut workspace = workspace;
+                    workspace.write().select_tab(index);
                 })
-                .on_close({
-                    let handles = handles.clone();
-                    move |index| close_tab(&handles, index)
+                .on_close(move |index| close_tab(&on_close, index))
+                .on_add(tr!("new-tab-button"), move |_| {
+                    new_tab(&on_add, &add_events, None)
                 })
         });
-        let active = tabs_now.active().cloned();
-        drop(tabs_now);
+        let body = state.active_tab().map(|tab| {
+            let root = if tab.zoomed {
+                Pane::Leaf(tab.active)
+            } else {
+                tab.root.clone()
+            };
+            let painting = Painting {
+                sessions: sessions.read().clone(),
+                fonts: fonts.read().clone(),
+                scheme,
+                active: tab.active,
+                window_focused,
+                revision: *revision.read(),
+                workspace,
+                tab: state.active,
+            };
+            pane_tree(&root, Vec::new(), &painting)
+        });
+        drop(state);
         #[cfg(feature = "kit-parcheado")]
         use_window_title(&title);
 
-        let cells = fonts.read().clone();
-        let painter = active.clone().map(|session| {
-            let fonts = cells.clone();
-            let mut look = DefaultHasher::new();
-            (
-                *revision.read(),
-                focused,
-                &scheme.name,
-                fonts.cell_width.to_bits(),
-            )
-                .hash(&mut look);
-            canvas(look.finish(), move |ctx| {
-                grid::draw(ctx, &session.term.lock(), &fonts, scheme, focused);
-            })
-        });
-        let point_at = {
-            let fonts = cells.clone();
-            let active = active.clone();
-            move |location: (f64, f64)| -> Option<(Point, Side)> {
-                let session = active.as_ref()?;
-                let column = (location.0 as f32 / fonts.cell_width).max(0.0);
-                let line = (location.1 as f32 / fonts.cell_height).max(0.0) as i32;
-                let size = session.size();
-                let point = Point::new(
-                    Line(line.min(i32::from(size.lines) - 1) - session.display_offset() as i32),
-                    Column((column as usize).min(usize::from(size.columns).saturating_sub(1))),
-                );
-                let side = if column.fract() < 0.5 {
-                    Side::Left
-                } else {
-                    Side::Right
-                };
-                Some((point, side))
-            }
-        };
-
+        let clipboard = handles.clipboard;
+        let keyboard = handles.clone();
         rect()
             .width(Size::fill())
             .height(Size::fill())
             .direction(Direction::Vertical)
+            .content(Content::flex())
             .background(color(palette.window_background))
-            .on_global_key_down({
-                let active = active.clone();
-                move |event: Event<KeyboardEventData>| {
-                    let Some(session) = &active else {
-                        return;
-                    };
-                    let data = event.data();
-                    match encode(&data.key, data.modifiers, session.mode()) {
-                        KeyAction::Write(bytes) => {
-                            session.clear_selection();
-                            session.write(bytes);
-                        }
-                        KeyAction::Copy => copy(session, clipboard),
-                        KeyAction::Paste => paste(session, clipboard),
-                        KeyAction::PageUp => session.scroll(Scroll::PageUp),
-                        KeyAction::PageDown => session.scroll(Scroll::PageDown),
-                        KeyAction::Ignore => return,
+            .on_global_key_down(move |event: Event<KeyboardEventData>| {
+                let Some(session) = &keyboard.active() else {
+                    return;
+                };
+                let data = event.data();
+                match encode(&data.key, data.modifiers, session.mode()) {
+                    KeyAction::Write(bytes) => {
+                        session.clear_selection();
+                        session.write(bytes);
                     }
-                    *revision.write() += 1;
+                    KeyAction::Copy => copy(session, clipboard),
+                    KeyAction::Paste => paste(session, clipboard),
+                    KeyAction::PageUp => session.scroll(Scroll::PageUp),
+                    KeyAction::PageDown => session.scroll(Scroll::PageDown),
+                    KeyAction::Ignore => return,
                 }
+                *revision.write() += 1;
             })
             .child(Titlebar::new().title(title))
             .maybe_child(tab_bar)
@@ -226,110 +186,96 @@ impl App for Terminal {
                 rect()
                     .width(Size::fill())
                     .height(Size::flex(1.0))
-                    .padding(Gaps::new_all(SPACE_1))
-                    .background(rgb(scheme.background))
-                    .child(
-                        rect()
-                            .width(Size::fill())
-                            .height(Size::fill())
-                            .on_sized({
-                                let fonts = cells.clone();
-                                move |event: Event<SizedEventData>| {
-                                    let area = event.data().area;
-                                    resize(tabs, &fonts, area.width(), area.height());
-                                }
-                            })
-                            .on_pointer_enter(|_| Cursor::set(CursorIcon::Text))
-                            .on_pointer_leave(|_| Cursor::set(CursorIcon::default()))
-                            .on_mouse_down({
-                                let active = active.clone();
-                                let point_at = point_at.clone();
-                                move |event: Event<MouseEventData>| {
-                                    let data = event.data();
-                                    if data.button != Some(MouseButton::Left) {
-                                        return;
-                                    }
-                                    let (Some(session), Some((point, side))) =
-                                        (&active, point_at(data.element_location.to_tuple()))
-                                    else {
-                                        return;
-                                    };
-                                    let click = next_click(*last_click.read(), point);
-                                    last_click.set(Some(click));
-                                    let kind = match click.count {
-                                        1 => SelectionType::Simple,
-                                        2 => SelectionType::Semantic,
-                                        _ => SelectionType::Lines,
-                                    };
-                                    session.start_selection(kind, point, side);
-                                    dragging.set(true);
-                                    *revision.write() += 1;
-                                }
-                            })
-                            .on_mouse_move({
-                                let active = active.clone();
-                                move |event: Event<MouseEventData>| {
-                                    if !*dragging.read() {
-                                        return;
-                                    }
-                                    if let (Some(session), Some((point, side))) = (
-                                        &active,
-                                        point_at(event.data().element_location.to_tuple()),
-                                    ) {
-                                        session.extend_selection(point, side);
-                                        *revision.write() += 1;
-                                    }
-                                }
-                            })
-                            .on_global_pointer_press(move |_| dragging.set_if_modified(false))
-                            .on_wheel({
-                                let active = active.clone();
-                                let fonts = cells.clone();
-                                move |event: Event<WheelEventData>| {
-                                    let Some(session) = &active else {
-                                        return;
-                                    };
-                                    let lines = (-event.data().delta_y as f32 / fonts.cell_height)
-                                        .round()
-                                        as i32;
-                                    wheel(session, lines);
-                                    *revision.write() += 1;
-                                }
-                            })
-                            .maybe_child(painter),
-                    ),
+                    .maybe_child(body),
             )
     }
 }
 
-fn rgb(rgb: alacritty_terminal::vte::ansi::Rgb) -> Color {
-    Color::from_rgb(rgb.r, rgb.g, rgb.b)
+struct Painting {
+    sessions: Sessions,
+    fonts: Rc<Fonts>,
+    scheme: &'static Scheme,
+    active: SessionId,
+    window_focused: bool,
+    revision: u64,
+    workspace: State<Workspace>,
+    tab: usize,
 }
 
-fn next_click(last: Option<Click>, point: Point) -> Click {
-    let now = Instant::now();
-    let count = match last {
-        Some(last) if last.point == point && now - last.at < MULTI_CLICK => last.count % 3 + 1,
-        _ => 1,
-    };
-    Click {
-        at: now,
-        point,
-        count,
+fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
+    match node {
+        Pane::Leaf(id) => match painting.sessions.get(id) {
+            Some(session) => {
+                let mut workspace = painting.workspace;
+                TerminalPane {
+                    session: session.clone(),
+                    fonts: painting.fonts.clone(),
+                    scheme: painting.scheme,
+                    focused: painting.window_focused && *id == painting.active,
+                    revision: painting.revision,
+                    on_focus: Callback::new(move |id| workspace.write().focus(id)),
+                }
+                .into_element()
+            }
+            None => rect().into_element(),
+        },
+        Pane::Split {
+            axis,
+            children,
+            ratios,
+        } => {
+            let direction = match axis {
+                Axis::Row => Direction::Horizontal,
+                Axis::Column => Direction::Vertical,
+            };
+            let (mut workspace, tab, at) = (painting.workspace, painting.tab, path.clone());
+            let split = SplitPanes::new(tr!("panes"), direction)
+                .ratios(ratios.clone())
+                .on_ratios(move |next: Vec<f32>| {
+                    let mut state = workspace.write();
+                    if let Some(slot) = state
+                        .tabs
+                        .get_mut(tab)
+                        .and_then(|tab| tab.root.ratios_at(&at))
+                    {
+                        *slot = next;
+                    }
+                });
+            children
+                .iter()
+                .enumerate()
+                .fold(split, |split, (index, child)| {
+                    let mut path = path.clone();
+                    path.push(index);
+                    split.pane(pane_tree(child, path, painting))
+                })
+                .into_element()
+        }
     }
 }
 
-fn wheel(session: &Session, lines: i32) {
-    if lines == 0 {
-        return;
-    }
-    let mode = session.mode();
-    if mode.contains(TermMode::ALT_SCREEN) && mode.contains(TermMode::ALTERNATE_SCROLL) {
-        let arrow: &[u8] = if lines > 0 { b"\x1bOA" } else { b"\x1bOB" };
-        session.write(arrow.repeat(lines.unsigned_abs() as usize));
-    } else {
-        session.scroll(Scroll::Delta(lines));
-    }
+fn use_live_menu(handles: &Handles) {
+    let state = handles.workspace.read();
+    let tabs = state.tabs.len();
+    let split = state.active_tab().is_some_and(|tab| tab.root.is_split());
+    let zoomed = state.active_tab().is_some_and(|tab| tab.zoomed);
+    let titles = state.tab_titles();
+    let active = state.active;
+    drop(state);
+    let selection = handles
+        .active()
+        .is_some_and(|session| session.selected_text().is_some());
+    use_menu_enabled(menu::COPY.id, selection);
+    use_menu_enabled(menu::CLOSE_PANES.id, split);
+    use_menu_enabled(menu::MAXIMIZE_PANE, split);
+    use_menu_checked(menu::MAXIMIZE_PANE, zoomed);
+    use_menu_checked(menu::SHOW_TAB_BAR.id, *handles.show_tab_bar.read());
+    use_menu_enabled(menu::NEXT_TAB, tabs > 1);
+    use_menu_enabled(menu::PREVIOUS_TAB, tabs > 1);
+    use_menu_enabled(menu::MOVE_TAB_LEFT.id, active > 0);
+    use_menu_enabled(menu::MOVE_TAB_RIGHT.id, active + 1 < tabs);
+    use_menu_enabled(menu::SPLIT_PANE, split);
+    use_submenu_items(menu::SELECT_TAB, menu::select_tab_items(&titles, active));
 }
 
 fn copy(session: &Session, clipboard: ClipboardState) {
@@ -359,26 +305,6 @@ fn paste(session: &Session, clipboard: ClipboardState) {
     }
 }
 
-fn resize(mut tabs: State<Tabs>, fonts: &Fonts, width: f32, height: f32) {
-    let grid = GridSize {
-        columns: (width / fonts.cell_width).floor().max(1.0) as u16,
-        lines: (height / fonts.cell_height).floor().max(1.0) as u16,
-        cell_width: fonts.cell_width,
-        cell_height: fonts.cell_height,
-    };
-    let mut tabs = tabs.write();
-    tabs.grid = Some(grid);
-    tabs.area = Some((width, height));
-    for tab in &tabs.tabs {
-        tab.session.resize(grid);
-    }
-}
-
-type Events = Rc<(
-    std::sync::mpsc::Sender<(SessionId, TermEvent)>,
-    barrier_kit::platform::WakeHandle,
-)>;
-
 fn listen(handles: Handles, revision: State<u64>) -> Events {
     let (sender, receiver) = channel();
     let receiver: RefCell<Receiver<(SessionId, TermEvent)>> = RefCell::new(receiver);
@@ -397,14 +323,13 @@ fn listen(handles: Handles, revision: State<u64>) -> Events {
 }
 
 fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent) {
-    let mut tabs = handles.tabs;
-    let Some(index) = tabs.peek().index_of(id) else {
+    let Some(session) = handles.sessions.peek().get(&id).cloned() else {
         return;
     };
-    let session = tabs.peek().tabs[index].session.clone();
+    let mut workspace = handles.workspace;
     match event {
-        TermEvent::Title(title) => tabs.write().tabs[index].title = title,
-        TermEvent::ResetTitle => tabs.write().tabs[index].title = "CurseTerm".into(),
+        TermEvent::Title(title) => workspace.write().set_title(id, Some(title)),
+        TermEvent::ResetTitle => workspace.write().set_title(id, None),
         TermEvent::PtyWrite(text) => session.write(text.into_bytes()),
         TermEvent::ClipboardStore(_, text) => set_clipboard(handles.clipboard, text),
         TermEvent::ClipboardLoad(_, format) => {
@@ -415,7 +340,7 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent) {
         TermEvent::TextAreaSizeRequest(format) => {
             let size = session.size();
             session.write(
-                format(alacritty_terminal::event::WindowSize {
+                format(WindowSize {
                     num_lines: size.lines,
                     num_cols: size.columns,
                     cell_width: size.cell_width as u16,
@@ -424,56 +349,96 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent) {
                 .into_bytes(),
             );
         }
-        TermEvent::ChildExit(_) | TermEvent::Exit => close_tab(handles, index),
+        TermEvent::ChildExit(_) | TermEvent::Exit => close_session(handles, id),
         _ => {}
     }
 }
 
-fn open_tab(mut tabs: State<Tabs>, events: &Events) {
+fn spawn(
+    handles: &Handles,
+    events: &Events,
+    directory: Option<std::path::PathBuf>,
+) -> Option<SessionId> {
     let (columns, lines) = INITIAL_GRID;
-    let mut state = tabs.write();
-    let size = state
-        .grid
-        .or_else(|| state.active().map(|session| session.size()))
-        .unwrap_or(GridSize {
+    let size = handles.active().map_or(
+        GridSize {
             columns,
             lines,
             cell_width: 1.0,
             cell_height: 1.0,
-        });
-    let id = state.next_id;
-    state.next_id += 1;
+        },
+        |session| session.size(),
+    );
+    let mut next_id = handles.next_id;
+    let id = *next_id.peek();
+    *next_id.write() += 1;
     let listener = Listener::new(id, events.0.clone(), events.1.clone());
-    match Session::spawn(id, size, listener) {
+    match Session::spawn(id, size, directory, listener) {
         Ok(session) => {
-            state.tabs.push(Tab {
-                session: Rc::new(session),
-                title: "CurseTerm".into(),
-            });
-            state.active = state.tabs.len() - 1;
+            let mut sessions = handles.sessions;
+            sessions.write().insert(id, Rc::new(session));
+            Some(id)
         }
-        Err(error) => tracing::error!(%error, "could not start the shell"),
+        Err(error) => {
+            tracing::error!(%error, "could not start the shell");
+            None
+        }
+    }
+}
+
+fn new_tab(handles: &Handles, events: &Events, directory: Option<std::path::PathBuf>) {
+    if let Some(id) = spawn(handles, events, directory) {
+        let mut workspace = handles.workspace;
+        workspace.write().open_tab(id);
+    }
+}
+
+fn split(handles: &Handles, events: &Events, axis: Axis) {
+    if let Some(id) = spawn(handles, events, None) {
+        let mut workspace = handles.workspace;
+        workspace.write().split(id, axis);
+    }
+}
+
+fn close_session(handles: &Handles, id: SessionId) {
+    let mut workspace = handles.workspace;
+    let closed = workspace.write().close(id);
+    let mut sessions = handles.sessions;
+    sessions.write().remove(&id);
+    if closed == Some(Closed::Window) {
+        handles.controls.close();
     }
 }
 
 fn close_tab(handles: &Handles, index: usize) {
-    let mut tabs = handles.tabs;
-    let mut state = tabs.write();
-    if index >= state.tabs.len() {
-        return;
+    let mut workspace = handles.workspace;
+    let closed = workspace.write().close_tab(index);
+    let mut sessions = handles.sessions;
+    for id in closed {
+        sessions.write().remove(&id);
     }
-    state.tabs.remove(index);
-    if state.tabs.is_empty() {
+    if workspace.peek().tabs.is_empty() {
         handles.controls.close();
-        return;
     }
-    state.active = state.active.min(state.tabs.len() - 1);
 }
 
 fn on_action(id: &str, handles: &Handles, events: &Events) {
-    let tabs = handles.tabs;
-    tracing::debug!(id, "menu action");
-    let active = tabs.peek().active().cloned();
+    let mut workspace = handles.workspace;
+    let active = handles.active();
+    let toward = match id {
+        menu::PANE_UP | menu::DIVIDER_UP => Some(Toward::Up),
+        menu::PANE_DOWN | menu::DIVIDER_DOWN => Some(Toward::Down),
+        menu::PANE_LEFT | menu::DIVIDER_LEFT => Some(Toward::Left),
+        menu::PANE_RIGHT | menu::DIVIDER_RIGHT => Some(Toward::Right),
+        _ => None,
+    };
+    if let Some(index) = id
+        .strip_prefix(menu::SELECT_TAB_PREFIX)
+        .and_then(|index| index.parse().ok())
+    {
+        workspace.write().select_tab(index);
+        return;
+    }
     match id {
         _ if id == menu::ABOUT.id => windows::open(Some("--about")),
         _ if id == menu::SETTINGS.id => windows::open(Some("--settings")),
@@ -482,10 +447,24 @@ fn on_action(id: &str, handles: &Handles, events: &Events) {
             handles.controls.close();
         }
         _ if id == menu::NEW_WINDOW.id => windows::open(None),
-        _ if id == menu::NEW_TAB.id => open_tab(tabs, events),
+        _ if id == menu::NEW_TAB.id => new_tab(handles, events, None),
+        _ if id == menu::DUPLICATE_TAB.id => {
+            let directory = active
+                .as_ref()
+                .and_then(|session| session.working_directory());
+            new_tab(handles, events, directory);
+        }
+        _ if id == menu::SPLIT_VERTICALLY.id => split(handles, events, Axis::Row),
+        _ if id == menu::SPLIT_HORIZONTALLY.id => split(handles, events, Axis::Column),
         _ if id == menu::CLOSE.id => {
-            let active_index = tabs.peek().active;
-            close_tab(handles, active_index);
+            if let Some(session) = active {
+                close_session(handles, session.id);
+            }
+        }
+        _ if id == menu::CLOSE_WINDOW.id => handles.controls.close(),
+        _ if id == menu::CLOSE_PANES.id => {
+            let index = workspace.peek().active;
+            close_tab(handles, index);
         }
         _ if id == menu::COPY.id => {
             if let Some(session) = &active {
@@ -500,6 +479,34 @@ fn on_action(id: &str, handles: &Handles, events: &Events) {
         _ if id == menu::SELECT_ALL.id => {
             if let Some(session) = &active {
                 session.select_all();
+            }
+        }
+        _ if id == menu::SHOW_TAB_BAR.id => {
+            let mut show = handles.show_tab_bar;
+            let shown = *show.peek();
+            show.set(!shown);
+        }
+        _ if id == menu::FULL_SCREEN.id => handles.controls.toggle_fullscreen(),
+        menu::MAXIMIZE_PANE => workspace.write().toggle_zoom(),
+        _ if id == menu::TEXT_BIGGER.id => *handles.text_zoom.clone().write() += 1,
+        _ if id == menu::TEXT_SMALLER.id => *handles.text_zoom.clone().write() -= 1,
+        _ if id == menu::TEXT_NORMAL.id => handles.text_zoom.clone().set(0),
+        _ if id == menu::MINIMIZE.id => handles.controls.minimize(),
+        _ if id == menu::ZOOM.id => handles.controls.toggle_maximize(),
+        menu::NEXT_TAB => workspace.write().step_tab(1),
+        menu::PREVIOUS_TAB => workspace.write().step_tab(-1),
+        _ if id == menu::MOVE_TAB_LEFT.id => workspace.write().move_tab(-1),
+        _ if id == menu::MOVE_TAB_RIGHT.id => workspace.write().move_tab(1),
+        _ if id == menu::NEXT_PANE.id => workspace.write().cycle_pane(1),
+        _ if id == menu::PREVIOUS_PANE.id => workspace.write().cycle_pane(-1),
+        menu::PANE_UP | menu::PANE_DOWN | menu::PANE_LEFT | menu::PANE_RIGHT => {
+            if let Some(toward) = toward {
+                workspace.write().focus_toward(toward);
+            }
+        }
+        menu::DIVIDER_UP | menu::DIVIDER_DOWN | menu::DIVIDER_LEFT | menu::DIVIDER_RIGHT => {
+            if let Some(toward) = toward {
+                workspace.write().move_divider(toward, DIVIDER_STEP);
             }
         }
         _ => {}

@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::io;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::mpsc::Sender;
 
@@ -48,6 +49,15 @@ pub struct GridSize {
 }
 
 impl GridSize {
+    pub fn fitting(width: f32, height: f32, cell_width: f32, cell_height: f32) -> Self {
+        Self {
+            columns: (width / cell_width).floor().max(1.0) as u16,
+            lines: (height / cell_height).floor().max(1.0) as u16,
+            cell_width,
+            cell_height,
+        }
+    }
+
     fn window_size(self) -> WindowSize {
         WindowSize {
             num_lines: self.lines,
@@ -67,13 +77,20 @@ pub struct Session {
     pub term: Arc<FairMutex<Term<Listener>>>,
     sender: EventLoopSender,
     size: Cell<GridSize>,
+    area: Cell<Option<(f32, f32)>>,
+    shell_pid: u32,
 }
 
 impl Session {
-    pub fn spawn(id: SessionId, size: GridSize, listener: Listener) -> io::Result<Self> {
+    pub fn spawn(
+        id: SessionId,
+        size: GridSize,
+        working_directory: Option<PathBuf>,
+        listener: Listener,
+    ) -> io::Result<Self> {
         let options = tty::Options {
             shell: None,
-            working_directory: None,
+            working_directory,
             drain_on_exit: false,
             env: HashMap::from([
                 ("TERM".into(), "xterm-256color".into()),
@@ -82,6 +99,7 @@ impl Session {
             ]),
         };
         let pty = tty::new(&options, size.window_size(), id)?;
+        let shell_pid = pty.child().id();
         let term = Arc::new(FairMutex::new(Term::new(
             Config::default(),
             &size.term_size(),
@@ -95,6 +113,8 @@ impl Session {
             term,
             sender,
             size: Cell::new(size),
+            area: Cell::new(None),
+            shell_pid,
         })
     }
 
@@ -113,7 +133,22 @@ impl Session {
         self.size.get()
     }
 
-    pub fn resize(&self, size: GridSize) {
+    pub fn working_directory(&self) -> Option<PathBuf> {
+        std::fs::read_link(format!("/proc/{}/cwd", self.shell_pid)).ok()
+    }
+
+    pub fn fit(&self, width: f32, height: f32, cell_width: f32, cell_height: f32) {
+        self.area.set(Some((width, height)));
+        self.resize(GridSize::fitting(width, height, cell_width, cell_height));
+    }
+
+    pub fn refit(&self, cell_width: f32, cell_height: f32) {
+        if let Some((width, height)) = self.area.get() {
+            self.resize(GridSize::fitting(width, height, cell_width, cell_height));
+        }
+    }
+
+    fn resize(&self, size: GridSize) {
         if size == self.size.get() || size.columns == 0 || size.lines == 0 {
             return;
         }

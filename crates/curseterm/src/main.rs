@@ -4,9 +4,12 @@ mod grid;
 mod keys;
 mod localize;
 mod menu;
+mod pane_view;
+mod panes;
 mod session;
 mod terminal;
 mod windows;
+mod workspace;
 
 use std::process::ExitCode;
 
