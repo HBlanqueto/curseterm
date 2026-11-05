@@ -230,3 +230,7 @@ state-mouse-reporting = Informe del ratón
 state-bracketed-paste = Pegado entre corchetes
 state-application-cursor = Cursor de aplicación
 state-application-keypad = Teclado de aplicación
+run-coprocess = Ejecutar un coproceso…
+stop-coprocess = Detener el coproceso
+coprocess-command = Orden; lee la salida de la sesión y lo que escribe se teclea
+coprocess-confirm = Ejecutar

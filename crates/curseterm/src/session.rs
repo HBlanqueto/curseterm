@@ -1,10 +1,13 @@
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::io;
+use std::io::{self, Read};
+use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::thread;
 use std::time::Instant;
 
 use alacritty_terminal::event::{Event, EventListener, OnResize, WindowSize};
@@ -18,6 +21,8 @@ use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::tty;
 use alacritty_terminal::vte::ansi::{Handler, Processor};
 use barrier_kit::platform::WakeHandle;
+
+use rustix::process::{Pid, Signal, kill_process_group};
 
 use crate::config::{APP_NAME, Profile, SCROLLBACK_LIMIT};
 use crate::io::{self as pty_io, Extras};
@@ -105,6 +110,7 @@ pub struct Session {
     pub started: Instant,
     ended: Cell<bool>,
     scrollback: Cell<usize>,
+    coprocess: RefCell<Option<Child>>,
 }
 
 thread_local! {
@@ -167,6 +173,7 @@ impl Session {
             started: Instant::now(),
             ended: Cell::new(false),
             scrollback: Cell::new(Config::default().scrolling_history),
+            coprocess: RefCell::new(None),
         })
     }
 
@@ -256,6 +263,55 @@ impl Session {
             .open(path)?;
         self.extras().log = Some(file);
         Ok(())
+    }
+
+    pub fn start_coprocess(&self, command: &str) -> io::Result<()> {
+        self.stop_coprocess();
+        let mut child = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(command)
+            .current_dir(self.working_directory().unwrap_or_else(|| "/".into()))
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .process_group(0)
+            .spawn()?;
+        if let Some(mut output) = child.stdout.take() {
+            let sender = self.sender.clone();
+            thread::spawn(move || {
+                let mut buffer = [0; 4096];
+                while let Ok(read @ 1..) = output.read(&mut buffer) {
+                    if sender.send(buffer[..read].to_vec().into()).is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+        self.extras().coprocess = child.stdin.take();
+        *self.coprocess.borrow_mut() = Some(child);
+        Ok(())
+    }
+
+    pub fn stop_coprocess(&self) {
+        self.extras().coprocess = None;
+        if let Some(mut child) = self.coprocess.borrow_mut().take() {
+            if let Some(group) = Pid::from_raw(child.id() as i32) {
+                let _ = kill_process_group(group, Signal::TERM);
+            }
+            let _ = child.wait();
+        }
+    }
+
+    pub fn coprocess_running(&self) -> bool {
+        let mut coprocess = self.coprocess.borrow_mut();
+        let ended = coprocess
+            .as_mut()
+            .is_some_and(|child| !matches!(child.try_wait(), Ok(None)));
+        if ended {
+            *coprocess = None;
+            self.extras().coprocess = None;
+        }
+        coprocess.is_some()
     }
 
     pub fn stop_log(&self) {
@@ -487,6 +543,12 @@ impl Session {
 
     pub fn display_offset(&self) -> usize {
         self.term.lock().grid().display_offset()
+    }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        self.stop_coprocess();
     }
 }
 

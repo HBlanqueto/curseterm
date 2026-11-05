@@ -105,6 +105,8 @@ pub const EDIT_SESSION: Action =
 pub const TERMINAL_STATE_MENU: &str = "terminal-state-menu";
 pub const HELP: Action =
     Action::new("help", || tr!("help")).shortcut(super_with(Modifiers::SHIFT, '?'));
+pub const RUN_COPROCESS: Action = Action::new("run-coprocess", || tr!("run-coprocess"));
+pub const STOP_COPROCESS: Action = Action::new("stop-coprocess", || tr!("stop-coprocess"));
 pub const RESET_CHARSET: Action = Action::new("reset-charset", || tr!("reset-charset"));
 pub const USE_TRANSPARENCY: Action =
     Action::new("use-transparency", || tr!("use-transparency")).shortcut(super_key('u'));
@@ -270,6 +272,9 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
             tr!("menu-session"),
             vec![
                 EDIT_SESSION.item(true),
+                MenuItem::Separator,
+                RUN_COPROCESS.item(true),
+                STOP_COPROCESS.item(false),
                 MenuItem::Separator,
                 RESTART_SESSION.item(true),
                 MenuItem::Separator,

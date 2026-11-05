@@ -2,7 +2,7 @@
 
 BarrierKit version/commit used: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Summary: living document; state at the close of phase 17 (2026-11-05), tested on
+Summary: living document; state at the close of phase 18 (2026-11-05), tested on
 headless sway with lavapipe (`progreso.en.md`). The most serious: the
 `use_menu_action` handlers run outside Freya's context and abort the app if
 they touch the clipboard or `WindowControls::get()` (BK-017); the menu is only

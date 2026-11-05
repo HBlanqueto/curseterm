@@ -230,3 +230,7 @@ state-mouse-reporting = Mouse Reporting
 state-bracketed-paste = Paste Bracketing
 state-application-cursor = Application Cursor
 state-application-keypad = Application Keypad
+run-coprocess = Run Coprocess…
+stop-coprocess = Stop Coprocess
+coprocess-command = Command; it reads the session output and its output is typed in
+coprocess-confirm = Run

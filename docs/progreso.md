@@ -968,3 +968,28 @@ informe fuera de los tests.
 2. **Session › Stop Coprocess:** termina el coproceso. Las dos entradas se
    activan según haya uno en marcha; cuando acaba solo, se recoge.
 3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla con el kit parcheado, porque las entradas no
+tienen atajo y se pulsaron por D-Bus. `./dev.sh check` limpio en los dos
+modos del kit; 39 tests de la app y 1 del bloque. Ningún gap nuevo.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Coproceso que espera `PING` con `grep -m1` y escribe `echo PONG`; `echo PING` en la shell: se teclea `echo PONG` y sale `PONG` | ✓ | `fase18-coproceso.png` |
+| Stop Coprocess: no queda ningún proceso del coproceso | ✓ tras lanzarlo en su propio grupo y terminar el grupo; antes el `sh` interior quedaba huérfano | — |
+| Stop Coprocess activado solo mientras hay uno; uno que acaba solo (`echo ya`) se recoge y la entrada se desactiva | ✓ | — |
+
+**No probado:** cerrar la ventana con un coproceso en marcha (el proceso
+termina sin pasar por `Drop`; el coproceso recibe fin de archivo en la
+entrada, pero sigue si no la lee).
+
+**Difiere de iTerm2:**
+
+- No hay coprocesos automáticos desde triggers ni la opción de que el
+  coproceso no reciba la salida.
+- Lo que escribe el coproceso se manda tal cual, sin el modo de pegado entre
+  corchetes.

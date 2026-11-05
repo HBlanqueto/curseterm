@@ -90,6 +90,7 @@ enum Sheet {
     RenameWindow,
     SaveSelection(SessionId),
     Log(SessionId),
+    Coprocess(SessionId),
     CopyModeKeys,
 }
 
@@ -402,10 +403,8 @@ impl App for Terminal {
         let alert = (*closing.read()).map(|pending| close_alert(&handles, pending));
         let sheet_view = (*sheet.read()).map(|open| match open {
             Sheet::Pick(picker) => pick_sheet(&handles, picker, revision),
-            Sheet::RenameTab(_) | Sheet::RenameWindow | Sheet::SaveSelection(_) | Sheet::Log(_) => {
-                field_sheet(&handles, open)
-            }
             Sheet::CopyModeKeys => copy_mode_keys_sheet(&handles),
+            _ => field_sheet(&handles, open),
         });
         rect()
             .width(Size::fill())
@@ -590,6 +589,10 @@ fn use_live_menu(handles: &Handles) {
     let logging = handles.active().is_some_and(|session| session.logging());
     use_menu_enabled(menu::LOG_START.id, !logging);
     use_menu_enabled(menu::LOG_STOP.id, logging);
+    let coprocess = handles
+        .active()
+        .is_some_and(|session| session.coprocess_running());
+    use_menu_enabled(menu::STOP_COPROCESS.id, coprocess);
     use_menu_enabled(menu::SAVE_SELECTION.id, selection);
     let output = handles.active().is_some_and(|session| session.has_output());
     use_menu_enabled(menu::SELECT_OUTPUT.id, output);
@@ -831,6 +834,11 @@ fn field_sheet(handles: &Handles, target: Sheet) -> Element {
         ),
         Sheet::SaveSelection(_) => (tr!("save-selection"), tr!("save-path"), tr!("save-confirm")),
         Sheet::Log(_) => (tr!("log-start"), tr!("save-path"), tr!("log-confirm")),
+        Sheet::Coprocess(_) => (
+            tr!("run-coprocess"),
+            tr!("coprocess-command"),
+            tr!("coprocess-confirm"),
+        ),
         _ => (
             tr!("edit-window-title"),
             tr!("title-automatic"),
@@ -889,6 +897,7 @@ fn confirm_later(handles: &Handles, target: Sheet) {
             Sheet::RenameTab(of) => workspace.write().rename_tab(of, &typed),
             Sheet::SaveSelection(of) => save_selection(&later, of, &typed),
             Sheet::Log(of) => start_log(&later, of, &typed),
+            Sheet::Coprocess(of) => start_coprocess(&later, of, &typed),
             _ => workspace.write().rename_window(&typed),
         }
         let mut sheet = later.sheet;
@@ -924,6 +933,17 @@ fn start_log(handles: &Handles, of: SessionId, path: &str) {
         && let Err(error) = session.start_log(&path)
     {
         tracing::warn!(%error, path = %path.display(), "could not start the session log");
+    }
+}
+
+fn start_coprocess(handles: &Handles, of: SessionId, command: &str) {
+    if command.trim().is_empty() {
+        return;
+    }
+    if let Some(session) = handles.sessions.peek().get(&of)
+        && let Err(error) = session.start_coprocess(command)
+    {
+        tracing::warn!(%error, command, "could not start the coprocess");
     }
 }
 
@@ -1441,6 +1461,17 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             if let Some(session) = active {
                 handles.draft.clone().set(String::new());
                 open_sheet(handles, Sheet::Log(session.id));
+            }
+        }
+        _ if id == menu::RUN_COPROCESS.id => {
+            if let Some(session) = &active {
+                handles.draft.clone().set(String::new());
+                open_sheet(handles, Sheet::Coprocess(session.id));
+            }
+        }
+        _ if id == menu::STOP_COPROCESS.id => {
+            if let Some(session) = &active {
+                session.stop_coprocess();
             }
         }
         _ if id == menu::LOG_STOP.id => {

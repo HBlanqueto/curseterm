@@ -6,6 +6,7 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::ops::RangeInclusive;
 use std::path::PathBuf;
+use std::process::ChildStdin;
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime};
@@ -61,6 +62,7 @@ pub struct Extras {
     pub stamps: VecDeque<(i64, SystemTime)>,
     pub show_timestamps: bool,
     pub log: Option<File>,
+    pub coprocess: Option<ChildStdin>,
     pub cursor_spotlight: Option<Instant>,
     pub triggers_enabled: bool,
     triggers: Vec<Trigger>,
@@ -289,7 +291,7 @@ fn read_loop(
             }
             Err(_) => break,
         };
-        log_output(&extras, &buffer[..read]);
+        tee_output(&extras, &buffer[..read]);
         {
             let mut term = term.lock();
             for piece in splitter.feed(&buffer[..read]) {
@@ -312,7 +314,7 @@ fn read_loop(
     listener.send_event(Event::Exit);
 }
 
-fn log_output(extras: &Mutex<Extras>, bytes: &[u8]) {
+fn tee_output(extras: &Mutex<Extras>, bytes: &[u8]) {
     let Ok(mut extras) = extras.lock() else {
         return;
     };
@@ -321,6 +323,11 @@ fn log_output(extras: &Mutex<Extras>, bytes: &[u8]) {
     {
         tracing::warn!(%error, "could not write the session log; logging stops");
         extras.log = None;
+    }
+    if let Some(coprocess) = extras.coprocess.as_mut()
+        && coprocess.write_all(bytes).is_err()
+    {
+        extras.coprocess = None;
     }
 }
 

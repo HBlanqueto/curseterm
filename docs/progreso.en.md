@@ -967,3 +967,27 @@ report outside the tests.
    depending on whether one is running; when it ends on its own, it is
    reaped.
 3. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-05)
+
+Tested on headless sway with the patched kit, because the items have no
+shortcut and were clicked over D-Bus. `./dev.sh check` clean in both kit
+modes; 39 app tests and 1 block test. No new gap.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Coprocess that waits for `PING` with `grep -m1` and writes `echo PONG`; `echo PING` in the shell: `echo PONG` is typed and `PONG` comes out | ✓ | `fase18-coproceso.png` |
+| Stop Coprocess: no coprocess process is left | ✓ after starting it in its own process group and ending the group; before, the inner `sh` was orphaned | — |
+| Stop Coprocess enabled only while one runs; one that ends on its own (`echo ya`) is reaped and the item disables | ✓ | — |
+
+**Not tested:** closing the window with a running coprocess (the process
+exits without going through `Drop`; the coprocess gets end of file on its
+input, but keeps running if it does not read it).
+
+**Differs from iTerm2:**
+
+- There are no automatic coprocesses from triggers nor the option for the
+  coprocess not to get the output.
+- What the coprocess writes is sent as is, without bracketed paste mode.
