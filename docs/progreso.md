@@ -311,3 +311,52 @@ del menú, sin captura).
    usa. Se anota como gap y se ofrece `curseterm --hotkey`, que abre o cierra
    una ventana dedicada, para enlazarlo a un atajo del escritorio.
 8. **Prueba** en sway sin pantalla, como en las fases anteriores.
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla como en las fases anteriores. `./dev.sh check`
+limpio en los dos modos del kit; 26 tests de la app y 1 del bloque.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Bucle de E/S propio: shell, `seq`, colores y redimensionado como antes | ✓ | — |
+| 40 prompts con `OSC 133;A`: triángulo azul en el margen de cada uno | ✓ | `fase4-marcas-e-imagen.png` |
+| Previous Mark (Super+Mayús+↑) tres veces: de la marca 27 a la 24 | ✓ | — |
+| Dividir el panel reajusta las líneas largas y las marcas siguen en su prompt | ✓ tras convertir las marcas a líneas lógicas (`io::reflow`) | `fase4-broadcast.png` |
+| `1337;File=inline=1;width=20` con un PNG: 20 celdas de ancho y el texto sigue debajo | ✓ | `fase4-marcas-e-imagen.png` |
+| `OSC 7` con `%20`: una pestaña nueva con «Reuse previous session's directory» abre en `/tmp/con espacio` aunque la shell estaba en `~` | ✓ | — |
+| Find (Super+F): búsqueda al escribir hacia arriba; Intro y ↑ la anterior, ↓ la siguiente; Escape cierra | ✓ | `fase4-buscar.png` |
+| Broadcast Input to All Panes in All Tabs (Super+Alt+I): franjas en los dos paneles y `echo` en los dos | ✓ | `fase4-broadcast.png` |
+| Triggers del perfil: resaltar `error [0-9]+`, «Send Text» `si\n` ante `¿seguir?`, campana con `^campana$` | ✓; la campana aclara el panel (píxel `#002B36` → `#1A4049`) | `fase4-triggers.png` |
+| Ajustes › Perfiles › Triggers: lista, acción, texto, «−» y «+», guardado en el `.domain` | ✓ | `fase4-ajustes-triggers.png` |
+| Menú por D-Bus (parches 0003 y 0004): radio de Broadcast Input, Jump/Next/Previous Mark activas tras Set Mark, Enable Triggers se desmarca | ✓ | — |
+| `curseterm --hotkey` abre la ventana; otro `--hotkey` la cierra y sale con 0; un tercero la vuelve a abrir | ✓ | — |
+
+**Errores encontrados y corregidos al probar:** tras cerrar la búsqueda con
+Escape el foco seguía marcado y el terminal ignoraba el teclado; el reajuste
+de líneas al dividir movía las marcas una línea; `Timers::get()` en el
+callback de la campana abortaba la app (BK-017); `^…$` no casaba con la
+búsqueda en flujo de `alacritty_terminal`, que incluye los blancos del final
+de fila: los triggers usan ahora el crate `regex` sobre el texto de la fila.
+
+**No probado:** imágenes con `preserveAspectRatio=0` y en porcentaje;
+`1337;SetMark` y `1337;CurrentDir` (solo sus tests); Use Selection for Find;
+Edit Triggers… (abre Ajustes como Settings…); un `Event` de dbusmenu
+enviado sin esperar respuesta (`dbus-send` sin `--print-reply`) no hizo nada
+dos veces, con respuesta sí; no se investigó la causa.
+
+**Difiere de iTerm2:**
+
+- Las marcas y las imágenes se anclan a líneas absolutas: cuando el
+  historial llega a su límite y empieza a descartar líneas, se desplazan.
+- La búsqueda resalta solo la coincidencia actual (con el color de
+  selección), sin contar coincidencias ni opciones de mayúsculas o regex;
+  distingue mayúsculas solo si la consulta las tiene.
+- Los triggers miran cada fila completa, no la línea lógica, y no tienen el
+  modo «Instant» para la línea del prompt; solo tres acciones.
+- La campana es visual (BK-026); la ventana hotkey se cierra en vez de
+  ocultarse (BK-025).
+- Broadcast no tiene «Toggle Broadcast Input to Current Session» ni el aviso
+  de iTerm2 al activarlo.

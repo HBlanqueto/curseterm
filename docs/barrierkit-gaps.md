@@ -2,14 +2,15 @@
 
 Versión/commit de BarrierKit usado: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Resumen: documento vivo; estado al cerrar la fase 3 (2026-11-05), probado en
+Resumen: documento vivo; estado al cerrar la fase 4 (2026-11-05), probado en
 sway sin pantalla con lavapipe (`progreso.md`). Lo más serio: los handlers de
 `use_menu_action` corren fuera del contexto de Freya y hacen abortar la app si
 tocan el portapapeles o `WindowControls::get()` (BK-017); el menú solo se
 publica en D-Bus con `org_kde_kwin_appmenu_manager`, al contrario de lo que
 dice la documentación (BK-018); una ventana por proceso y sin título en vivo
 (BK-001, BK-002); sin token de activación para apps (BK-019); sin IME ni
-selección primaria. El lienzo, las pestañas, los paneles divididos, el
+selección primaria; sin atajos globales para la ventana hotkey (BK-025) ni
+campana o notificaciones (BK-026). El lienzo, las pestañas, los paneles divididos, el
 token `MONO` y el estado vivo del menú se resolvieron como bloques; el título,
 los atajos, el menú en D-Bus, los menús de primer nivel en vivo y el repintado
 sin foco, como parches probados.
@@ -53,6 +54,9 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-022 | plataforma / persistencia | Un cambio de `.domain` no repinta las ventanas sin foco | alta | Parche 0005 probado |
 | BK-023 | app | Sin selector de archivos | media | Workaround: ruta en un campo y `--import-colors` |
 | BK-024 | símbolos | Faltan símbolos para una barra de ajustes (engranaje, persona, teclado) | baja | Se usan `CircleHalf` y `ListBullet` |
+| BK-025 | plataforma / input | Sin atajos globales ni forma de ocultar y mostrar la ventana | media | Workaround probado: `curseterm --hotkey` |
+| BK-026 | app / plataforma | Sin campana, petición de atención ni notificaciones | baja | Workaround probado: campana visual |
+| BK-027 | controles / input | Una vista con teclado global no sabe si un campo de texto tiene el foco | baja | Workaround: foco seguido con `on_focus_change` |
 
 ## Gaps
 
@@ -374,7 +378,9 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Cómo lo resolví en CurseTerm**: `Handles` en `terminal.rs` guarda el
   `State` del portapapeles (`consume_root_context`) y `WindowControls` durante
   `render`; los handlers y los callbacks de `wakeup` usan esas copias. Las
-  ventanas auxiliares capturan `WindowControls` igual.
+  ventanas auxiliares capturan `WindowControls` igual. En la fase 4,
+  `Timers::get()` dentro de un callback de `wakeup` también abortó la app
+  (campana de un trigger): `Handles` guarda además `Timers`.
 - **Coste del workaround**: la app usa el `State` interno de
   `freya-clipboard` en vez de `Clipboard`.
 - **API propuesta para el kit**: que `MenuActions::dispatch` corra dentro de `with_context` del árbol de la ventana, o que el handler reciba un `MenuContext` con portapapeles y ventana.
@@ -504,6 +510,72 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Gravedad**: baja
 - **Cómo reproducirlo**: leer `enum Symbol` en `crates/barrier-kit/src/symbol.rs`.
 
+### BK-025 — Sin atajos globales ni forma de ocultar y mostrar la ventana
+- **Área**: plataforma / input
+- **Qué necesitaba CurseTerm**: la ventana hotkey de iTerm2: un atajo de todo
+  el sistema que muestra y oculta una ventana de terminal sin perder sus
+  sesiones.
+- **Qué ofrece hoy BarrierKit**: nada. Los atajos de `Action` solo llegan con
+  la ventana enfocada; `WindowControls` puede minimizar, pero xdg-shell no
+  deja a un cliente desminimizarse. El portal de Malaysia
+  (`crates/xdg-desktop-portal-malaysia/src`) solo implementa `Settings`, y su
+  auditoría (`docs/auditoria-claude-2026-11-03.md:613`) anota que el respaldo
+  GTK no da `GlobalShortcuts`.
+- **Qué falta**: registrar atajos con el portal
+  `org.freedesktop.portal.GlobalShortcuts` (y que Malaysia lo implemente), y
+  ocultar y volver a mostrar una ventana propia.
+- **Cómo lo resolví en CurseTerm**: `curseterm --hotkey` (`windows.rs`)
+  guarda su pid en `$XDG_RUNTIME_DIR/curseterm/hotkey`; si ya hay una ventana
+  hotkey viva, la cierra con `SIGTERM` y sale; si no, se convierte en ella. El
+  usuario lo enlaza a un atajo del escritorio.
+- **Coste del workaround**: cerrar la ventana pierde sus sesiones; sin
+  animación ni posición propia; hay que configurar el atajo fuera de la app.
+- **API propuesta para el kit**: `app::global_shortcut(id, description, preferred: Shortcut, on_activated: impl Fn())` sobre el portal, y `WindowControls::{hide, show}`.
+- **Gravedad**: media
+- **Cómo reproducirlo**: buscar `GlobalShortcuts` en `crates/`: no aparece.
+
+### BK-026 — Sin campana, petición de atención ni notificaciones
+- **Área**: app / plataforma
+- **Qué necesitaba CurseTerm**: la campana (BEL y el trigger «Ring Bell»),
+  que en iTerm2 suena, pide atención si la ventana no tiene el foco y puede
+  publicar una notificación.
+- **Qué ofrece hoy BarrierKit**: nada; en `crates/barrier-kit/src` no hay
+  sonido, urgencia ni notificaciones (solo aparece «notifies» en un test de
+  menús).
+- **Qué falta**: un sonido de evento del tema freedesktop y una notificación
+  por `org.freedesktop.portal.Notification`.
+- **Cómo lo resolví en CurseTerm**: campana visual: el panel se aclara un
+  20 % con el color del texto durante `DURATION_FAST_MS` y `Timers::after`
+  lo repinta al terminar.
+- **Coste del workaround**: sin sonido; con la ventana sin foco nadie se
+  entera.
+- **API propuesta para el kit**: `app::beep()` y `app::notify(title, body)`.
+- **Gravedad**: baja
+- **Cómo reproducirlo**: `grep -rni "bell\|attention\|notif" crates/barrier-kit/src`.
+
+### BK-027 — Una vista con teclado global no sabe si un campo de texto tiene el foco
+- **Área**: controles / input
+- **Qué necesitaba CurseTerm**: la barra de búsqueda (Edit › Find): lo que se
+  escribe en ella no debe llegar a la shell, y Escape la cierra.
+- **Qué ofrece hoy BarrierKit**: `SearchField` con `auto_focus`,
+  `on_focus_change` y `on_navigate` (Arriba, Abajo, Intro). Su
+  `stop_propagation` no frena los `on_global_key_down`, que Freya deriva de
+  cada `KeyDown` (`freya-core` 0.4.3, `events/name.rs:144`), y Escape no llega
+  a `on_navigate` (`controls.rs:951`).
+- **Qué falta**: saber desde la vista si un campo de texto del kit tiene el
+  foco, y un callback de cancelar.
+- **Cómo lo resolví en CurseTerm**: `terminal.rs` sigue el foco del
+  `SearchField` con `on_focus_change`; con la barra abierta y enfocada, el
+  manejador global ignora las teclas y Escape cierra la barra.
+- **Coste del workaround**: un estado más que se desincroniza si la barra se
+  cierra sin pasar por `Find::close`.
+- **API propuesta para el kit**: `SearchField::on_cancel` y
+  `use_text_input_focused() -> bool`.
+- **Gravedad**: baja
+- **Cómo reproducirlo**: un `rect().on_global_key_down(…)` con un
+  `SearchField` dentro: cada tecla del campo llega también al manejador.
+  Detectado en el código; el workaround se puso antes de reproducirlo.
+
 ## Cosas que funcionaron bien
 
 Comprobado en la fase 1 (sway sin pantalla, lavapipe):
@@ -537,6 +609,14 @@ Comprobado en la fase 1 (sway sin pantalla, lavapipe):
   `Table` con selección, `SegmentedControl`, `Switch`, `Stepper`,
   `PopUpButton` y `Form` cubrieron el editor de perfiles sin dibujar nada a
   mano.
+
+- **Lo característico de iTerm2 (fase 4):** el bloque `canvas` dibujó sin
+  elementos extra las franjas de broadcast, los triángulos de marca, el
+  resaltado de triggers, la campana y las imágenes en línea, decodificadas con
+  `Image::from_encoded` de `freya-engine`. `Timers::after` sirvió para apagar
+  la campana; `SearchField` con `auto_focus` y `on_navigate` dio la barra de
+  búsqueda; `use_submenu_items` reconstruye el grupo de radio de Broadcast
+  Input y el host lo ve por D-Bus.
 
 Sin probar todavía: menú contextual, arrastrar y soltar, menú global en la
 barra de Malaysia, GNOME y KDE reales.
