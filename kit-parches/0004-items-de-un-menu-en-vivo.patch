@@ -1,0 +1,106 @@
+From aadea43de596f953f0371b1972a07f598535e795 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 5 Nov 2026 20:26:24 +0000
+Subject: [PATCH] =?UTF-8?q?feat(kit):=20MenuHandle::set=5Fmenu=5Fitems=20c?=
+ =?UTF-8?q?ambia=20un=20men=C3=BA=20de=20primer=20nivel?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+update() solo alcanza ítems con id; un menú como «Profiles» necesita cambiar
+su lista entera. Lo pide CurseTerm (BK-010). Documenta también MenuHandle.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F89v1xFeQ2WCVD25PBsobh
+---
+ crates/barrier-kit/src/app_menu.rs | 34 +++++++++++++++++++++++-------
+ docs/barrierkit/11-app.en.md       |  8 +++++++
+ docs/barrierkit/11-app.md          |  8 +++++++
+ 3 files changed, 42 insertions(+), 8 deletions(-)
+
+diff --git a/crates/barrier-kit/src/app_menu.rs b/crates/barrier-kit/src/app_menu.rs
+index 4e96c24..8a345a1 100644
+--- a/crates/barrier-kit/src/app_menu.rs
++++ b/crates/barrier-kit/src/app_menu.rs
+@@ -133,14 +133,32 @@ impl MenuHandle {
+         if update_item(&mut state.menu, id.as_ref(), &f) {
+             state.revision = state.revision.wrapping_add(1);
+             drop(state);
+-            if let Ok(slot) = self.path.lock()
+-                && let Some(path) = slot.as_ref()
+-            {
+-                server::update(path);
+-            }
+-            if let Some(wake) = &self.wake {
+-                wake.wake();
+-            }
++            self.publish();
++        }
++    }
++
++    pub fn set_menu_items(&self, title: &str, items: Vec<MenuItem>) {
++        let mut state = self.state.lock().expect("menu state poisoned");
++        let Some(menu) = state.menu.menus.iter_mut().find(|menu| menu.title == title) else {
++            return;
++        };
++        if menu.items == items {
++            return;
++        }
++        menu.items = items;
++        state.revision = state.revision.wrapping_add(1);
++        drop(state);
++        self.publish();
++    }
++
++    fn publish(&self) {
++        if let Ok(slot) = self.path.lock()
++            && let Some(path) = slot.as_ref()
++        {
++            server::update(path);
++        }
++        if let Some(wake) = &self.wake {
++            wake.wake();
+         }
+     }
+ 
+diff --git a/docs/barrierkit/11-app.en.md b/docs/barrierkit/11-app.en.md
+index 44293ab..1b859e4 100644
+--- a/docs/barrierkit/11-app.en.md
++++ b/docs/barrierkit/11-app.en.md
+@@ -49,6 +49,14 @@ The menu is published over D-Bus (dbusmenu) and, if the compositor offers
+ `org_kde_kwin_appmenu_manager`, it appears in the Malaysia menu bar.
+ Without that protocol it still exists on D-Bus.
+ 
++To change the menu live, the app takes the window's `MenuHandle` with
++`try_consume_root_context::<MenuHandle>()`:
++
++- `update(id, |item| ..)` changes an item or a submenu with an id: label,
++  `enabled`, `check` or children.
++- `set_menu_items(title, items)` replaces the items of a top-level menu, for
++  example a list of profiles.
++
+ ## Single instance: `launch`
+ 
+ ```rust
+diff --git a/docs/barrierkit/11-app.md b/docs/barrierkit/11-app.md
+index 1c53334..2a269a6 100644
+--- a/docs/barrierkit/11-app.md
++++ b/docs/barrierkit/11-app.md
+@@ -50,6 +50,14 @@ El menú se publica por D-Bus (dbusmenu) y, si el compositor ofrece
+ `org_kde_kwin_appmenu_manager`, aparece en la barra de menús de Malaysia.
+ Sin ese protocolo sigue existiendo en D-Bus.
+ 
++Para cambiar el menú en vivo, la app toma el `MenuHandle` de la ventana con
++`try_consume_root_context::<MenuHandle>()`:
++
++- `update(id, |item| ..)` cambia un ítem o un submenú con id: etiqueta,
++  `enabled`, `check` o hijos.
++- `set_menu_items(título, ítems)` sustituye los ítems de un menú de primer
++  nivel, por ejemplo una lista de perfiles.
++
+ ## Una sola instancia: `launch`
+ 
+ ```rust
+-- 
+2.43.0
+
