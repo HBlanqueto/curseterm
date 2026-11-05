@@ -127,3 +127,37 @@ se pudo ejecutar se dice aquí; no se da por hecho.
 **Fallos encontrados y corregidos al probar:** handlers del menú que pedían
 contexto de Freya (BK-017), signo de la rueda, préstamo doble de `State` al
 cerrar, y repintado al cambiar foco, fuente o esquema.
+
+## Fase 2 — Organización
+
+### Plan
+
+1. **Modelo de paneles** (`crates/curseterm/src/panes.rs`, lógica pura con
+   tests): árbol de divisiones con proporciones; dividir junto al panel
+   activo, cerrar y colapsar, recorrer en orden, vecino arriba, abajo,
+   izquierda y derecha por geometría, y mover el divisor.
+2. **Bloque `views::split_panes`** (BK-007) en `barrier-kit-next`: un
+   contenedor de N hijos en un eje, anidable, con divisores que se arrastran;
+   controlado (`ratios` y `on_ratios`).
+3. **Cada panel mide su sesión:** el PTY de cada panel sigue su propio tamaño
+   (`SIGWINCH` por panel); el panel activo recibe el teclado y se elige con
+   un clic.
+4. **Barra de pestañas** (BK-006): botón «+», pestaña siguiente y anterior,
+   mover a izquierda y derecha, Super+1…9, y «Show Tab Bar» para verla con una
+   sola pestaña.
+5. **Menús completos** de Shell, View y Window, con estados vivos (marcas,
+   activado según contexto) y el submenú dinámico «Select Tab», sobre el
+   bloque `app_menu` (BK-010):
+   - Shell: New Window, New Tab, Duplicate Tab, Split Vertically/Horizontally
+     with Current Profile, Close, Close Terminal Window, Close All Panes in Tab.
+   - View: Show Tab Bar, Toggle Full Screen, Maximize Active Pane, Make Text
+     Bigger, Make Text Normal Size, Make Text Smaller.
+   - Window: Minimize, Zoom, Select Next/Previous Tab, Move Tab Left/Right,
+     Select Tab ▸, Split Pane ▸ (Select Pane Above/Below/Left/Right, Next/
+     Previous Pane, Move Divider Up/Down/Left/Right).
+6. **Lista de ventanas en «Window»:** cada ventana es un proceso (BK-001) y
+   una app no puede pedir un token de activación para traer otra al frente
+   (solo la feature `shell`). Con el kit tal cual no se muestra; se intenta
+   como parche si el resto de la fase cabe.
+7. **Prueba** en sway sin pantalla como en la fase 1, y por D-Bus con el
+   parche 0003 para el menú.
