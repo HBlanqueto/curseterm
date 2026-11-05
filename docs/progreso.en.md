@@ -1,0 +1,365 @@
+# Progress
+
+**Goal:** record the plan of each phase before it starts and, when it
+closes, what works, what does not and what differs from iTerm2.
+**Reader:** anyone who follows the project or reviews a phase.
+
+A phase closes when it builds, passes `./dev.sh check` (fmt, clippy with
+`-D warnings` and tests) in both kit modes (ADR 0001), has been tested by
+hand and its gaps are in [`barrierkit-gaps.en.md`](barrierkit-gaps.en.md).
+Whatever could not be run is stated here; nothing is taken for granted.
+
+## Phase 1 — Core
+
+### Plan
+
+1. **Workspace.** `Cargo.toml` with `crates/curseterm` (the app) and
+   `crates/barrier-kit-next` (blocks, ADR 0001); `flake.nix` with barrierkit
+   as an input (ADR 0004); `dev.sh` with `check`, `run`, `kit-parches` and
+   `kit-tal-cual`.
+2. **`canvas` block** (BK-009) in `barrier-kit-next`: an element that gives
+   the Skia `Canvas`, the scale and the font collection, and redraws when
+   its revision changes.
+3. **Session.** `alacritty_terminal` (ADR 0002): the user's shell (`$SHELL`,
+   else `/etc/passwd`), `TERM=xterm-256color`, `COLORTERM=truecolor`; I/O
+   thread with `WakeHandle`; title through OSC 0/2.
+4. **Grid.** Drawing by runs: one background per color run, text per style
+   run; ANSI, 256 and truecolor colors; bold, italic, underline, inverse;
+   block, bar and underline cursor; scrollback with the wheel.
+5. **Input.** Keyboard encoder (text, Ctrl, Alt as ESC, arrows and cursor
+   modes, F1–F12, Home/End, PgUp/PgDn); Super never reaches the PTY
+   (ADR 0003); Ctrl+Shift+C/V.
+6. **Selection and clipboard.** Drag (simple), double click (word), triple
+   click (line); copy and paste with the kit's `Clipboard`; bracketed paste
+   if the program asked for it.
+7. **Resize.** When the canvas size changes, the grid is recomputed and
+   `Term::resize` and the PTY's `OnResize` (`SIGWINCH`) are called.
+8. **Configuration.** `~/.config/malaysia/org.curseterm.CurseTerm.domain`
+   (`load_defaults`/`use_defaults`): font family and size and color scheme.
+   Schemes are bundled as data.
+9. **Window.** The kit's `Titlebar` with the session title; minimal tabs so
+   that "New Tab" does something real (the full iTerm2 bar belongs to
+   phase 2).
+10. **Minimal global menu** with `Action` and Super shortcuts:
+    - CurseTerm: About CurseTerm, Preferences…, Quit CurseTerm.
+    - Shell: New Window, New Tab, Close.
+    - Edit: Copy, Paste, Select All.
+11. **Platform workarounds** in "kit as is" mode: one window per process
+    (New Window launches another process; Quit closes the CurseTerm
+    processes registered in `$XDG_RUNTIME_DIR/curseterm/`); Preferences in a
+    separate process that writes the `.domain`, which the window watches
+    with `use_defaults`.
+12. **Patches** in `kit-parches/`: live title (BK-002) and shortcuts consumed
+    with `ShortcutKey::Named` (BK-003).
+13. **Test** in a headless compositor with lavapipe; screenshots in
+    `docs/capturas/`; and in `malaysia/dev.sh lab` if the environment allows.
+
+### Result (2026-11-05)
+
+**How it was tested.** Everything ran in the container, without a GPU:
+
+1. `nix develop` (the kit's dev shell plus `CURSETERM_DEV_SHELL`) with Vulkan
+   through lavapipe.
+2. Headless sway 1.12 (`WLR_BACKENDS=headless WLR_RENDERER=pixman`) and a
+   private D-Bus session bus.
+3. `wtype` for the keyboard, `grim` for screenshots, `wl-copy`/`wl-paste`
+   for the clipboard, and a minimal `zwlr_virtual_pointer_v1` client for the
+   mouse (`wlrctl` creates a new pointer on each command and the seat is
+   left without a pointer between one and the next).
+4. `./dev.sh check` clean in both kit modes (ADR 0001).
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| User shell in the PTY, prompt and cursor | ✓ | `fase1-colores-claro.png` |
+| 16 ANSI colors, 256 cube, truecolor | ✓ | `fase1-colores-claro.png` |
+| Bold, italic, underline, inverse, strikethrough, dim | ✓ | same |
+| Font fallback: ñ, double-width CJK | ✓ | same |
+| Light or dark scheme from `appearance.domain`, live | ✓ | `fase1-colores-oscuro-y-ajustes.png` |
+| Resize: `stty size` gives 39×136 at 1100×700 and 27×98 at 800×500 | ✓ | — |
+| Scrollback with the wheel | ✓ | `fase1-scrollback.png` |
+| Selection by drag, double click (word) and triple click (line) | ✓ | `fase1-seleccion-linea.png` |
+| Copy (Super+C, Ctrl+Shift+C) and paste (Super+V) with the system clipboard | ✓, checked with `wl-paste` and `wl-copy` | — |
+| Select All (Super+A) | ✓ | — |
+| New Tab (Super+T), titles through OSC, Close (Super+W) | ✓ | `fase1-pestanas.png` |
+| New Window (Super+N) in a new process | ✓ | `fase1-dos-ventanas-foco.png` |
+| Hollow cursor in the unfocused window | ✓ | same |
+| Quit (Super+Q) closes all windows | ✓ | — |
+| About and Settings… in their window | ✓ | `fase1-acerca-de.png` |
+| Changing the font size in Settings changes the terminal live | ✓ | `fase1-ajustes-fuente-en-vivo.png` |
+| Fractional scale 1.5 | ✓, no seams | `fase1-escala-1-5.png` |
+| At rest there are no new frames | ✓, 1 % CPU | — |
+| Patch 0001: live window title | ✓, sway shows the session title | `fase1-titulo-en-vivo-parcheado.png` |
+| Patch 0003: menu on D-Bus without `org_kde_kwin_appmenu_manager` | ✓ `GetLayout` gives CurseTerm, Shell and Edit with shortcuts; Copy becomes enabled on selection; `Event clicked` on New Tab opens the tab | — |
+
+**Not tested:**
+
+- **Global menu in Malaysia** (`malaysia/dev.sh lab`): the malaysia dev
+  shell builds `libadwaita` 1.9.3 and its `test-animation-target` test
+  aborts in the Nix sandbox. Without Malaysia there is no
+  `org_kde_kwin_appmenu_manager`, and with the kit as is the menu is not even
+  published on D-Bus (BK-018). The menu was tested over D-Bus with patch
+  0003, not in the menu bar.
+- **Malaysia's fixed shortcuts** (Super+W, Super+Q): could not be tested.
+- **IME, dead keys and primary selection:** the kit does not offer them
+  (BK-004, BK-005).
+- **Application mouse mode** (`vim`, `htop` with mouse): not implemented;
+  the wheel on the alternate screen sends arrows.
+- **Real GNOME and KDE.**
+- **First key of each `wtype`:** the first key of each invocation is lost
+  (each one uploads its own keymap). It was not isolated whether this comes
+  from the kit or from the tool; the tests send an Escape first.
+
+**Differs from iTerm2:**
+
+- "Preferences…" is named "Settings…" ("Ajustes…" in Spanish), to fill the
+  "Settings" slot of Malaysia's bar.
+- Shortcuts with Super (ADR 0003). In Malaysia, Super+W closes the whole
+  window.
+- The tab bar only appears with two or more tabs, as in iTerm2, but it has
+  no "+", reordering or activity indicator.
+- Emoji comes out monochrome (there is no color font in the environment) and
+  box-drawing characters come from the fallback font and do not fit the cell;
+  iTerm2 draws them itself.
+- Each window is a process (BK-001): tabs do not move between windows.
+- The "Window" menu and the window list belong to phase 2.
+
+**Bugs found and fixed while testing:** menu handlers that asked for Freya
+context (BK-017), the wheel sign, a double borrow of `State` on close, and
+repainting on focus, font or scheme change.
+
+## Phase 2 — Organization
+
+### Plan
+
+1. **Pane model** (`crates/curseterm/src/panes.rs`, pure logic with tests):
+   a split tree with ratios; split next to the active pane, close and
+   collapse, walk in order, neighbor above, below, left and right by
+   geometry, and move the divider.
+2. **`views::split_panes` block** (BK-007) in `barrier-kit-next`: a container
+   of N children on one axis, nestable, with draggable dividers; controlled
+   (`ratios` and `on_ratios`).
+3. **Each pane measures its session:** each pane's PTY follows its own size
+   (`SIGWINCH` per pane); the active pane receives the keyboard and is
+   chosen with a click.
+4. **Tab bar** (BK-006): "+" button, next and previous tab, move left and
+   right, Super+1…9, and "Show Tab Bar" to see it with a single tab.
+5. **Full menus** for Shell, View and Window, with live states (checkmarks,
+   enabled by context) and the dynamic "Select Tab" submenu, on the
+   `app_menu` block (BK-010):
+   - Shell: New Window, New Tab, Duplicate Tab, Split Vertically/Horizontally
+     with Current Profile, Close, Close Terminal Window, Close All Panes in Tab.
+   - View: Show Tab Bar, Toggle Full Screen, Maximize Active Pane, Make Text
+     Bigger, Make Text Normal Size, Make Text Smaller.
+   - Window: Minimize, Zoom, Select Next/Previous Tab, Move Tab Left/Right,
+     Select Tab ▸, Split Pane ▸ (Select Pane Above/Below/Left/Right, Next/
+     Previous Pane, Move Divider Up/Down/Left/Right).
+6. **Window list in "Window":** each window is a process (BK-001) and an app
+   cannot request an activation token to bring another to the front (only
+   the `shell` feature can). With the kit as is it is not shown; it is tried
+   as a patch if the rest of the phase fits.
+7. **Test** in headless sway as in phase 1, and over D-Bus with patch 0003
+   for the menu.
+
+### Result (2026-11-05)
+
+Tested as in phase 1 (headless sway, lavapipe, `wtype`, the scratchpad's
+virtual pointer and the menu over D-Bus with patch 0003). `./dev.sh
+check` clean in both kit modes; 17 app tests and 1 block test.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Split Vertically (Super+D) and Horizontally (Super+Shift+D), nested | ✓; each pane has its PTY (`stty size` gives 14×53 in a quarter) | `fase2-paneles.png` |
+| Select Pane Left/Right/Above/Below (Super+Alt+arrows), Next/Previous Pane (Super+] and Super+[) | ✓ | — |
+| Move Divider (Ctrl+Super+arrows) | ✓, the pane reflows the text | `fase2-divisor-movido.png` |
+| Drag the divider with the mouse; click to activate a pane | ✓ | `fase2-divisor-arrastrado.png` |
+| Maximize Active Pane (Super+Shift+Return), with checkmark | ✓ | `fase2-panel-maximizado.png` |
+| Close (Super+W) closes the pane; the last one closes the tab and then the window | ✓ | — |
+| Close All Panes in Tab (Super+Alt+W) | ✓, only enabled with splits | — |
+| Tab bar with "+" | ✓ | `fase2-barra-de-pestanas.png` |
+| Select Next/Previous Tab (Super+Shift+} and {), Super+1…9, Move Tab Left/Right | ✓ | — |
+| "Select Tab" ▸ with the tab list and a radio mark on the active one | ✓ over D-Bus | — |
+| Show Tab Bar with a single tab, with checkmark | ✓ | `fase2-mostrar-barra.png` |
+| Duplicate Tab opens in the active session's directory | ✓ | `fase2-duplicar-y-texto-mayor.png` |
+| Make Text Bigger/Smaller/Normal Size (Super+=, Super+-, Super+0) | ✓, the PTY resizes | same |
+| Toggle Full Screen (Ctrl+Super+F) | ✓ in sway | — |
+| Live states over D-Bus: enabled/disabled by tabs and splits, checkmarks | ✓ | — |
+
+**Not tested:**
+
+- **Minimize and Zoom:** sway does not minimize and does not maximize in
+  tiling; `WindowControls::minimize` and `toggle_maximize` are called, with
+  no visible effect here.
+- **Malaysia:** it still cannot be built (phase 1). In Malaysia, Super+M and
+  Super+W are handled by the compositor.
+
+**Differs from iTerm2:**
+
+- **Window list in "Window":** missing. Each window is a process (BK-001)
+  and an app cannot request an activation token to bring another to the
+  front (BK-019), so such an item would do nothing. In Malaysia the bar
+  already adds the app's window list to the "Window" menu.
+- **Closing a pane** activates the first one in the tree, not the neighbor.
+- **Inactive panes** are not dimmed; only their cursor turns hollow.
+- **Shortcuts with Shift:** they are declared with the produced character
+  (`Super+Shift+}`) because of BK-016; on a non-US keyboard they may not
+  match.
+- **Make Text Bigger** shows as Super+= and not ⌘+.
+- **Missing:** Undo Close, Edit Tab Title, moving tabs between windows and
+  dragging them.
+
+## Phase 3 — Profiles and preferences
+
+### Plan
+
+1. **Profiles** in the app's `.domain`: name, font family and size, color
+   scheme (or "Follow the system"), initial command and directory (home, the
+   previous session's or a fixed one), and which profile is the default.
+   With no saved profiles there is one, "Default".
+2. **Each session with its profile:** the command and directory at startup;
+   the font and scheme when drawing. New splits and tabs use the active
+   session's profile ("with Current Profile").
+3. **Importable schemes** from `.itermcolors` (XML plist) with the `plist`
+   crate. Imported schemes are saved in the same `.domain`, so they reach
+   every window live. They are imported from Preferences (path in a field,
+   because the kit has no file picker) or with
+   `curseterm --import-colors <archivo>`.
+4. **Preferences** with iTerm2's structure built with `PreferencesWindow`:
+   "Appearance" (tab bar with a single tab) and a "Profiles" group with one
+   pane per profile, whose sections follow the General, Colors and Text tabs
+   of iTerm2's profile editor; duplicate, delete and choose the default
+   profile.
+5. **"Profiles" menu** with one item per profile, which opens a tab with it
+   (Ctrl+Super+1…9). The kit does not allow changing the items of a
+   top-level menu: with the kit as is the labels update and the new list
+   appears in the next window; a patch (0004) adds `MenuHandle::set_menu` to
+   change it live.
+6. **Test** in headless sway, as in previous phases.
+
+### Changes to the plan
+
+With the iTerm2 screenshots the user sent, Settings does not use
+`PreferencesWindow` (sidebar) but what iTerm2 does: toolbar tabs at the top
+(`TabView`) and, in Profiles, the profile list (`Table`, ★ on the default,
++ and −) next to a `SegmentedControl` with General, Colors and Text. The
+menus were also reordered after those screenshots: Shell with "with Current
+Profile", Session (Restart Session, Reset), Edit with Clear Buffer and Clear
+Scrollback Buffer, and the "Tab ▸" submenu in Window.
+
+### Result (2026-11-05)
+
+Tested in headless sway as in previous phases. `./dev.sh check` clean in
+both kit modes; 20 app tests and 1 block test.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `curseterm --import-colors 'Solarized Dark.itermcolors'` (taken from iTerm2's `ColorPresets.plist`) | ✓; a file that is not a plist exits with an error and code 1 | — |
+| Settings: Appearance and Profiles tabs; list, ★, + and −; General, Colors and Text | ✓ | `fase3-ajustes-perfil-general.png`, `fase3-ajustes-perfil-colores.png` |
+| Choose an imported scheme; the terminal (another process) changes live | ✓ with the terminal focused; unfocused, only with patch 0005 (BK-022) | `fase3-repintado-sin-foco-parche-0005.png` |
+| "+" creates a profile; the terminal's "Profiles" menu shows it at once | ✓ with patch 0004; with the kit as is it appears in the next window | — |
+| Ctrl+Super+2 opens a tab with that profile and its scheme | ✓ | `fase3-pestana-con-otro-perfil.png` |
+| Split with Current Profile inherits the profile | ✓ | `fase3-division-con-el-perfil.png` |
+| Profile command and fixed directory | ✓ | `fase3-orden-directorio-y-restart.png` |
+| Restart Session (new shell, same profile and directory) | ✓ | same |
+| Clear Buffer (Super+K) keeps the prompt line; Clear Scrollback Buffer is enabled with history | ✓ | `fase3-clear-buffer-y-reset.png` |
+| Reset (Super+R) after breaking the character set with `ESC (0` | ✓ | same |
+| Appearance › "Show tab bar even when there is only one tab" and the View › Show Tab Bar checkmark in the terminal | ✓ | `fase3-ajustes-apariencia.png` |
+
+**Not tested:** renaming a profile with open sessions (sessions with the old
+name fall back to the default profile); the "Directory path" row with the
+keyboard; New Window with Current Profile (it launches
+`curseterm --profile NOMBRE`; `--profile` was tested only through that menu
+command, without a screenshot).
+
+**Differs from iTerm2:**
+
+- Settings only has Appearance and Profiles: General, Keys, Arrangements,
+  Pointer, Shortcuts and Advanced have nothing real behind them yet.
+- The profile editor has General, Colors and Text; Window, Terminal,
+  Session, Keys and Advanced are missing, and General lacks Shortcut key,
+  Tags, Badge, Title, Icon and Send text at start.
+- "Command" is a field (empty = login shell) and not a "Login Shell /
+  Command" dropdown.
+- Import asks for the path in a field: the kit has no file picker
+  (BK-023). `Calibrated` colors in a `.itermcolors` are taken as sRGB.
+- "Show Tab Bar" is in View; in current iTerm2 it only exists in Appearance.
+- The Settings window has no search field.
+
+## Phase 4 — What makes iTerm2 iTerm2
+
+### Plan
+
+1. **Own I/O loop** (ADR 0005) with a splitter for OSC 7, 133 and 1337.
+2. **Shell integration:** current directory through OSC 7 and
+   `1337;CurrentDir` (used by Duplicate Tab and "Reuse previous session's
+   directory"); marks through OSC 133;A and `1337;SetMark`, with iTerm2's
+   triangle in the margin, Set Mark, Jump to Mark, Next and Previous Mark.
+3. **Find** (Edit › Find ▸): a search bar in the pane with highlighting,
+   Find Next, Find Previous and Use Selection for Find, with
+   `alacritty_terminal`'s regex search.
+4. **Broadcast input** (Shell › Broadcast Input ▸): only the current
+   session, all panes in the tab or in all tabs, with an indicator on the
+   panes that receive.
+5. **Inline images** (`1337;File=…;inline=1`), decoded with Skia.
+6. **Triggers** per profile (regex and action: highlight, bell or send
+   text), editable in Settings and toggled from Session › Triggers ▸.
+7. **Hotkey window:** Wayland has no global shortcuts except the
+   `GlobalShortcuts` portal, which Malaysia's portal does not implement and
+   the kit does not use. It is noted as a gap and `curseterm --hotkey` is
+   offered, which opens or closes a dedicated window, to bind it to a
+   desktop shortcut.
+8. **Test** in headless sway, as in previous phases.
+
+### Result (2026-11-05)
+
+Tested in headless sway as in previous phases. `./dev.sh check` clean in
+both kit modes; 26 app tests and 1 block test.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Own I/O loop: shell, `seq`, colors and resize as before | ✓ | — |
+| 40 prompts with `OSC 133;A`: blue triangle in the margin of each one | ✓ | `fase4-marcas-e-imagen.png` |
+| Previous Mark (Super+Shift+↑) three times: from mark 27 to 24 | ✓ | — |
+| Splitting the pane reflows long lines and marks stay on their prompt | ✓ after converting marks to logical lines (`io::reflow`) | `fase4-broadcast.png` |
+| `1337;File=inline=1;width=20` with a PNG: 20 cells wide and the text continues below | ✓ | `fase4-marcas-e-imagen.png` |
+| `OSC 7` with `%20`: a new tab with "Reuse previous session's directory" opens in `/tmp/con espacio` even though the shell was in `~` | ✓ | — |
+| Find (Super+F): search-as-you-type upward; Enter and ↑ the previous, ↓ the next; Escape closes | ✓ | `fase4-buscar.png` |
+| Broadcast Input to All Panes in All Tabs (Super+Alt+I): stripes on both panes and `echo` in both | ✓ | `fase4-broadcast.png` |
+| Profile triggers: highlight `error [0-9]+`, "Send Text" `si\n` on `¿seguir?`, bell with `^campana$` | ✓; the bell lightens the pane (pixel `#002B36` → `#1A4049`) | `fase4-triggers.png` |
+| Settings › Profiles › Triggers: list, action, text, "−" and "+", saved in the `.domain` | ✓ | `fase4-ajustes-triggers.png` |
+| Menu over D-Bus (patches 0003 and 0004): Broadcast Input radio, Jump/Next/Previous Mark enabled after Set Mark, Enable Triggers unchecks | ✓ | — |
+| `curseterm --hotkey` opens the window; another `--hotkey` closes it and exits with 0; a third opens it again | ✓ | — |
+
+**Bugs found and fixed while testing:** after closing the search with
+Escape, focus stayed marked and the terminal ignored the keyboard; the line
+reflow on split moved marks by one line; `Timers::get()` in the bell
+callback aborted the app (BK-017); `^…$` did not match with
+`alacritty_terminal`'s stream search, which includes the trailing blanks of
+the row: triggers now use the `regex` crate on the row text.
+
+**Not tested:** images with `preserveAspectRatio=0` and in percent;
+`1337;SetMark` and `1337;CurrentDir` (only their tests); Use Selection for
+Find; Edit Triggers… (opens Settings like Settings…); a dbusmenu `Event`
+sent without waiting for a reply (`dbus-send` without `--print-reply`) did
+nothing twice, with a reply it did; the cause was not investigated.
+
+**Differs from iTerm2:**
+
+- Marks and images are anchored to absolute lines: when the history reaches
+  its limit and starts dropping lines, they shift.
+- Search highlights only the current match (with the selection color),
+  without counting matches or case or regex options; it is case-sensitive
+  only if the query has uppercase letters.
+- Triggers look at each full row, not the logical line, and lack the
+  "Instant" mode for the prompt line; only three actions.
+- The bell is visual (BK-026); the hotkey window closes instead of hiding
+  (BK-025).
+- Broadcast lacks "Toggle Broadcast Input to Current Session" and iTerm2's
+  warning when turning it on.

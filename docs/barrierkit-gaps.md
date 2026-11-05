@@ -37,7 +37,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-005 | portapapeles | Sin selección primaria | media | Ninguno |
 | BK-006 | contenedores | Sin pestañas de documento | media | Bloque probado `views::tab_bar` |
 | BK-007 | contenedores | Sin divisor genérico anidable | media | Bloque probado `views::split_panes` |
-| BK-008 | tokens / texto | Sin cara monoespaciada en Tengen | baja | Bloque `tokens::MONO` |
+| BK-008 | tokens / texto | Sin cara monoespaciada ni métricas de terminal en Tengen | baja | Bloques `tokens::MONO` y `tokens::TERMINAL` |
 | BK-009 | texto / rendimiento | Sin lienzo público y caché de párrafos apagada | media | Bloque `canvas` |
 | BK-010 | menú global | Títulos de `Action` estáticos y menú sin reemplazo en vivo | media | Bloque probado `app_menu`; parche 0004 probado para menús de primer nivel |
 | BK-011 | docs | Documentación que no coincide con el código | baja | — |
@@ -214,11 +214,17 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Qué ofrece hoy BarrierKit**: `vow_design::Font` con `family`; en
   `crates/vow-design/tengen/tokens.json:285-321` todas son `sans`. ADR 0047
   menciona un estilo «Mono» que no existe.
-- **Qué falta**: un token `MONO` (familia, tamaño, alto de línea).
+- **Qué falta**: un token `MONO` (familia, tamaño, alto de línea) y las
+  métricas de una vista de terminal: alfa de las franjas de broadcast, del
+  resaltado y de la campana, ancho de franja, intervalo de multiclic y rango
+  de tamaños de letra; también los tamaños de las ventanas de terminal,
+  Ajustes y Acerca de.
 - **Cómo lo resolví en CurseTerm**: bloque `barrier_kit_next::tokens::MONO`
-  (Geist Mono 13/16, que ya trae el dev shell del kit en `geist-font`).
+  (Geist Mono 13/16, que ya trae el dev shell del kit en `geist-font`), y
+  `tokens::TERMINAL`, `TERMINAL_WINDOW_SIZE`, `SETTINGS_WINDOW_SIZE` y
+  `ABOUT_WINDOW_SIZE`.
 - **Coste del workaround**: —
-- **API propuesta para el kit**: `vow_design::MONO: Font` en `tokens.json`.
+- **API propuesta para el kit**: `vow_design::MONO: Font` en `tokens.json` y `vow_design::TERMINAL: TerminalMetrics` en `components.json`.
 - **Gravedad**: baja
 - **Cómo reproducirlo**: `grep -n '"family"' crates/vow-design/tengen/tokens.json`.
 

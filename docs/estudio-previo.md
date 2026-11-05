@@ -32,9 +32,8 @@ Salen de `barrierkit/AGENTS.md` y `barrierkit/CLAUDE.md`:
 4. **Texto visible por Fluent:** `i18n/{en,es}/curseterm.ftl` y `tr!`.
 5. **Commits** `tipo(ámbito): …` (`feat`, `fix`, `docs`, `refactor`, `test`,
    `perf`, `chore`, `build`).
-6. **Docs en español; código, comentarios y rustdoc en inglés.** CurseTerm no
-   duplica cada documento en inglés: el encargo pide la documentación en
-   español y no es parte del kit.
+6. **Docs en español e inglés** (`nombre.md` y `nombre.en.md`, en el mismo
+   commit), como en barrierkit; código, comentarios y rustdoc solo en inglés.
 7. **ADR** con el formato del kit: título `NNNN — …`, «Estado», «Contexto»,
    «Decisión», «Consecuencias» y «Referencias».
 

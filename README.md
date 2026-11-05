@@ -5,6 +5,8 @@ comportamiento, la interfaz y los menús de iTerm2, construido con
 [BarrierKit](https://github.com/HBlanqueto/barrierkit), el toolkit de
 [Malaysia](https://github.com/HBlanqueto/malaysia).
 
+English: [README.en.md](README.en.md)
+
 ## Licencia y relación con iTerm2
 
 CurseTerm es MIT. **Reimplementa el comportamiento de iTerm2 a partir de
