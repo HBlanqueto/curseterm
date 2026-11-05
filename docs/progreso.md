@@ -360,3 +360,22 @@ dos veces, con respuesta sí; no se investigó la causa.
   ocultarse (BK-025).
 - Broadcast no tiene «Toggle Broadcast Input to Current Session» ni el aviso
   de iTerm2 al activarlo.
+
+## Fase 5 — Perfil Terminal, campana y búsqueda completa
+
+### Plan
+
+1. **Perfil › Terminal** en Ajustes: «Scrollback lines» (por omisión 1000,
+   como iTerm2) y, en la campana, «Flash visual bell» y «Show bell icon in
+   tabs». Se aplican en vivo a las sesiones abiertas
+   (`Term::set_options`). Sin «Unlimited scrollback»:
+   `Grid::clear_history` de `alacritty_terminal` vuelve a reservar todas las
+   filas del límite al limpiar, así que el límite es finito.
+2. **Campana en una pestaña de fondo:** la pestaña muestra un icono hasta que
+   se selecciona. El kit no tiene símbolo de campana (BK-024); el bloque
+   `TabBar` gana un indicador por pestaña.
+3. **Find completo:** todas las coincidencias visibles resaltadas, la actual
+   con la selección, y «n de m» o «Sin coincidencias» en la barra.
+4. **Perfil › Advanced:** los triggers pasan a la sección Advanced, donde los
+   tiene iTerm2.
+5. **Prueba** en sway sin pantalla y documentación en los dos idiomas.

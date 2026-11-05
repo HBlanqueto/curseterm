@@ -363,3 +363,22 @@ nothing twice, with a reply it did; the cause was not investigated.
   (BK-025).
 - Broadcast lacks "Toggle Broadcast Input to Current Session" and iTerm2's
   warning when turning it on.
+
+## Phase 5 — Terminal profile, bell and complete Find
+
+### Plan
+
+1. **Profile › Terminal** in Settings: "Scrollback lines" (1000 by default,
+   like iTerm2) and, for the bell, "Flash visual bell" and "Show bell icon in
+   tabs". They apply live to open sessions (`Term::set_options`). No
+   "Unlimited scrollback": `alacritty_terminal`'s `Grid::clear_history`
+   reallocates every row up to the limit when clearing, so the limit is
+   finite.
+2. **Bell in a background tab:** the tab shows an icon until it is selected.
+   The kit has no bell symbol (BK-024); the `TabBar` block gains a per-tab
+   indicator.
+3. **Complete Find:** every visible match highlighted, the current one with
+   the selection, and "n of m" or "No matches" in the bar.
+4. **Profile › Advanced:** triggers move to the Advanced section, where
+   iTerm2 keeps them.
+5. **Test** in headless sway and documentation in both languages.
