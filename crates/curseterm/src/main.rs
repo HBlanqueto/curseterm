@@ -62,6 +62,13 @@ fn main() -> ExitCode {
     {
         return import_colors(Path::new(path));
     }
+    let _hotkey = match arguments.first().map(String::as_str) {
+        Some("--hotkey") => match windows::toggle_hotkey() {
+            Some(registration) => Some(registration),
+            None => return ExitCode::SUCCESS,
+        },
+        _ => None,
+    };
     let _registration = windows::register();
     let result = match arguments.first().map(String::as_str) {
         Some("--about") => auxiliary::run_about(),
