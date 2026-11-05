@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
+use crate::config::APP_NAME;
 use crate::panes::{Axis, Pane, Toward};
 use crate::session::SessionId;
-
-pub const DEFAULT_TITLE: &str = "CurseTerm";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tab {
@@ -59,7 +58,7 @@ impl Workspace {
     }
 
     pub fn title(&self, id: SessionId) -> &str {
-        self.titles.get(&id).map_or(DEFAULT_TITLE, String::as_str)
+        self.titles.get(&id).map_or(APP_NAME, String::as_str)
     }
 
     pub fn set_title(&mut self, id: SessionId, title: Option<String>) {

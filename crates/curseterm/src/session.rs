@@ -18,6 +18,7 @@ use alacritty_terminal::tty;
 use alacritty_terminal::vte::ansi::Handler;
 use barrier_kit::platform::WakeHandle;
 
+use crate::config::APP_NAME;
 use crate::io::{self as pty_io, Extras};
 
 pub type SessionId = u64;
@@ -115,7 +116,7 @@ impl Session {
             env: HashMap::from([
                 ("TERM".into(), "xterm-256color".into()),
                 ("COLORTERM".into(), "truecolor".into()),
-                ("TERM_PROGRAM".into(), "CurseTerm".into()),
+                ("TERM_PROGRAM".into(), APP_NAME.into()),
             ]),
         };
         let mut pty = tty::new(&options, size.window_size(), id)?;
@@ -184,7 +185,9 @@ impl Session {
         self.size.set(size);
         let mut term = self.term.lock();
         let mut extras = self.extras();
-        pty_io::reflow(&mut term, &mut extras, |term| term.resize(size.term_size()));
+        pty_io::resize_keeping_anchors(&mut term, &mut extras, |term| {
+            term.resize(size.term_size())
+        });
         extras.cell = (size.cell_width, size.cell_height);
         drop((extras, term));
         self.pty.borrow_mut().on_resize(size.window_size());

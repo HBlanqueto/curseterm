@@ -1,5 +1,4 @@
-//! BarrierKit opens one window per process (BK-001): each CurseTerm window is
-//! its own process, registered by pid under `$XDG_RUNTIME_DIR/curseterm/windows`.
+//! One process per window (BK-001), registered by pid under `$XDG_RUNTIME_DIR/curseterm`.
 
 use std::fs;
 use std::path::PathBuf;
@@ -23,9 +22,7 @@ fn is_curseterm(pid: u32) -> bool {
     fs::read_link(format!("/proc/{pid}/exe")).is_ok_and(|path| exe.is_ok_and(|exe| path == exe))
 }
 
-/// Wayland has no global shortcuts without the GlobalShortcuts portal (BK-025):
-/// a desktop shortcut runs `curseterm --hotkey`, which closes the hotkey window
-/// when one is open and otherwise becomes it.
+// BK-025: without the GlobalShortcuts portal a desktop shortcut runs `curseterm --hotkey`.
 pub fn toggle_hotkey() -> Option<Registration> {
     let Some(file) = runtime_dir().map(|dir| dir.join("hotkey")) else {
         return Some(Registration(None));
@@ -104,8 +101,7 @@ pub fn quit_others() {
     }
 }
 
-/// The kit restores every window of an app from one `<app_id>.window` state
-/// (BK-012); an auxiliary window puts the terminal's saved size back on exit.
+// BK-012: one saved size per app_id, so an auxiliary window restores the terminal's on exit.
 pub struct KeepTerminalSize(toml::Table);
 
 impl KeepTerminalSize {

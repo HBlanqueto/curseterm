@@ -6,6 +6,7 @@ use barrier_kit_next::tokens::MONO;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub const APP_ID: &str = "org.curseterm.CurseTerm";
+pub const APP_NAME: &str = "CurseTerm";
 const DEFAULT_PROFILE: &str = "Default";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

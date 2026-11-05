@@ -137,8 +137,7 @@ fn logical_lines(term: &Term<Listener>) -> Vec<i64> {
         .collect()
 }
 
-/// Keeps marks and images on their text when a resize rewraps the lines above them.
-pub fn reflow(
+pub fn resize_keeping_anchors(
     term: &mut Term<Listener>,
     extras: &mut Extras,
     resize: impl FnOnce(&mut Term<Listener>),
@@ -285,7 +284,7 @@ fn run_triggers(
         ..
     } = &mut *extras;
     for row in from..cursor {
-        let (text, columns) = row_text(term, Line((row - history) as i32));
+        let (text, columns) = trimmed_text_and_byte_columns(term, Line((row - history) as i32));
         for trigger in compiled.iter() {
             for found in trigger
                 .regex
@@ -307,8 +306,7 @@ fn run_triggers(
     }
 }
 
-/// A row's text without trailing blanks, and the column of each of its bytes.
-fn row_text(term: &Term<Listener>, line: Line) -> (String, Vec<usize>) {
+fn trimmed_text_and_byte_columns(term: &Term<Listener>, line: Line) -> (String, Vec<usize>) {
     let mut text = String::new();
     let mut columns = Vec::new();
     for (column, cell) in term.grid()[line].into_iter().enumerate() {

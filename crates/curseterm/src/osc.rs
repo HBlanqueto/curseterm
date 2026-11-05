@@ -1,3 +1,5 @@
+//! iTerm2's OSC 7, 133 and 1337 split out of the PTY stream (ADR 0005).
+
 const ESC: u8 = 0x1b;
 const BEL: u8 = 0x07;
 const WANTED: [&[u8]; 3] = [b"7", b"133", b"1337"];
@@ -20,8 +22,6 @@ enum State {
     PayloadEscape,
 }
 
-/// Takes iTerm2's OSC 7, 133 and 1337 out of the PTY stream and keeps every
-/// other byte, in order, for the terminal parser.
 #[derive(Default)]
 pub struct Splitter {
     state: State,

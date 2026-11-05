@@ -122,3 +122,4 @@ trigger-bell = Ring Bell
 trigger-send-text = Send Text
 trigger-regex = Regular Expression
 trigger-parameter = Text to send (\n = Return)
+profile-default-row = ★ { $name }

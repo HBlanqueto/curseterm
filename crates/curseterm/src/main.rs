@@ -20,10 +20,11 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use barrier_kit::platform::{WindowOptions, run_window};
+use barrier_kit_next::tokens::TERMINAL_WINDOW_SIZE;
 use freya_core::integration::AppComponent;
 use vow_design::WINDOW_MIN_SIZE;
 
-use crate::config::{APP_ID, Defaults, change_defaults};
+use crate::config::{APP_ID, APP_NAME, Defaults, change_defaults};
 
 fn profile_names() -> Vec<String> {
     let defaults: Defaults = barrier_kit::app::load_defaults(APP_ID);
@@ -50,8 +51,6 @@ fn import_colors(path: &Path) -> ExitCode {
         }
     }
 }
-
-const TERMINAL_SIZE: (u32, u32) = (720, 460);
 
 fn main() -> ExitCode {
     barrier_kit::init_tracing();
@@ -80,9 +79,9 @@ fn main() -> ExitCode {
                     _ => None,
                 },
             }),
-            WindowOptions::new("CurseTerm", "curseterm")
+            WindowOptions::new(APP_NAME, "curseterm")
                 .app_id(APP_ID)
-                .size(TERMINAL_SIZE)
+                .size(TERMINAL_WINDOW_SIZE)
                 .min_size(Some(WINDOW_MIN_SIZE))
                 .menu(menu::terminal_menu(&profile_names())),
         ),

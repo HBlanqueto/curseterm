@@ -27,8 +27,6 @@ struct Canvas {
     layout: LayoutData,
 }
 
-/// Fills its parent; `painter` draws in logical pixels from the top-left corner
-/// and runs again whenever `revision` changes.
 pub fn canvas(revision: u64, painter: impl Fn(&mut CanvasContext) + 'static) -> Element {
     let layout = torin::node::Node {
         width: Size::fill(),

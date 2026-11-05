@@ -1,4 +1,4 @@
-//! «About» in its own process (BK-001) and the menu of the auxiliary windows.
+//! About window and the menu of the auxiliary windows, one process each (BK-001).
 
 use barrier_kit::adornments::avatar;
 use barrier_kit::app::use_menu_action;
@@ -7,16 +7,15 @@ use barrier_kit::platform::{RunError, WindowControls, WindowOptions, run_window}
 use barrier_kit::style::Palette;
 use barrier_kit::theme::color;
 use barrier_kit::titlebar::Titlebar;
+use barrier_kit_next::tokens::ABOUT_WINDOW_SIZE;
 use freya_core::integration::AppComponent;
 use freya_core::prelude::*;
 use torin::prelude::{Direction, Size};
 
-use crate::config::APP_ID;
+use crate::config::{APP_ID, APP_NAME};
 use crate::localize::tr;
 use crate::menu;
 use crate::windows::{self, KeepTerminalSize};
-
-const ABOUT_SIZE: (u32, u32) = (320, 280);
 
 pub fn run_about() -> Result<(), RunError> {
     let _keep = KeepTerminalSize::new();
@@ -24,9 +23,9 @@ pub fn run_about() -> Result<(), RunError> {
         AppComponent::new(About),
         WindowOptions::new(tr!("about"), "curseterm")
             .app_id(APP_ID)
-            .size(ABOUT_SIZE)
-            .min_size(Some(ABOUT_SIZE))
-            .max_size(Some(ABOUT_SIZE))
+            .size(ABOUT_WINDOW_SIZE)
+            .min_size(Some(ABOUT_WINDOW_SIZE))
+            .max_size(Some(ABOUT_WINDOW_SIZE))
             .menu(menu::auxiliary_menu()),
     )
 }
@@ -60,7 +59,7 @@ impl App for About {
             .child(Titlebar::new().close_only(true))
             .child(about_window(
                 avatar("CT"),
-                "CurseTerm",
+                APP_NAME,
                 Some(tr!("about-version", version = env!("CARGO_PKG_VERSION"))),
                 tr!("about-copyright"),
             ))

@@ -16,6 +16,7 @@ use barrier_kit::style::Palette;
 use barrier_kit::theme::color;
 use barrier_kit::titlebar::Titlebar;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
+use barrier_kit_next::tokens::TERMINAL;
 use barrier_kit_next::views::split_panes::SplitPanes;
 use barrier_kit_next::views::tab_bar::TabBar;
 use freya_clipboard::copypasta::ClipboardProvider;
@@ -24,7 +25,7 @@ use torin::prelude::{Content, Direction, Size};
 
 use vow_design::{DURATION_FAST_MS, SPACE_1};
 
-use crate::config::{APP_ID, Defaults, Profile, WorkingDirectory, change_defaults};
+use crate::config::{APP_ID, APP_NAME, Defaults, Profile, WorkingDirectory, change_defaults};
 use crate::grid::Fonts;
 use crate::keys::{KeyAction, encode};
 use crate::localize::tr;
@@ -37,7 +38,6 @@ use crate::workspace::{Broadcast, Closed, Workspace};
 
 const INITIAL_GRID: (u16, u16) = (80, 24);
 const DIVIDER_STEP: f32 = 0.05;
-const TEXT_SIZE_RANGE: (i32, i32) = (6, 72);
 
 type Sessions = HashMap<SessionId, Rc<Session>>;
 type ClipboardState = State<Option<Box<dyn ClipboardProvider>>>;
@@ -97,8 +97,9 @@ impl Handles {
     }
 
     fn fonts_for(&self, profile: &Profile) -> Rc<Fonts> {
-        let (smallest, largest) = TEXT_SIZE_RANGE;
-        let size = (profile.font_size as i32 + *self.text_zoom.peek()).clamp(smallest, largest);
+        let (smallest, largest) = TERMINAL.font_sizes;
+        let size = (profile.font_size as i32 + *self.text_zoom.peek())
+            .clamp(smallest as i32, largest as i32);
         self.fonts
             .borrow_mut()
             .entry((profile.font_family.clone(), size))
@@ -215,7 +216,7 @@ impl App for Terminal {
         let state = workspace.read();
         let title = state
             .active_session()
-            .map_or(crate::workspace::DEFAULT_TITLE, |id| state.title(id))
+            .map_or(APP_NAME, |id| state.title(id))
             .to_string();
         let show_tab_bar = defaults.read().show_tab_bar;
         let tab_bar = (state.tabs.len() > 1 || show_tab_bar).then(|| {

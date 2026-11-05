@@ -4,7 +4,6 @@ use barrier_kit::app_menu::MenuHandle;
 use barrier_kit::menu::{CheckState, MenuItem};
 use freya_core::prelude::*;
 
-/// Applies `value` to the entry `id` whenever it changes between renders.
 pub fn use_menu_update<T: PartialEq + Clone + 'static>(
     id: &'static str,
     value: T,

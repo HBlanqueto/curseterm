@@ -8,6 +8,7 @@ use alacritty_terminal::term::color::Colors;
 use alacritty_terminal::term::{RenderableContent, RenderableCursor, Term};
 use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Rgb};
 use barrier_kit_next::canvas::CanvasContext;
+use barrier_kit_next::tokens::TERMINAL;
 use freya_engine::prelude::{
     Color4f, Font, FontEdging, FontMgr, FontStyle, Paint, PaintStyle, PathBuilder, Rect as SkRect,
     Typeface,
@@ -17,11 +18,6 @@ use vow_design::DURATION_FAST_MS;
 use crate::config::Scheme;
 use crate::io::Extras;
 use crate::session::Listener;
-
-const BROADCAST_ALPHA: f32 = 0.12;
-const BROADCAST_STRIPE: f32 = 6.0;
-const HIGHLIGHT_ALPHA: f32 = 0.45;
-const BELL_ALPHA: f32 = 0.2;
 
 pub struct Fonts {
     family: String,
@@ -243,7 +239,7 @@ pub fn draw(
         .is_some_and(|rang| rang.elapsed() < Duration::from_millis(DURATION_FAST_MS));
     if ringing {
         let mut flash = paint(scheme.foreground);
-        flash.set_alpha_f(BELL_ALPHA);
+        flash.set_alpha_f(TERMINAL.bell_alpha);
         ctx.canvas
             .draw_rect(SkRect::new(0.0, 0.0, ctx.width, ctx.height), &flash);
     }
@@ -257,7 +253,7 @@ fn draw_highlights(
     scheme: &Scheme,
 ) {
     let mut ink = paint(scheme.ansi[usize::from(NamedColor::Yellow as u8)]);
-    ink.set_alpha_f(HIGHLIGHT_ALPHA);
+    ink.set_alpha_f(TERMINAL.highlight_alpha);
     for highlight in &extras.highlights {
         let y = (highlight.line - top) as f32 * fonts.cell_height;
         if y + fonts.cell_height < 0.0 || y > ctx.height {
@@ -311,10 +307,10 @@ fn draw_marks(
 
 fn draw_broadcast(ctx: &mut CanvasContext, tint: Rgb) {
     let mut stripe = paint(tint);
-    stripe.set_alpha_f(BROADCAST_ALPHA);
-    stripe.set_stroke_width(BROADCAST_STRIPE);
+    stripe.set_alpha_f(TERMINAL.broadcast_alpha);
+    stripe.set_stroke_width(TERMINAL.broadcast_stripe);
     stripe.set_style(PaintStyle::Stroke);
-    let step = BROADCAST_STRIPE * 3.0;
+    let step = TERMINAL.broadcast_stripe * 3.0;
     let mut x = -ctx.height;
     while x < ctx.width {
         ctx.canvas

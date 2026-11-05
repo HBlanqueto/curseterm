@@ -122,3 +122,4 @@ trigger-bell = Hacer sonar la campana
 trigger-send-text = Enviar texto
 trigger-regex = Expresión regular
 trigger-parameter = Texto que enviar (\n = Intro)
+profile-default-row = ★ { $name }

@@ -1,6 +1,4 @@
-//! Settings window with iTerm2's layout: toolbar tabs on top and, under
-//! Profiles, the profile list beside the profile editor's sections. It runs in
-//! its own process (BK-001) and writes the app's `.domain`.
+//! Settings window laid out like iTerm2's, in its own process (BK-001).
 
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -19,6 +17,7 @@ use barrier_kit::titlebar::Titlebar;
 use barrier_kit::views::form::{Form, Row, Section};
 use barrier_kit::views::table::Table;
 use barrier_kit::views::tabs::TabView;
+use barrier_kit_next::tokens::{SETTINGS_WINDOW_SIZE, TERMINAL};
 use freya_core::integration::AppComponent;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Size};
@@ -32,10 +31,6 @@ use crate::itermcolors;
 use crate::localize::tr;
 use crate::menu;
 use crate::windows::KeepTerminalSize;
-
-const SIZE: (u32, u32) = (860, 560);
-const FONT_SIZES: (i64, i64) = (6, 72);
-const DEFAULT_MARK: &str = "★ ";
 
 thread_local! {
     static INTERNED: RefCell<HashSet<&'static str>> = RefCell::new(HashSet::new());
@@ -62,7 +57,7 @@ pub fn run() -> Result<(), RunError> {
         AppComponent::new(Settings),
         WindowOptions::new(tr!("settings-title"), "curseterm")
             .app_id(APP_ID)
-            .size(SIZE)
+            .size(SETTINGS_WINDOW_SIZE)
             .min_size(Some(WINDOW_MIN_SIZE))
             .menu(menu::auxiliary_menu()),
     )
@@ -139,12 +134,12 @@ impl Component for ProfilesPane {
         let rows = profiles
             .iter()
             .map(|profile| {
-                let mark = if profile.name == default_name {
-                    DEFAULT_MARK
+                let name = profile.name.clone();
+                vec![if name == default_name {
+                    tr!("profile-default-row", name = name)
                 } else {
-                    ""
-                };
-                vec![format!("{mark}{}", profile.name)]
+                    name
+                }]
             })
             .collect();
         let several = profiles.len() > 1;
@@ -380,11 +375,13 @@ fn text_section(index: usize, profile: &Profile) -> Section {
         }))
         .row(
             Row::new(tr!("font-size")).control(
-                Stepper::new(tr!("font-size"), FONT_SIZES.0, FONT_SIZES.1)
-                    .value(i64::from(profile.font_size))
-                    .on_change(move |size: i64| {
-                        edit(index, |profile| profile.font_size = size as u32)
-                    }),
+                Stepper::new(
+                    tr!("font-size"),
+                    i64::from(TERMINAL.font_sizes.0),
+                    i64::from(TERMINAL.font_sizes.1),
+                )
+                .value(i64::from(profile.font_size))
+                .on_change(move |size: i64| edit(index, |profile| profile.font_size = size as u32)),
             ),
         )
 }

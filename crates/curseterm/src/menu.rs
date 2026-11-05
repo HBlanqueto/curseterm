@@ -4,6 +4,7 @@ use barrier_kit::menu::{CheckState, MenuItem};
 use barrier_kit_next::app_menu::submenu;
 use freya_core::prelude::Modifiers;
 
+use crate::config::APP_NAME;
 use crate::localize::tr;
 use crate::workspace::Broadcast;
 
@@ -110,9 +111,6 @@ pub const DIVIDER_UP: &str = "divider-up";
 pub const DIVIDER_DOWN: &str = "divider-down";
 pub const DIVIDER_LEFT: &str = "divider-left";
 pub const DIVIDER_RIGHT: &str = "divider-right";
-
-// The shell merges a menu titled like the app into its own app menu.
-const APP_MENU_TITLE: &str = "CurseTerm";
 
 fn keyed(id: &'static str, label: &str, shortcut: &str) -> MenuItem {
     MenuItem::action(id, label).with_shortcut(shortcut)
@@ -324,7 +322,8 @@ pub fn auxiliary_menu() -> AppMenu {
 
 fn app_menu() -> Menu {
     Menu::new(
-        APP_MENU_TITLE,
+        // The shell merges a menu titled like the app into its own app menu.
+        APP_NAME,
         vec![
             ABOUT.item(true),
             MenuItem::Separator,

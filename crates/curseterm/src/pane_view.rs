@@ -7,6 +7,7 @@ use alacritty_terminal::index::{Column, Line, Point, Side};
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::TermMode;
 use barrier_kit_next::canvas::canvas;
+use barrier_kit_next::tokens::TERMINAL;
 use freya_core::prelude::*;
 use torin::prelude::Size;
 use vow_design::SPACE_2;
@@ -14,8 +15,6 @@ use vow_design::SPACE_2;
 use crate::config::Scheme;
 use crate::grid::{self, Fonts};
 use crate::session::{Session, SessionId};
-
-const MULTI_CLICK: Duration = Duration::from_millis(400);
 
 pub struct TerminalPane {
     pub session: Rc<Session>,
@@ -184,7 +183,12 @@ fn point_at(session: &Session, fonts: &Fonts, x: f32, y: f32) -> (Point, Side) {
 fn next_click(last: Option<Click>, point: Point) -> Click {
     let now = Instant::now();
     let count = match last {
-        Some(last) if last.point == point && now - last.at < MULTI_CLICK => last.count % 3 + 1,
+        Some(last)
+            if last.point == point
+                && now - last.at < Duration::from_millis(TERMINAL.multi_click_ms) =>
+        {
+            last.count % 3 + 1
+        }
         _ => 1,
     };
     Click {
