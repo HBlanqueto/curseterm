@@ -236,3 +236,54 @@ check` limpio en los dos modos del kit; 17 tests de la app y 1 del bloque.
    aparece en la siguiente ventana; un parche (0004) añade
    `MenuHandle::set_menu` para cambiarla en vivo.
 6. **Prueba** en sway sin pantalla, como en las fases anteriores.
+
+### Cambios al plan
+
+Con las capturas de iTerm2 que mandó el usuario, Ajustes no usa
+`PreferencesWindow` (barra lateral) sino lo que hace iTerm2: pestañas de
+barra de herramientas arriba (`TabView`) y, en Profiles, la lista de perfiles
+(`Table`, ★ en el de por omisión, + y −) junto a un `SegmentedControl` con
+General, Colors y Text. También se reordenaron los menús según esas capturas:
+Shell con «with Current Profile», Session (Restart Session, Reset), Edit con
+Clear Buffer y Clear Scrollback Buffer, y en Window el submenú «Tab ▸».
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla como en las fases anteriores. `./dev.sh check`
+limpio en los dos modos del kit; 20 tests de la app y 1 del bloque.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `curseterm --import-colors 'Solarized Dark.itermcolors'` (sacado de `ColorPresets.plist` de iTerm2) | ✓; un archivo que no es plist sale con error y código 1 | — |
+| Ajustes: pestañas Appearance y Profiles; lista, ★, + y −; General, Colors y Text | ✓ | `fase3-ajustes-perfil-general.png`, `fase3-ajustes-perfil-colores.png` |
+| Elegir un esquema importado; el terminal (otro proceso) cambia en vivo | ✓ con el terminal con foco; sin foco, solo con el parche 0005 (BK-022) | `fase3-repintado-sin-foco-parche-0005.png` |
+| «+» crea un perfil; el menú «Profiles» del terminal lo muestra al momento | ✓ con el parche 0004; con el kit tal cual aparece en la siguiente ventana | — |
+| Ctrl+Super+2 abre una pestaña con ese perfil y su esquema | ✓ | `fase3-pestana-con-otro-perfil.png` |
+| Split with Current Profile hereda el perfil | ✓ | `fase3-division-con-el-perfil.png` |
+| Orden del perfil y directorio fijo | ✓ | `fase3-orden-directorio-y-restart.png` |
+| Restart Session (shell nueva, mismo perfil y directorio) | ✓ | ídem |
+| Clear Buffer (Super+K) deja la línea del prompt; Clear Scrollback Buffer se activa con historial | ✓ | `fase3-clear-buffer-y-reset.png` |
+| Reset (Super+R) tras romper el juego de caracteres con `ESC (0` | ✓ | ídem |
+| Appearance › «Show tab bar even when there is only one tab» y la marca de View › Show Tab Bar en el terminal | ✓ | `fase3-ajustes-apariencia.png` |
+
+**No probado:** cambiar el nombre de un perfil con sesiones abiertas (las
+sesiones con el nombre viejo pasan al perfil por omisión); la fila
+«Directory path» con el teclado; New Window with Current Profile (lanza
+`curseterm --profile NOMBRE`; se probó `--profile` solo a través de esa orden
+del menú, sin captura).
+
+**Difiere de iTerm2:**
+
+- En Ajustes solo hay Appearance y Profiles: General, Keys, Arrangements,
+  Pointer, Shortcuts y Advanced no tienen todavía nada real detrás.
+- El editor de perfil tiene General, Colors y Text; faltan Window, Terminal,
+  Session, Keys y Advanced, y en General faltan Shortcut key, Tags, Badge,
+  Title, Icon y Send text at start.
+- «Command» es un campo (vacío = shell de inicio) y no un desplegable «Login
+  Shell / Command».
+- Importar pide la ruta en un campo: el kit no tiene selector de archivos
+  (BK-023). Los colores `Calibrated` de un `.itermcolors` se toman como sRGB.
+- «Show Tab Bar» está en View; en iTerm2 actual solo existe en Appearance.
+- La ventana de Ajustes no tiene buscador.

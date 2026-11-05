@@ -2,7 +2,7 @@
 
 Versión/commit de BarrierKit usado: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Resumen: documento vivo; estado al cerrar la fase 2 (2026-11-05), probado en
+Resumen: documento vivo; estado al cerrar la fase 3 (2026-11-05), probado en
 sway sin pantalla con lavapipe (`progreso.md`). Lo más serio: los handlers de
 `use_menu_action` corren fuera del contexto de Freya y hacen abortar la app si
 tocan el portapapeles o `WindowControls::get()` (BK-017); el menú solo se
@@ -11,7 +11,8 @@ dice la documentación (BK-018); una ventana por proceso y sin título en vivo
 (BK-001, BK-002); sin token de activación para apps (BK-019); sin IME ni
 selección primaria. El lienzo, las pestañas, los paneles divididos, el
 token `MONO` y el estado vivo del menú se resolvieron como bloques; el título,
-los atajos y el menú en D-Bus, como parches probados.
+los atajos, el menú en D-Bus, los menús de primer nivel en vivo y el repintado
+sin foco, como parches probados.
 
 Estados: **detectado** (leído en el código), **confirmado** (reproducido al
 ejecutar CurseTerm), **resuelto en CurseTerm** (con workaround).
@@ -37,7 +38,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-007 | contenedores | Sin divisor genérico anidable | media | Bloque probado `views::split_panes` |
 | BK-008 | tokens / texto | Sin cara monoespaciada en Tengen | baja | Bloque `tokens::MONO` |
 | BK-009 | texto / rendimiento | Sin lienzo público y caché de párrafos apagada | media | Bloque `canvas` |
-| BK-010 | menú global | Títulos de `Action` estáticos y menú sin reemplazo en vivo | media | Bloque probado `app_menu` (activado, marca, submenús) |
+| BK-010 | menú global | Títulos de `Action` estáticos y menú sin reemplazo en vivo | media | Bloque probado `app_menu`; parche 0004 probado para menús de primer nivel |
 | BK-011 | docs | Documentación que no coincide con el código | baja | — |
 | BK-012 | ventana / persistencia | El tamaño guardado es uno por `app_id` | media | Workaround: `KeepTerminalSize` |
 | BK-013 | ventana | El cierre pedido por el compositor no se puede interceptar | media | Ninguno |
@@ -47,6 +48,11 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-017 | menú global / plataforma | Los handlers del menú corren fuera del contexto de Freya | **bloqueante** | Workaround probado: handles tomados en `render` |
 | BK-018 | menú global / docs | Sin `org_kde_kwin_appmenu_manager` el menú no se publica en D-Bus | alta | Parche 0003 probado |
 | BK-019 | ventana / plataforma | Una app no puede pedir un token de xdg-activation | media | Ninguno; sin lista de ventanas en «Window» |
+| BK-020 | controles | Las etiquetas de paneles, filas y desplegables son `&'static str` | media | Workaround: `intern` en `preferences.rs` |
+| BK-021 | controles | `RadioGroup` es siempre horizontal | baja | Workaround: un grupo de una opción por fila |
+| BK-022 | plataforma / persistencia | Un cambio de `.domain` no repinta las ventanas sin foco | alta | Parche 0005 probado |
+| BK-023 | app | Sin selector de archivos | media | Workaround: ruta en un campo y `--import-colors` |
+| BK-024 | símbolos | Faltan símbolos para una barra de ajustes (engranaje, persona, teclado) | baja | Se usan `CircleHalf` y `ListBullet` |
 
 ## Gaps
 
@@ -255,7 +261,13 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
   constructor de `MenuItem::Submenu` con id). Probado por D-Bus: «Select Tab»
   se rellena con las pestañas y marca la activa; «Show Tab Bar» y «Maximize
   Active Pane» llevan marca; una docena de entradas se activan según el
-  contexto.
+  contexto. Para el menú «Profiles», que es de primer nivel, `update` no
+  sirve: el parche
+  [`kit-parches/0004-items-de-un-menu-en-vivo.patch`](../kit-parches/0004-items-de-un-menu-en-vivo.patch)
+  añade `MenuHandle::set_menu_items(título, ítems)` y documenta `MenuHandle`
+  en `11-app{,.en}.md`. Probado por D-Bus: «+» en Ajustes añade «New Profile»
+  al menú del terminal al momento. Con el kit tal cual solo se renombran los
+  ítems que ya existían.
 - **Coste del workaround**: las entradas dinámicas no son `Action`, así que no
   tienen `Shortcut` tipado.
 - **API propuesta para el kit**: `use_menu(|menu: &mut AppMenu| ..)` que se vuelve a evaluar cuando cambia su estado.
@@ -412,6 +424,86 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Cómo reproducirlo**: buscar `get_activation_token` fuera de
   `crates/barrier-kit/src/shell/`: no aparece.
 
+### BK-020 — Las etiquetas de paneles, filas y desplegables son `&'static str`
+- **Área**: controles
+- **Qué necesitaba CurseTerm**: nombres de perfil y de esquemas importados, que escribe el usuario, como ítems de `PopUpButton` y títulos de `Pane`.
+- **Qué ofrece hoy BarrierKit**: `PopUpButton::item(&'static str)`
+  (`popup_button.rs:38`), `Row::new(&'static str)` (`views/form.rs:31`),
+  `Pane::new(&'static str, &'static str, ..)` (`patterns/preferences.rs:35`),
+  `RadioGroup::option(&'static str)`. Pensado para `tr!`, que devuelve
+  `&'static str`.
+- **Qué falta**: aceptar `impl Into<Cow<'static, str>>` como ya hacen
+  `Button::new` y `about_window`.
+- **Cómo lo resolví en CurseTerm**: `intern` en `crates/curseterm/src/preferences.rs`
+  filtra cada nombre una vez a un `&'static str` y lo reutiliza.
+- **Coste del workaround**: memoria que no se libera por cada nombre distinto
+  (pequeña en la práctica).
+- **API propuesta para el kit**: `fn item(self, label: impl Into<Cow<'static, str>>)` y lo mismo en `Row`, `Pane` y `RadioGroup`.
+- **Gravedad**: media
+- **Cómo reproducirlo**: `PopUpButton::new("x").item(nombre.as_str())` no compila.
+
+### BK-021 — `RadioGroup` es siempre horizontal
+- **Área**: controles
+- **Qué necesitaba CurseTerm**: «Initial directory» de iTerm2: tres opciones en columna.
+- **Qué ofrece hoy BarrierKit**: `choice_group` fija `Direction::Horizontal`
+  (`choices.rs:50`); con tres opciones largas la última se sale de la fila.
+- **Qué falta**: `.direction(Direction::Vertical)` o una variante en columna.
+- **Cómo lo resolví en CurseTerm**: `directory_choices` en `preferences.rs`
+  apila tres `RadioGroup` de una opción, controlados desde el perfil.
+- **Coste del workaround**: el lector de pantalla ve tres grupos en vez de uno.
+- **API propuesta para el kit**: `RadioGroup::new(label).vertical(true)`.
+- **Gravedad**: baja
+- **Cómo reproducirlo**: un `RadioGroup` con tres opciones en una `Row` estrecha.
+
+### BK-022 — Un cambio de `.domain` no repinta las ventanas sin foco
+- **Área**: plataforma / persistencia
+- **Qué necesitaba CurseTerm**: que el terminal cambie de esquema en cuanto
+  se elige en Ajustes, que es otro proceso y tiene el foco.
+- **Qué ofrece hoy BarrierKit**: al cambiar un `.domain`, el runner sube
+  `defaults_revision` y hace `ping` (`platform/runtime.rs:255`), pero no marca
+  `request_redraw_all`, como sí hace con la apariencia (`:263`).
+- **Qué falta**: pedir el repintado también en ese caso.
+- **Cómo lo resolví en CurseTerm**: parche
+  [`kit-parches/0005-domain-repinta-sin-foco.patch`](../kit-parches/0005-domain-repinta-sin-foco.patch).
+  Probado en sway: con Ajustes delante y el terminal sin foco, editar el
+  `.domain` no cambia el terminal con el kit tal cual y sí con el parche
+  (`docs/capturas/fase3-repintado-sin-foco-parche-0005.png`).
+- **Coste del workaround**: con el kit tal cual, el cambio aparece cuando la
+  ventana recibe cualquier otro evento.
+- **API propuesta para el kit**: ninguna; es el cambio del parche.
+- **Gravedad**: alta
+- **Cómo reproducirlo**: dos ventanas que usan `use_defaults`; con el foco en
+  una, cambiar el `.domain` desde ella: la otra no se repinta.
+
+### BK-023 — Sin selector de archivos
+- **Área**: app
+- **Qué necesitaba CurseTerm**: «Import…» de esquemas `.itermcolors`.
+- **Qué ofrece hoy BarrierKit**: nada; ADR 0047 deja «`Open` de archivos y
+  URLs» pendiente hasta la primera app que lo use. Freya tiene
+  `on_file_drop`, pero el runner no lo emite.
+- **Qué falta**: un diálogo de abrir por el portal
+  `org.freedesktop.portal.FileChooser` (Malaysia tiene su
+  `xdg-desktop-portal-malaysia`).
+- **Cómo lo resolví en CurseTerm**: un `TextField` con la ruta y el botón
+  «Import» en Colors, y `curseterm --import-colors <archivo>`.
+- **Coste del workaround**: hay que escribir la ruta a mano.
+- **API propuesta para el kit**: `app::open_file(filters: &[(&str, &[&str])], callback: impl FnOnce(Option<PathBuf>))`.
+- **Gravedad**: media
+- **Cómo reproducirlo**: buscar `FileChooser` en `crates/barrier-kit/src`: no aparece.
+
+### BK-024 — Faltan símbolos para una barra de ajustes
+- **Área**: símbolos
+- **Qué necesitaba CurseTerm**: los iconos de la barra de Settings de iTerm2
+  (engranaje, ojo, persona, teclado, puntero, rayo).
+- **Qué ofrece hoy BarrierKit**: 31 símbolos en `symbol.rs`; ninguno de esos.
+- **Qué falta**: ampliar el registro.
+- **Cómo lo resolví en CurseTerm**: `CircleHalf` para Appearance y
+  `ListBullet` para Profiles.
+- **Coste del workaround**: menos parecido a iTerm2.
+- **API propuesta para el kit**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt}`.
+- **Gravedad**: baja
+- **Cómo reproducirlo**: leer `enum Symbol` en `crates/barrier-kit/src/symbol.rs`.
+
 ## Cosas que funcionaron bien
 
 Comprobado en la fase 1 (sway sin pantalla, lavapipe):
@@ -439,6 +531,12 @@ Comprobado en la fase 1 (sway sin pantalla, lavapipe):
 - **Estado vivo del menú:** `MenuHandle::update` publica el cambio por D-Bus
   (revisión 1 → 3 al seleccionar).
 - **Cursor por forma:** `Cursor::set(CursorIcon::Text)` sobre la rejilla.
+
+- **Controles para unos Ajustes como los de iTerm2 (fase 3):** `TabView` es
+  justo la barra de pestañas con icono de la ventana Settings de iTerm2;
+  `Table` con selección, `SegmentedControl`, `Switch`, `Stepper`,
+  `PopUpButton` y `Form` cubrieron el editor de perfiles sin dibujar nada a
+  mano.
 
 Sin probar todavía: menú contextual, arrastrar y soltar, menú global en la
 barra de Malaysia, GNOME y KDE reales.
