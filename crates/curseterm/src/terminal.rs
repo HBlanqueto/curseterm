@@ -39,6 +39,7 @@ use crate::menu;
 use crate::pane_view::TerminalPane;
 use crate::panes::{Axis, Pane, Toward};
 use crate::paste_history;
+use crate::pick;
 use crate::session::{self, GridSize, Launch, Listener, MarkJump, Session, SessionId};
 use crate::windows;
 use crate::workspace::{Broadcast, Closed, Tab, Workspace};
@@ -73,7 +74,7 @@ struct Handles {
     events: Rc<OnceCell<Events>>,
     buried: State<Option<Buried>>,
     pastes: State<Vec<String>>,
-    paste_history: PasteHistory,
+    picker: PickerState,
     sheet: State<Option<Sheet>>,
     draft: State<String>,
     super_held: State<bool>,
@@ -82,7 +83,7 @@ struct Handles {
 
 #[derive(Clone, Copy, PartialEq)]
 enum Sheet {
-    PasteHistory,
+    Pick(Picker),
     RenameTab(SessionId),
     RenameWindow,
     SaveSelection(SessionId),
@@ -97,8 +98,22 @@ struct Buried {
     at: Instant,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum Picker {
+    PasteHistory,
+    OpenQuickly,
+    Profiles,
+}
+
+#[derive(Clone)]
+enum Choice {
+    Paste(String),
+    Focus(SessionId),
+    Profile(String),
+}
+
 #[derive(Clone, Copy)]
-struct PasteHistory {
+struct PickerState {
     query: State<String>,
     selected: State<usize>,
 }
@@ -206,7 +221,7 @@ impl App for Terminal {
         let mut super_held = use_state(|| false);
         let transparency = use_state(|| true);
         let draft = use_state(String::new);
-        let paste_history = PasteHistory {
+        let picker = PickerState {
             query: use_state(String::new),
             selected: use_state(|| 0),
         };
@@ -232,7 +247,7 @@ impl App for Terminal {
             events: Rc::default(),
             buried,
             pastes,
-            paste_history,
+            picker,
             sheet,
             draft,
             super_held,
@@ -383,7 +398,7 @@ impl App for Terminal {
         let find_bar = (*find.open.read()).then(|| find_bar(&handles, revision));
         let alert = (*closing.read()).map(|pending| close_alert(&handles, pending));
         let sheet_view = (*sheet.read()).map(|open| match open {
-            Sheet::PasteHistory => paste_history_sheet(&handles, revision),
+            Sheet::Pick(picker) => pick_sheet(&handles, picker, revision),
             Sheet::RenameTab(_) | Sheet::RenameWindow | Sheet::SaveSelection(_) | Sheet::Log(_) => {
                 field_sheet(&handles, open)
             }
@@ -680,13 +695,50 @@ fn paste_text(handles: &Handles, text: String) {
     remember_paste(handles, text);
 }
 
-fn paste_history_sheet(handles: &Handles, mut revision: State<u64>) -> Element {
-    let history = handles.paste_history;
-    let entries = paste_history::matching(&handles.pastes.read(), &history.query.read());
+fn pick_entries(handles: &Handles, picker: Picker) -> Vec<(String, Choice)> {
+    match picker {
+        Picker::PasteHistory => handles
+            .pastes
+            .read()
+            .iter()
+            .map(|text| (paste_history::one_line(text), Choice::Paste(text.clone())))
+            .collect(),
+        Picker::OpenQuickly => {
+            let workspace = handles.workspace.read();
+            let sessions = handles.sessions.read();
+            workspace
+                .tabs
+                .iter()
+                .flat_map(|tab| tab.root.leaves())
+                .filter_map(|id| {
+                    let profile = &sessions.get(&id)?.profile;
+                    let label = format!("{} — {profile}", workspace.title(id));
+                    Some((label, Choice::Focus(id)))
+                })
+                .collect()
+        }
+        Picker::Profiles => handles
+            .defaults
+            .read()
+            .profiles()
+            .into_iter()
+            .map(|profile| (profile.name.clone(), Choice::Profile(profile.name)))
+            .collect(),
+    }
+}
+
+fn pick_sheet(handles: &Handles, picker: Picker, mut revision: State<u64>) -> Element {
+    let (heading, column) = match picker {
+        Picker::PasteHistory => (tr!("paste-history"), tr!("paste-history-text")),
+        Picker::OpenQuickly => (tr!("open-quickly"), tr!("open-quickly-session")),
+        Picker::Profiles => (tr!("open-profiles"), tr!("open-profiles-name")),
+    };
+    let history = handles.picker;
+    let entries = pick::matching(pick_entries(handles, picker), &history.query.read());
     let selected = (*history.selected.read()).min(entries.len().saturating_sub(1));
     let rows = entries
         .iter()
-        .map(|entry| vec![paste_history::one_line(entry)])
+        .map(|(label, _)| vec![label.clone()])
         .collect();
     let (chosen, navigate) = (handles.clone(), entries.clone());
     let palette = Palette::current();
@@ -698,7 +750,7 @@ fn paste_history_sheet(handles: &Handles, mut revision: State<u64>) -> Element {
             .direction(Direction::Vertical)
             .content(Content::flex())
             .spacing(SPACE_2)
-            .child(text(tr!("paste-history"), HEADLINE, palette.label))
+            .child(text(heading, HEADLINE, palette.label))
             .child(
                 SearchField::new(history.query, tr!("paste-history-filter"))
                     .auto_focus(true)
@@ -709,8 +761,8 @@ fn paste_history_sheet(handles: &Handles, mut revision: State<u64>) -> Element {
                                 .set((*selected.peek() + 1).min(navigate.len().saturating_sub(1))),
                             NamedKey::ArrowUp => selected.set(selected.peek().saturating_sub(1)),
                             _ => {
-                                if let Some(text) = navigate.get(*selected.peek()).cloned() {
-                                    paste_later(&chosen, text);
+                                if let Some((_, choice)) = navigate.get(*selected.peek()).cloned() {
+                                    choose_later(&chosen, choice);
                                 }
                             }
                         }
@@ -719,7 +771,7 @@ fn paste_history_sheet(handles: &Handles, mut revision: State<u64>) -> Element {
             )
             .child(
                 rect().width(Size::fill()).height(Size::flex(1.0)).child(
-                    Table::new(tr!("paste-history"), vec![tr!("paste-history-text")])
+                    Table::new(heading, vec![column])
                         .rows(rows)
                         .selected((!entries.is_empty()).then_some(selected))
                         .on_select(move |index: usize| {
@@ -733,13 +785,29 @@ fn paste_history_sheet(handles: &Handles, mut revision: State<u64>) -> Element {
 }
 
 // BK-027: Enter also reaches the global handler, so the sheet closes one loop later.
-fn paste_later(handles: &Handles, text: String) {
-    let handles_later = handles.clone();
+fn choose_later(handles: &Handles, choice: Choice) {
+    let later = handles.clone();
     handles.timers.after(Duration::ZERO, move || {
-        let mut sheet = handles_later.sheet;
+        let mut sheet = later.sheet;
         sheet.set(None);
-        paste_text(&handles_later, text.clone());
+        match &choice {
+            Choice::Paste(text) => paste_text(&later, text.clone()),
+            Choice::Focus(id) => later.workspace.clone().write().focus(*id),
+            Choice::Profile(name) => {
+                if let Some(events) = later.events.get() {
+                    new_tab(&later, events, name, None);
+                }
+            }
+        }
     });
+}
+
+fn open_picker(handles: &Handles, picker: Picker) {
+    let state = handles.picker;
+    let (mut query, mut selected) = (state.query, state.selected);
+    query.set(String::new());
+    selected.set(0);
+    open_sheet(handles, Sheet::Pick(picker));
 }
 
 fn open_sheet(handles: &Handles, open: Sheet) {
@@ -1334,12 +1402,10 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         _ if id == menu::CLOSE_WINDOW.id => request_close(handles, Closing::Window),
         _ if id == menu::UNDO_CLOSE.id => undo_close(handles),
         _ if id == menu::PASTE_HISTORY.id => {
-            let history = handles.paste_history;
-            let (mut query, mut selected) = (history.query, history.selected);
-            query.set(String::new());
-            selected.set(0);
-            open_sheet(handles, Sheet::PasteHistory);
+            open_picker(handles, Picker::PasteHistory);
         }
+        _ if id == menu::OPEN_QUICKLY.id => open_picker(handles, Picker::OpenQuickly),
+        _ if id == menu::OPEN_PROFILES.id => open_picker(handles, Picker::Profiles),
         _ if id == menu::EDIT_TAB_TITLE.id => {
             if let Some(session) = active {
                 let workspace = handles.workspace.peek();

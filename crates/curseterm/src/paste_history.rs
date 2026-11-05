@@ -9,15 +9,6 @@ pub fn remember(history: &mut Vec<String>, text: String) {
     history.truncate(LIMIT);
 }
 
-pub fn matching(history: &[String], query: &str) -> Vec<String> {
-    let query = query.to_lowercase();
-    history
-        .iter()
-        .filter(|entry| entry.to_lowercase().contains(&query))
-        .cloned()
-        .collect()
-}
-
 pub fn one_line(text: &str) -> String {
     text.split(['\r', '\n'])
         .filter(|line| !line.is_empty())
@@ -43,9 +34,7 @@ mod tests {
     }
 
     #[test]
-    fn the_filter_ignores_case_and_lines_join_with_a_return_sign() {
-        let history = vec!["git Push".to_string(), "ls".to_string()];
-        assert_eq!(matching(&history, "push"), vec!["git Push".to_string()]);
+    fn lines_join_with_a_return_sign() {
         assert_eq!(one_line("a\r\nb\n"), "a ⏎ b");
     }
 }

@@ -217,3 +217,7 @@ profile-badge-placeholder = No badge
 window-transparency = Transparency
 window-transparency-detail = Default background of each pane; turned on and off with View › Use Transparency
 use-transparency = Use Transparency
+open-quickly = Open Quickly
+open-quickly-session = Session
+open-profiles = Open Profiles…
+open-profiles-name = Profile

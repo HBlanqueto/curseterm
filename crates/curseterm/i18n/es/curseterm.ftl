@@ -217,3 +217,7 @@ profile-badge-placeholder = Sin insignia
 window-transparency = Transparencia
 window-transparency-detail = Fondo por omisión de cada panel; se activa y apaga con Visualización › Usar transparencia
 use-transparency = Usar transparencia
+open-quickly = Abrir rápidamente
+open-quickly-session = Sesión
+open-profiles = Abrir perfiles…
+open-profiles-name = Perfil

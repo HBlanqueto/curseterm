@@ -102,6 +102,10 @@ pub const SHOW_TIMESTAMPS: Action = Action::new("show-timestamps", || tr!("show-
 pub const RESET_CHARSET: Action = Action::new("reset-charset", || tr!("reset-charset"));
 pub const USE_TRANSPARENCY: Action =
     Action::new("use-transparency", || tr!("use-transparency")).shortcut(super_key('u'));
+pub const OPEN_QUICKLY: Action =
+    Action::new("open-quickly", || tr!("open-quickly")).shortcut(super_with(Modifiers::SHIFT, 'o'));
+pub const OPEN_PROFILES: Action =
+    Action::new("open-profiles", || tr!("open-profiles")).shortcut(super_key('o'));
 pub const FIND_CURSOR: Action =
     Action::new("find-cursor", || tr!("find-cursor")).shortcut(super_key('/'));
 pub const MAXIMIZE_PANE: &str = "maximize-pane";
@@ -230,6 +234,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 USE_TRANSPARENCY.item_with(false, CheckState::Checkbox(true)),
                 MenuItem::Separator,
                 FIND_CURSOR.item(true),
+                OPEN_QUICKLY.item(true),
                 SHOW_TIMESTAMPS.item_with(true, CheckState::Checkbox(false)),
                 keyed(MAXIMIZE_PANE, tr!("maximize-pane"), "Super+Shift+Return")
                     .with_enabled(false)
@@ -357,17 +362,15 @@ pub fn select_tab_items(titles: &[String], active: usize) -> Vec<MenuItem> {
 }
 
 pub fn profile_items(profiles: &[String]) -> Vec<MenuItem> {
-    profiles
-        .iter()
-        .enumerate()
-        .map(|(index, name)| {
-            let item = MenuItem::action(format!("{PROFILE_PREFIX}{index}"), name.clone());
-            match index {
-                0..9 => item.with_shortcut(format!("Ctrl+Super+{}", index + 1)),
-                _ => item,
-            }
-        })
-        .collect()
+    let open = [OPEN_PROFILES.item(true), MenuItem::Separator];
+    let listed = profiles.iter().enumerate().map(|(index, name)| {
+        let item = MenuItem::action(format!("{PROFILE_PREFIX}{index}"), name.clone());
+        match index {
+            0..9 => item.with_shortcut(format!("Ctrl+Super+{}", index + 1)),
+            _ => item,
+        }
+    });
+    open.into_iter().chain(listed).collect()
 }
 
 pub fn auxiliary_menu() -> AppMenu {

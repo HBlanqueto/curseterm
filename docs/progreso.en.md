@@ -852,3 +852,26 @@ the same tab; blur, which sway does not do.
    Profiles share the sheet (filter, table, arrows, Enter, Escape); each one
    only brings its entries and what to do with the chosen one.
 4. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-05)
+
+Tested on headless sway. `./dev.sh check` clean in both kit modes; 36 app
+tests and 1 block test. No new gap: the three lists use the same sheet with
+`SearchField` and `Table`, and the filter is a pure function with its test.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Three tabs (two "Default", one "New Profile"), Super+1, ⇧⌘O, `new` and Enter: goes to the "New Profile" tab | ✓ | `fase15-open-quickly.png` |
+| ⌘O lists both profiles; `def` and Enter opens a fourth tab with "Default" | ✓ | `fase15-open-profiles.png` |
+| ⇧⌘H after pasting `echo historial`: the entry is still in the sheet and Enter pastes it | ✓ | — |
+
+**Not tested:** Open Profiles in the global menu with patch 0004, which
+rebuilds the Profiles menu; Open Quickly with split panes.
+
+**Differs from iTerm2:**
+
+- Open Quickly only searches this window's sessions (one process per window,
+  BK-001) and offers no commands, profiles or arrangements.
+- Open Profiles always opens a tab; iTerm2 lets you choose a new window.

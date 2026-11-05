@@ -850,3 +850,27 @@ distintas en la misma pestaña; el desenfoque, que sway no hace.
    Open Profiles comparten la hoja (filtro, tabla, flechas, Intro, Escape);
    cada uno solo aporta sus entradas y qué hacer con la elegida.
 4. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla. `./dev.sh check` limpio en los dos modos del
+kit; 36 tests de la app y 1 del bloque. Ningún gap nuevo: las tres listas
+usan la misma hoja con `SearchField` y `Table`, y el filtro es una función
+pura con su test.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Tres pestañas (dos «Default», una «New Profile»), Super+1, ⇧⌘O, `new` e Intro: va a la pestaña de «New Profile» | ✓ | `fase15-open-quickly.png` |
+| ⌘O lista los dos perfiles; `def` e Intro abre una cuarta pestaña con «Default» | ✓ | `fase15-open-profiles.png` |
+| ⇧⌘H tras pegar `echo historial`: la entrada sigue en la hoja e Intro la pega | ✓ | — |
+
+**No probado:** Open Profiles en el menú global con el parche 0004, que
+reconstruye el menú Profiles; Open Quickly con paneles divididos.
+
+**Difiere de iTerm2:**
+
+- Open Quickly solo busca sesiones de esta ventana (un proceso por ventana,
+  BK-001) y no ofrece órdenes, perfiles ni arreglos.
+- Open Profiles abre siempre una pestaña; iTerm2 deja elegir ventana nueva.
