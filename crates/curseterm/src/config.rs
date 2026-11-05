@@ -34,6 +34,49 @@ pub struct Profile {
     pub scrollback_lines: u32,
     pub flash_visual_bell: bool,
     pub bell_icon_in_tabs: bool,
+    pub columns: u16,
+    pub rows: u16,
+    pub when_session_ends: SessionEnd,
+    pub prompt_before_closing: ClosePrompt,
+    pub alt_key: AltKey,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionEnd {
+    #[default]
+    Close,
+    Restart,
+    KeepOpen,
+}
+
+impl SessionEnd {
+    pub const ALL: [Self; 3] = [Self::Close, Self::Restart, Self::KeepOpen];
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClosePrompt {
+    #[default]
+    IfJobs,
+    Always,
+    Never,
+}
+
+impl ClosePrompt {
+    pub const ALL: [Self; 3] = [Self::IfJobs, Self::Always, Self::Never];
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AltKey {
+    Normal,
+    #[default]
+    Escape,
+}
+
+impl AltKey {
+    pub const ALL: [Self; 2] = [Self::Normal, Self::Escape];
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -70,6 +113,11 @@ impl Default for Profile {
             scrollback_lines: 1000,
             flash_visual_bell: true,
             bell_icon_in_tabs: true,
+            columns: 80,
+            rows: 25,
+            when_session_ends: SessionEnd::Close,
+            prompt_before_closing: ClosePrompt::IfJobs,
+            alt_key: AltKey::Escape,
         }
     }
 }

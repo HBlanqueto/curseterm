@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -16,6 +16,7 @@ use barrier_kit::style::{Palette, text};
 use barrier_kit::symbol::Symbol;
 use barrier_kit::theme::color;
 use barrier_kit::titlebar::Titlebar;
+use barrier_kit::views::feedback::Alert;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
 use barrier_kit_next::tokens::TERMINAL;
 use barrier_kit_next::views::split_panes::SplitPanes;
@@ -26,7 +27,10 @@ use torin::prelude::{Alignment, Content, Direction, Size};
 
 use vow_design::{CAPTION, DURATION_FAST_MS, SPACE_1};
 
-use crate::config::{APP_ID, APP_NAME, Defaults, Profile, WorkingDirectory, change_defaults};
+use crate::config::{
+    APP_ID, APP_NAME, AltKey, ClosePrompt, Defaults, Profile, SessionEnd, WorkingDirectory,
+    change_defaults,
+};
 use crate::grid::Fonts;
 use crate::keys::{KeyAction, encode};
 use crate::localize::tr;
@@ -59,6 +63,15 @@ struct Handles {
     clipboard: ClipboardState,
     broadcast: State<Broadcast>,
     find: Find,
+    closing: State<Option<Closing>>,
+    events: Rc<OnceCell<Events>>,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Closing {
+    Session(SessionId),
+    Tab(usize),
+    Window,
 }
 
 #[derive(Clone, Copy)]
@@ -152,6 +165,7 @@ impl App for Terminal {
         let text_zoom = use_state(|| 0i32);
         let mut revision = use_state(|| 0u64);
         let broadcast = use_state(Broadcast::default);
+        let closing = use_state(|| None::<Closing>);
         let find = Find {
             open: use_state(|| false),
             query: use_state(String::new),
@@ -170,6 +184,8 @@ impl App for Terminal {
             clipboard: consume_root_context(),
             broadcast,
             find,
+            closing,
+            events: Rc::default(),
         });
         use_side_effect({
             let handles = handles.clone();
@@ -199,7 +215,11 @@ impl App for Terminal {
         });
         let events = use_hook({
             let handles = handles.clone();
-            move || listen(handles, revision)
+            move || {
+                let events = listen(handles.clone(), revision);
+                let _ = handles.events.set(events.clone());
+                events
+            }
         });
         use_hook({
             let (handles, events) = (handles.clone(), events.clone());
@@ -252,7 +272,7 @@ impl App for Terminal {
                     let mut workspace = workspace;
                     workspace.write().select_tab(index);
                 })
-                .on_close(move |index| close_tab(&on_close, index))
+                .on_close(move |index| request_close(&on_close, Closing::Tab(index)))
                 .on_add(tr!("new-tab-button"), move |_| {
                     let profile = on_add.defaults.peek().default_profile_name();
                     new_tab(&on_add, &add_events, &profile, None)
@@ -289,6 +309,7 @@ impl App for Terminal {
 
         let keyboard = handles.clone();
         let find_bar = (*find.open.read()).then(|| find_bar(&handles, revision));
+        let alert = (*closing.read()).map(|pending| close_alert(&handles, pending));
         rect()
             .width(Size::fill())
             .height(Size::fill())
@@ -297,6 +318,9 @@ impl App for Terminal {
             .background(color(palette.window_background))
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
                 let data = event.data();
+                if keyboard.closing.peek().is_some() {
+                    return;
+                }
                 if *find.open.peek() && *find.focused.peek() {
                     if data.key == Key::Named(NamedKey::Escape) {
                         find.close();
@@ -306,7 +330,14 @@ impl App for Terminal {
                 let Some(session) = &keyboard.active() else {
                     return;
                 };
-                match encode(&data.key, data.modifiers, session.mode()) {
+                let alt_key = keyboard.defaults.peek().profile(&session.profile).alt_key;
+                let modifiers = match (&data.key, alt_key) {
+                    (Key::Character(_), AltKey::Normal) => {
+                        data.modifiers.difference(Modifiers::ALT)
+                    }
+                    _ => data.modifiers,
+                };
+                match encode(&data.key, modifiers, session.mode()) {
                     KeyAction::Write(bytes) => {
                         for receiver in keyboard.receivers() {
                             receiver.clear_selection();
@@ -324,6 +355,7 @@ impl App for Terminal {
             .child(Titlebar::new().title(title))
             .maybe_child(tab_bar)
             .maybe_child(find_bar)
+            .maybe_child(alert)
             .child(
                 rect()
                     .width(Size::fill())
@@ -599,7 +631,22 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
                     });
             }
         }
-        TermEvent::ChildExit(_) | TermEvent::Exit => close_session(handles, id),
+        TermEvent::ChildExit(_) | TermEvent::Exit => {
+            match handles
+                .defaults
+                .peek()
+                .profile(&session.profile)
+                .when_session_ends
+            {
+                SessionEnd::Close => close_session(handles, id),
+                SessionEnd::Restart => {
+                    if let Some(events) = handles.events.get() {
+                        restart(handles, events, &session);
+                    }
+                }
+                SessionEnd::KeepOpen => session.show_ended(tr!("session-ended")),
+            }
+        }
         _ => {}
     }
 }
@@ -668,6 +715,67 @@ fn restart(handles: &Handles, events: &Events, session: &Session) {
         let mut sessions = handles.sessions;
         sessions.write().remove(&session.id);
     }
+}
+
+fn request_close(handles: &Handles, closing: Closing) {
+    let workspace = handles.workspace.peek();
+    let ids = match closing {
+        Closing::Session(id) => vec![id],
+        Closing::Tab(index) => workspace
+            .tabs
+            .get(index)
+            .map(|tab| tab.root.leaves())
+            .unwrap_or_default(),
+        Closing::Window => workspace.receivers(Broadcast::AllTabs),
+    };
+    drop(workspace);
+    let defaults = handles.defaults.peek();
+    let ask = ids
+        .iter()
+        .filter_map(|id| handles.sessions.peek().get(id).cloned())
+        .any(
+            |session| match defaults.profile(&session.profile).prompt_before_closing {
+                ClosePrompt::Always => true,
+                ClosePrompt::Never => false,
+                ClosePrompt::IfJobs => session.has_jobs(),
+            },
+        );
+    drop(defaults);
+    if ask {
+        let mut pending = handles.closing;
+        pending.set(Some(closing));
+    } else {
+        close_now(handles, closing);
+    }
+}
+
+fn close_now(handles: &Handles, closing: Closing) {
+    match closing {
+        Closing::Session(id) => close_session(handles, id),
+        Closing::Tab(index) => close_tab(handles, index),
+        Closing::Window => handles.controls.close(),
+    }
+}
+
+// BK-027: the Alert's Enter or Escape also reaches the terminal's global key handler,
+// so the alert stays up until that handler has seen the key and ignored it.
+fn dismiss_later(handles: &Handles, then: impl Fn() + 'static) {
+    let closing = handles.closing;
+    handles.timers.after(Duration::ZERO, move || {
+        let mut closing = closing;
+        closing.set(None);
+        then();
+    });
+}
+
+fn close_alert(handles: &Handles, pending: Closing) -> Alert {
+    let (confirm, cancel) = (handles.clone(), handles.clone());
+    Alert::new(tr!("close-title"), tr!("close-message"))
+        .confirm(tr!("close-confirm"), move |_| {
+            let handles = confirm.clone();
+            dismiss_later(&confirm, move || close_now(&handles, pending));
+        })
+        .cancel(tr!("close-cancel"), move |_| dismiss_later(&cancel, || {}))
 }
 
 fn close_session(handles: &Handles, id: SessionId) {
@@ -739,13 +847,13 @@ fn on_action(id: &str, handles: &Handles, events: &Events) {
         _ if id == menu::SPLIT_HORIZONTALLY.id => split(handles, events, Axis::Column),
         _ if id == menu::CLOSE.id => {
             if let Some(session) = active {
-                close_session(handles, session.id);
+                request_close(handles, Closing::Session(session.id));
             }
         }
-        _ if id == menu::CLOSE_WINDOW.id => handles.controls.close(),
+        _ if id == menu::CLOSE_WINDOW.id => request_close(handles, Closing::Window),
         _ if id == menu::CLOSE_PANES.id => {
             let index = workspace.peek().active;
-            close_tab(handles, index);
+            request_close(handles, Closing::Tab(index));
         }
         _ if id == menu::COPY.id => {
             if let Some(session) = &active {

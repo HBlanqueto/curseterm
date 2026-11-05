@@ -25,13 +25,12 @@ use vow_design::{CAPTION, SIDEBAR, SPACE_1, SPACE_3, WINDOW_MIN_SIZE};
 
 use crate::auxiliary::on_action;
 use crate::config::{
-    APP_ID, Defaults, Profile, SCROLLBACK_LIMIT, Trigger, TriggerAction, WorkingDirectory,
-    change_defaults,
+    APP_ID, AltKey, ClosePrompt, Defaults, Profile, SCROLLBACK_LIMIT, SessionEnd, Trigger,
+    TriggerAction, WorkingDirectory, change_defaults,
 };
 use crate::itermcolors;
 use crate::localize::tr;
 use crate::menu;
-use crate::windows::KeepTerminalSize;
 
 thread_local! {
     static INTERNED: RefCell<HashSet<&'static str>> = RefCell::new(HashSet::new());
@@ -53,7 +52,6 @@ fn intern(text: &str) -> &'static str {
 }
 
 pub fn run() -> Result<(), RunError> {
-    let _keep = KeepTerminalSize::new();
     run_window(
         AppComponent::new(Settings),
         WindowOptions::new(tr!("settings-title"), "curseterm")
@@ -148,7 +146,10 @@ impl Component for ProfilesPane {
             0 => general_section(defaults, index, &profile),
             1 => colors_section(defaults, index, &profile),
             2 => text_section(index, &profile),
-            3 => terminal_section(index, &profile),
+            3 => window_section(index, &profile),
+            4 => terminal_section(index, &profile),
+            5 => session_section(index, &profile),
+            6 => keys_section(index, &profile),
             _ => triggers_section(index, &profile),
         };
         rect()
@@ -222,7 +223,10 @@ impl Component for ProfilesPane {
                                     .segment(tr!("section-general"))
                                     .segment(tr!("section-colors"))
                                     .segment(tr!("section-text"))
+                                    .segment(tr!("section-window"))
                                     .segment(tr!("section-terminal"))
+                                    .segment(tr!("section-session"))
+                                    .segment(tr!("section-keys"))
                                     .segment(tr!("section-advanced"))
                                     .selected(*section.read())
                                     .on_change(move |choice| section.set(choice)),
@@ -389,6 +393,102 @@ fn text_section(index: usize, profile: &Profile) -> Section {
         )
 }
 
+fn profile_choice<T: Copy + PartialEq + 'static, const N: usize>(
+    index: usize,
+    label: &'static str,
+    choices: [(T, &'static str); N],
+    current: T,
+    apply: fn(&mut Profile, T),
+) -> PopUpButton {
+    let selected = choices
+        .iter()
+        .position(|(choice, _)| *choice == current)
+        .unwrap_or_default();
+    choices
+        .iter()
+        .fold(PopUpButton::new(label), |button, (_, name)| {
+            button.item(name)
+        })
+        .selected(selected)
+        .on_change(move |position: usize| {
+            let choice = choices[position].0;
+            edit(index, |profile| apply(profile, choice));
+        })
+}
+
+fn window_section(index: usize, profile: &Profile) -> Section {
+    Section::titled(tr!("section-window"))
+        .row(
+            Row::new(tr!("window-columns"))
+                .detail(tr!("window-size-detail"))
+                .control(ProfileText {
+                    index,
+                    field: Field::Columns,
+                    value: profile.columns.to_string(),
+                }),
+        )
+        .row(Row::new(tr!("window-rows")).control(ProfileText {
+            index,
+            field: Field::Rows,
+            value: profile.rows.to_string(),
+        }))
+}
+
+fn session_section(index: usize, profile: &Profile) -> Section {
+    let endings = SessionEnd::ALL.map(|ending| {
+        let name = match ending {
+            SessionEnd::Close => tr!("session-end-close"),
+            SessionEnd::Restart => tr!("session-end-restart"),
+            SessionEnd::KeepOpen => tr!("session-end-keep"),
+        };
+        (ending, name)
+    });
+    let prompts = ClosePrompt::ALL.map(|prompt| {
+        let name = match prompt {
+            ClosePrompt::IfJobs => tr!("close-prompt-jobs"),
+            ClosePrompt::Always => tr!("close-prompt-always"),
+            ClosePrompt::Never => tr!("close-prompt-never"),
+        };
+        (prompt, name)
+    });
+    Section::titled(tr!("section-session"))
+        .row(Row::new(tr!("session-end")).control(profile_choice(
+            index,
+            tr!("session-end"),
+            endings,
+            profile.when_session_ends,
+            |profile, ending| profile.when_session_ends = ending,
+        )))
+        .row(Row::new(tr!("close-prompt")).control(profile_choice(
+            index,
+            tr!("close-prompt"),
+            prompts,
+            profile.prompt_before_closing,
+            |profile, prompt| profile.prompt_before_closing = prompt,
+        )))
+}
+
+fn keys_section(index: usize, profile: &Profile) -> Section {
+    let keys = AltKey::ALL.map(|key| {
+        let name = match key {
+            AltKey::Normal => tr!("alt-key-normal"),
+            AltKey::Escape => tr!("alt-key-escape"),
+        };
+        (key, name)
+    });
+    Section::titled(tr!("section-keys")).row(
+        Row::new(tr!("alt-key"))
+            .detail(tr!("alt-key-detail"))
+            .control(profile_choice(
+                index,
+                tr!("alt-key"),
+                keys,
+                profile.alt_key,
+                |profile, key| profile.alt_key = key,
+            )),
+    )
+}
+
 fn terminal_section(index: usize, profile: &Profile) -> Section {
     Section::titled(tr!("section-terminal"))
         .row(
@@ -495,6 +595,8 @@ enum Field {
     TriggerRegex(usize),
     TriggerParameter(usize),
     Scrollback,
+    Columns,
+    Rows,
 }
 
 impl Field {
@@ -507,6 +609,8 @@ impl Field {
             Self::TriggerRegex(_) => tr!("trigger-regex"),
             Self::TriggerParameter(_) => tr!("trigger-parameter"),
             Self::Scrollback => tr!("scrollback-lines"),
+            Self::Columns => tr!("window-columns"),
+            Self::Rows => tr!("window-rows"),
         }
     }
 
@@ -531,6 +635,14 @@ impl Field {
                     profile.working_directory = WorkingDirectory::Fixed(value.clone().into())
                 }
                 Self::Family => profile.font_family = value.clone(),
+                Self::Columns | Self::Rows => {
+                    if let Some(cells) = value.parse::<u16>().ok().filter(|cells| *cells > 0) {
+                        match self {
+                            Self::Columns => profile.columns = cells,
+                            _ => profile.rows = cells,
+                        }
+                    }
+                }
                 Self::Scrollback => {
                     if let Ok(lines) = value.parse::<u32>() {
                         profile.scrollback_lines = lines.min(SCROLLBACK_LIMIT);

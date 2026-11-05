@@ -2,7 +2,7 @@
 
 Versión/commit de BarrierKit usado: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Resumen: documento vivo; estado al cerrar la fase 5 (2026-11-05), probado en
+Resumen: documento vivo; estado al cerrar la fase 6 (2026-11-05), probado en
 sway sin pantalla con lavapipe (`progreso.md`). Lo más serio: los handlers de
 `use_menu_action` corren fuera del contexto de Freya y hacen abortar la app si
 tocan el portapapeles o `WindowControls::get()` (BK-017); el menú solo se
@@ -41,7 +41,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-009 | texto / rendimiento | Sin lienzo público y caché de párrafos apagada | media | Bloque `canvas` |
 | BK-010 | menú global | Títulos de `Action` estáticos y menú sin reemplazo en vivo | media | Bloque probado `app_menu`; parche 0004 probado para menús de primer nivel |
 | BK-011 | docs | Documentación que no coincide con el código | baja | — |
-| BK-012 | ventana / persistencia | El tamaño guardado es uno por `app_id` | media | Workaround: `KeepTerminalSize` |
+| BK-012 | ventana / persistencia | El tamaño guardado es uno por `app_id` y no se puede pedir otro | media | Workaround probado: `forget_saved_size` |
 | BK-013 | ventana | El cierre pedido por el compositor no se puede interceptar | media | Ninguno |
 | BK-014 | plataforma | `Timers::wakeup` no se puede dar de baja | baja | Workaround: un solo canal por ventana |
 | BK-015 | persistencia | Las preferencias van siempre a `~/.config/malaysia/` | baja | Se acepta |
@@ -56,7 +56,8 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-024 | símbolos | Faltan símbolos para una barra de ajustes y para la campana | baja | Se usan `CircleHalf`, `ListBullet` y `SpeakerWave` |
 | BK-025 | plataforma / input | Sin atajos globales ni forma de ocultar y mostrar la ventana | media | Workaround probado: `curseterm --hotkey` |
 | BK-026 | app / plataforma | Sin campana, petición de atención ni notificaciones | baja | Workaround probado: campana visual |
-| BK-027 | controles / input | Una vista con teclado global no sabe si un campo de texto tiene el foco | baja | Workaround: foco seguido con `on_focus_change` |
+| BK-027 | controles / input | Una vista con teclado global no sabe si un campo de texto o un `Alert` se quedan la tecla | baja | Workaround probado: foco seguido y cierre diferido del `Alert` |
+| BK-028 | controles | Las etiquetas de `SegmentedControl` se parten en dos líneas | baja | Workaround: Ajustes a 980 px |
 
 ## Gaps
 
@@ -221,8 +222,8 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
   Ajustes y Acerca de.
 - **Cómo lo resolví en CurseTerm**: bloque `barrier_kit_next::tokens::MONO`
   (Geist Mono 13/16, que ya trae el dev shell del kit en `geist-font`), y
-  `tokens::TERMINAL`, `TERMINAL_WINDOW_SIZE`, `SETTINGS_WINDOW_SIZE` y
-  `ABOUT_WINDOW_SIZE`.
+  `tokens::TERMINAL`, `SETTINGS_WINDOW_SIZE` y `ABOUT_WINDOW_SIZE` (el
+  terminal se mide en celdas, BK-012).
 - **Coste del workaround**: —
 - **API propuesta para el kit**: `vow_design::MONO: Font` en `tokens.json` y `vow_design::TERMINAL: TerminalMetrics` en `components.json`.
 - **Gravedad**: baja
@@ -290,20 +291,26 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - Ver «Documentación de BarrierKit», abajo.
 - **Gravedad**: baja
 
-### BK-012 — El tamaño guardado es uno por `app_id`
+### BK-012 — El tamaño guardado es uno por `app_id` y no se puede pedir otro
 - **Área**: ventana / persistencia
 - **Qué necesitaba CurseTerm**: abrir «About» (tamaño fijo) sin cambiar el
-  tamaño con el que se abre la siguiente ventana de terminal.
+  tamaño con el que se abre la siguiente ventana de terminal; y, desde la
+  fase 6, abrir cada ventana nueva con las columnas y filas del perfil, como
+  iTerm2.
 - **Qué ofrece hoy BarrierKit**: `platform/window.rs:333` guarda
   `<app_id>.window` al cerrar cualquier ventana y lo restaura en todas las del
   mismo `app_id` (`:373`).
-- **Qué falta**: una clave de restauración por tipo de ventana.
-- **Cómo lo resolví en CurseTerm**: `windows::KeepTerminalSize` lee ese estado
-  antes de `run_window` en las ventanas auxiliares y lo vuelve a escribir al
-  salir.
-- **Coste del workaround**: lee y escribe un fichero privado del kit por su
-  nombre.
-- **API propuesta para el kit**: `WindowOptions::restoration_key(impl Into<String>)`, o no guardar tamaño en ventanas de tamaño fijo.
+  El tamaño restaurado gana siempre sobre `WindowOptions::size`, y
+  `WindowControls` no puede pedir otro tamaño después.
+- **Qué falta**: una clave de restauración por tipo de ventana y poder
+  abrir con un tamaño propio aunque haya uno guardado.
+- **Cómo lo resolví en CurseTerm**: `windows::forget_saved_size` vacía ese
+  estado antes de cada `run_window`; el terminal calcula su tamaño con las
+  métricas de la fuente del perfil (`main.rs::terminal_size`) y cada ventana
+  auxiliar usa el suyo.
+- **Coste del workaround**: escribe un fichero privado del kit por su nombre;
+  ninguna ventana recuerda su tamaño ni si estaba maximizada.
+- **API propuesta para el kit**: `WindowOptions::restoration_key(impl Into<String>)` y `WindowOptions::restore(false)`.
 - **Gravedad**: media
 - **Cómo reproducirlo**: dos ventanas del mismo `app_id`, una fija de 320×280;
   cerrar la fija y abrir la otra: abre a 320×280 recortado a su mínimo.
@@ -564,25 +571,50 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 ### BK-027 — Una vista con teclado global no sabe si un campo de texto tiene el foco
 - **Área**: controles / input
 - **Qué necesitaba CurseTerm**: la barra de búsqueda (Edit › Find): lo que se
-  escribe en ella no debe llegar a la shell, y Escape la cierra.
+  escribe en ella no debe llegar a la shell, y Escape la cierra. En la fase
+  6, el aviso «¿Cerrar?»: su Intro o su Escape no deben llegar a la shell.
 - **Qué ofrece hoy BarrierKit**: `SearchField` con `auto_focus`,
   `on_focus_change` y `on_navigate` (Arriba, Abajo, Intro). Su
   `stop_propagation` no frena los `on_global_key_down`, que Freya deriva de
   cada `KeyDown` (`freya-core` 0.4.3, `events/name.rs:144`), y Escape no llega
-  a `on_navigate` (`controls.rs:951`).
+  a `on_navigate` (`controls.rs:951`). `Alert` (`views/feedback.rs`) atiende
+  Intro y Escape en su propio `on_global_key_down`, que tampoco frena a los
+  demás.
 - **Qué falta**: saber desde la vista si un campo de texto del kit tiene el
   foco, y un callback de cancelar.
 - **Cómo lo resolví en CurseTerm**: `terminal.rs` sigue el foco del
   `SearchField` con `on_focus_change`; con la barra abierta y enfocada, el
-  manejador global ignora las teclas y Escape cierra la barra.
+  manejador global ignora las teclas y Escape cierra la barra. Con el aviso
+  abierto el manejador ignora todo, y el aviso se quita con
+  `Timers::after(Duration::ZERO)` (`dismiss_later`) para que el manejador
+  aún lo vea abierto al recibir esa misma tecla.
 - **Coste del workaround**: un estado más que se desincroniza si la barra se
   cierra sin pasar por `Find::close`.
 - **API propuesta para el kit**: `SearchField::on_cancel` y
-  `use_text_input_focused() -> bool`.
+  `use_text_input_focused() -> bool`, y que `Alert` consuma sus teclas.
 - **Gravedad**: baja
 - **Cómo reproducirlo**: un `rect().on_global_key_down(…)` con un
   `SearchField` dentro: cada tecla del campo llega también al manejador.
-  Detectado en el código; el workaround se puso antes de reproducirlo.
+  Detectado en el código; el workaround se puso antes de reproducirlo. Con
+  `Alert` sí se reprodujo: sin `dismiss_later`, Escape cancelaba el aviso y
+  la shell recibía `^[`.
+
+### BK-028 — Las etiquetas de `SegmentedControl` se parten en dos líneas
+- **Área**: controles
+- **Qué necesitaba CurseTerm**: las ocho secciones del perfil de iTerm2
+  (General, Colors, Text, Window, Terminal, Session, Keys, Advanced) en un
+  `SegmentedControl`.
+- **Qué ofrece hoy BarrierKit**: cada segmento ocupa `Size::flex(1.0)` y su
+  `label()` no limita las líneas (`controls.rs:769-791`): a 860 px,
+  «Advanced» sale partida en dos.
+- **Qué falta**: una línea por etiqueta, con anchos según el texto o con
+  desplazamiento cuando no caben.
+- **Cómo lo resolví en CurseTerm**: `SETTINGS_WINDOW_SIZE` pasa a 980 × 600.
+- **Coste del workaround**: por debajo de ese ancho la etiqueta se vuelve a
+  partir.
+- **API propuesta para el kit**: `label().max_lines(1)` en el segmento y anchos por contenido.
+- **Gravedad**: baja
+- **Cómo reproducirlo**: Ajustes de CurseTerm con `SETTINGS_WINDOW_SIZE` a 860 × 560, Perfiles.
 
 ## Cosas que funcionaron bien
 

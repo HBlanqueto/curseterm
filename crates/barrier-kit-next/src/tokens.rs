@@ -56,6 +56,5 @@ pub const TERMINAL: TerminalMetrics = TerminalMetrics {
     font_sizes: (6, 72),
 };
 
-pub const TERMINAL_WINDOW_SIZE: (u32, u32) = (720, 460);
-pub const SETTINGS_WINDOW_SIZE: (u32, u32) = (860, 560);
+pub const SETTINGS_WINDOW_SIZE: (u32, u32) = (980, 600);
 pub const ABOUT_WINDOW_SIZE: (u32, u32) = (320, 280);

@@ -429,3 +429,35 @@ the field.
    characters and does not arrive as Alt, so there is one option and not one
    per side as in iTerm2.
 4. **Test** in headless sway and documentation in both languages.
+
+### Result (2026-11-05)
+
+Tested on headless sway, with CurseTerm's windows floating so the compositor
+honors their size. `./dev.sh check` is clean in both kit modes; 27 app tests
+and 1 block test.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| New window with the default profile: `tput cols` and `tput lines` give 80 and 25 | ✓ after measuring the titlebar with `TITLEBAR_CLIENT_HEIGHT` (with `TITLEBAR.thickness` it gave 24 rows) | `fase6-ventana-80x25.png` |
+| `sleep 100` and Super+W: "Close?" alert; Escape cancels it without sending `^[` to the shell; Enter closes | ✓ after deferring the alert's dismissal (BK-027) | `fase6-preguntar-al-cerrar.png` |
+| Super+W on a session that already ended, with no processes: closes without asking | ✓ | — |
+| "Keep open": `exit` leaves the session with "[Process completed]" | ✓ | `fase6-sesion-terminada.png` |
+| "Restart": `exit` opens a new shell in the same pane | ✓ | — |
+| Alt "Normal": Alt+B in `cat -v` gives `b`; "Esc+" gives `^[b` | ✓ | — |
+| Settings › Profiles with eight sections; Window, Session and Keys | ✓ with the window at 980 px (BK-028) | `fase6-ajustes-sesion.png` |
+
+**Not tested:** "Prompt before closing" on Close All Panes, Close Window and a
+tab's "×" (they share `request_close`, no screenshot); "Always" and "Never";
+changing Columns and Rows from the field.
+
+**Differs from iTerm2:**
+
+- One option for Alt, not one per side; AltGr composes.
+- "Prompt before closing" lacks iTerm2's list of allowed processes: any
+  foreground group other than the shell counts. Quit and the close requested
+  by the compositor do not ask (BK-013).
+- No window remembers its size or whether it was maximized (BK-012).
+- Window has no style, transparency or screen; Keys has no per-profile
+  shortcuts.

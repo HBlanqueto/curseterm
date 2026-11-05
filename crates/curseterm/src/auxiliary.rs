@@ -15,10 +15,9 @@ use torin::prelude::{Direction, Size};
 use crate::config::{APP_ID, APP_NAME};
 use crate::localize::tr;
 use crate::menu;
-use crate::windows::{self, KeepTerminalSize};
+use crate::windows;
 
 pub fn run_about() -> Result<(), RunError> {
-    let _keep = KeepTerminalSize::new();
     run_window(
         AppComponent::new(About),
         WindowOptions::new(tr!("about"), "curseterm")

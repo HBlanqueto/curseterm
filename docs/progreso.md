@@ -426,3 +426,35 @@ el campo.
    caracteres y no llega como Alt, así que hay una sola opción y no una por
    lado como en iTerm2.
 4. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla, con las ventanas de CurseTerm flotantes para
+que el compositor respete su tamaño. `./dev.sh check` limpio en los dos modos
+del kit; 27 tests de la app y 1 del bloque.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Ventana nueva con el perfil por omisión: `tput cols` y `tput lines` dan 80 y 25 | ✓ tras medir la barra de título con `TITLEBAR_CLIENT_HEIGHT` (con `TITLEBAR.thickness` salían 24 filas) | `fase6-ventana-80x25.png` |
+| `sleep 100` y Super+W: aviso «Close?»; Escape lo cancela sin mandar `^[` a la shell; Intro cierra | ✓ tras diferir el cierre del aviso (BK-027) | `fase6-preguntar-al-cerrar.png` |
+| Super+W en una sesión ya terminada, sin procesos: cierra sin preguntar | ✓ | — |
+| «Keep open»: `exit` deja la sesión con «[Process completed]» | ✓ | `fase6-sesion-terminada.png` |
+| «Restart»: `exit` abre una shell nueva en el mismo panel | ✓ | — |
+| Alt «Normal»: Alt+B en `cat -v` da `b`; «Esc+» da `^[b` | ✓ | — |
+| Ajustes › Perfiles con ocho secciones; Window, Session y Keys | ✓ con la ventana a 980 px (BK-028) | `fase6-ajustes-sesion.png` |
+
+**No probado:** «Prompt before closing» en Close All Panes, en Close Window y
+en la «×» de una pestaña (comparten `request_close`, sin captura);
+«Always» y «Never»; cambiar Columns y Rows desde el campo.
+
+**Difiere de iTerm2:**
+
+- Una sola opción para Alt, no una por lado; AltGr compone.
+- «Prompt before closing» no tiene la lista de procesos permitidos de
+  iTerm2: cuenta cualquier grupo de primer plano distinto de la shell. Quit
+  y el cierre pedido por el compositor no preguntan (BK-013).
+- Ninguna ventana recuerda su tamaño ni si estaba maximizada (BK-012).
+- Window no tiene estilo, transparencia ni pantalla; Keys no tiene atajos
+  por perfil.

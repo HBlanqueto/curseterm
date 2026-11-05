@@ -24,7 +24,7 @@ torin = "=0.4.3"
 alacritty_terminal = "0.26"
 
 toml = "0.8"
-rustix = { version = "1", features = ["process", "event"] }
+rustix = { version = "1", features = ["process", "event", "termios"] }
 base64 = "0.22"
 regex = "1"
 plist = "1.10"

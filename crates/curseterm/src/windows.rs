@@ -101,19 +101,7 @@ pub fn quit_others() {
     }
 }
 
-// BK-012: one saved size per app_id, so an auxiliary window restores the terminal's on exit.
-pub struct KeepTerminalSize(toml::Table);
-
-impl KeepTerminalSize {
-    pub fn new() -> Self {
-        Self(barrier_kit::app::load_restoration(&format!(
-            "{APP_ID}.window"
-        )))
-    }
-}
-
-impl Drop for KeepTerminalSize {
-    fn drop(&mut self) {
-        let _ = barrier_kit::app::save_restoration(&format!("{APP_ID}.window"), &self.0);
-    }
+// BK-012: the kit puts the one saved size per app_id over WindowOptions::size.
+pub fn forget_saved_size() {
+    let _ = barrier_kit::app::save_restoration(&format!("{APP_ID}.window"), &toml::Table::new());
 }

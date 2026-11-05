@@ -15,7 +15,7 @@ use alacritty_terminal::term::search::{Match, RegexSearch};
 use alacritty_terminal::term::test::TermSize;
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::tty;
-use alacritty_terminal::vte::ansi::Handler;
+use alacritty_terminal::vte::ansi::{Handler, Processor};
 use barrier_kit::platform::WakeHandle;
 
 use crate::config::{APP_NAME, Profile, SCROLLBACK_LIMIT};
@@ -342,6 +342,19 @@ impl Session {
             .iter()
             .position(|found| Some(*found.start()) == selected)?;
         Some((current + 1, all.len()))
+    }
+
+    pub fn has_jobs(&self) -> bool {
+        let foreground = rustix::termios::tcgetpgrp(self.pty.borrow().file());
+        foreground.is_ok_and(|group| group.as_raw_nonzero().get() as u32 != self.shell_pid)
+    }
+
+    pub fn show_ended(&self, notice: &str) {
+        let mut processor: Processor = Processor::new();
+        processor.advance(
+            &mut *self.term.lock(),
+            format!("\r\n{notice}\r\n").as_bytes(),
+        );
     }
 
     pub fn has_scrollback(&self) -> bool {
