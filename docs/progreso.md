@@ -1005,3 +1005,25 @@ entrada, pero sigue si no la lee).
    `/` y `:`), como el «smart selection» de iTerm2. Uno, dos y tres clics
    siguen seleccionando carácter, palabra y línea.
 3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla. `./dev.sh check` limpio en los dos modos del
+kit; 40 tests de la app y 1 del bloque. Ningún gap nuevo.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `seq 1 200` con 50 líneas de historial y la rueda hacia arriba: aparece la barra en el borde derecho, de un tercio del alto y abajo del todo; al volver abajo desaparece | ✓ | `fase19-indicador.png` |
+| Cuatro clics en `(https://a.org/x).` y ⌘C: el portapapeles tiene `https://a.org/x` | ✓ | — |
+
+**No probado:** arrastrar la barra (no se puede: es solo un indicador);
+cuatro clics en una ruta fuera del test de `word_span`.
+
+**Difiere de iTerm2:**
+
+- El indicador no se puede arrastrar ni pulsar, y no hay opción para ocultar
+  la barra.
+- La selección inteligente usa dos reglas fijas (URL o palabra entre
+  espacios); iTerm2 trae una lista de reglas editable por perfil.

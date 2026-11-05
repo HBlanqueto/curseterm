@@ -172,7 +172,12 @@ impl Component for TerminalPane {
                             let kind = match click.count {
                                 1 => SelectionType::Simple,
                                 2 => SelectionType::Semantic,
-                                _ => SelectionType::Lines,
+                                3 => SelectionType::Lines,
+                                _ => {
+                                    session.smart_select(point);
+                                    *repaint.write() += 1;
+                                    return;
+                                }
                             };
                             session.start_selection(kind, point, side);
                             dragging.set(true);
@@ -279,7 +284,7 @@ fn next_click(last: Option<Click>, point: Point) -> Click {
             if last.point == point
                 && now - last.at < Duration::from_millis(TERMINAL.multi_click_ms) =>
         {
-            last.count % 3 + 1
+            last.count % 4 + 1
         }
         _ => 1,
     };

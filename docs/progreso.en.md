@@ -1003,3 +1003,25 @@ input, but keeps running if it does not read it).
    and `:`), like iTerm2's smart selection. One, two and three clicks still
    select character, word and line.
 3. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-05)
+
+Tested on headless sway. `./dev.sh check` clean in both kit modes; 40 app
+tests and 1 block test. No new gap.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `seq 1 200` with 50 lines of scrollback and the wheel up: the bar shows on the right edge, a third of the height and at the bottom; it goes away when back at the bottom | ✓ | `fase19-indicador.png` |
+| Four clicks on `(https://a.org/x).` and ⌘C: the clipboard holds `https://a.org/x` | ✓ | — |
+
+**Not tested:** dragging the bar (it cannot be done: it is only an
+indicator); four clicks on a path outside the `word_span` test.
+
+**Differs from iTerm2:**
+
+- The indicator cannot be dragged or clicked, and there is no option to hide
+  the bar.
+- Smart selection uses two fixed rules (URL or space-separated word); iTerm2
+  ships a list of rules editable per profile.

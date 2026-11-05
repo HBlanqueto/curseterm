@@ -216,6 +216,9 @@ pub fn draw(
     if let Some(tint) = overlay.broadcast {
         draw_broadcast(ctx, tint);
     }
+    if display_offset > 0 {
+        draw_scroll_indicator(ctx, term, display_offset, scheme);
+    }
     if let Some(badge) = overlay.badge {
         draw_badge(ctx, badge, fonts, scheme);
     }
@@ -426,6 +429,30 @@ fn draw_timestamps(
             &ink,
         );
     }
+}
+
+fn draw_scroll_indicator(
+    ctx: &mut CanvasContext,
+    term: &Term<Listener>,
+    offset: usize,
+    scheme: &Scheme,
+) {
+    let total = term.total_lines() as f32;
+    let screen = term.screen_lines() as f32;
+    let above = (term.history_size() - offset) as f32;
+    let height = (ctx.height * screen / total).max(TERMINAL.scrollbar_width * 2.0);
+    let top = (ctx.height - height) * above / (total - screen).max(1.0);
+    let width = TERMINAL.scrollbar_width;
+    let thumb = SkRect::new(
+        ctx.width - width * 2.0,
+        top,
+        ctx.width - width,
+        top + height,
+    );
+    let mut ink = paint(scheme.foreground);
+    ink.set_alpha_f(TERMINAL.scrollbar_alpha);
+    ctx.canvas
+        .draw_rrect(RRect::new_rect_xy(thumb, width / 2.0, width / 2.0), &ink);
 }
 
 fn draw_badge(ctx: &mut CanvasContext, badge: &str, fonts: &Fonts, scheme: &Scheme) {

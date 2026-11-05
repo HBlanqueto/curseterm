@@ -392,6 +392,21 @@ impl Session {
         path.exists().then(|| path.display().to_string())
     }
 
+    pub fn smart_select(&self, point: Point) {
+        let mut term = self.term.lock();
+        let (text, columns) = pty_io::trimmed_text_and_byte_columns(&term, point.line);
+        let column = point.column.0;
+        let Some(span) = links::url_span(&text, &columns, column)
+            .or_else(|| links::word_span(&text, &columns, column))
+        else {
+            return;
+        };
+        let cell = |byte: usize| Point::new(point.line, Column(columns[byte]));
+        let mut selection = Selection::new(SelectionType::Simple, cell(span.start), Side::Left);
+        selection.update(cell(span.end - 1), Side::Right);
+        term.selection = Some(selection);
+    }
+
     pub fn has_output(&self) -> bool {
         self.extras().output.is_some()
     }
