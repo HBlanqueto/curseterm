@@ -1,0 +1,10 @@
+name = "CurseTerm Claro"
+foreground = "#24272e"
+background = "#fbfbfc"
+cursor = "#24272e"
+cursor_text = "#fbfbfc"
+selection = "#c8d9f5"
+ansi = [
+    "#24272e", "#c4302b", "#2d8a3e", "#946b00", "#2463c9", "#8a3fc4", "#13808a", "#8b9099",
+    "#5c626d", "#df4a44", "#3aa152", "#b38500", "#3b7be0", "#a45bdc", "#1d9aa6", "#c5c8cf",
+]

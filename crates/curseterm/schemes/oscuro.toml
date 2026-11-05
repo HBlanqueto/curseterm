@@ -1,0 +1,10 @@
+name = "CurseTerm Oscuro"
+foreground = "#d8dbe1"
+background = "#17191e"
+cursor = "#d8dbe1"
+cursor_text = "#17191e"
+selection = "#384863"
+ansi = [
+    "#22252c", "#e15a52", "#5aa85c", "#c8952c", "#5a9ef0", "#ad86ec", "#3dbfc9", "#c3c7ce",
+    "#666f7c", "#f17a70", "#71c272", "#dcae47", "#76b8fb", "#d6bcf8", "#5fd0d9", "#eff1f4",
+]
