@@ -51,15 +51,15 @@ pub fn run_settings() -> Result<(), RunError> {
     )
 }
 
-fn on_action(id: &str) {
+fn on_action(id: &str, controls: &WindowControls) {
     match id {
         _ if id == menu::ABOUT.id => windows::open(Some("--about")),
         _ if id == menu::SETTINGS.id => windows::open(Some("--settings")),
         _ if id == menu::NEW_WINDOW.id => windows::open(None),
-        _ if id == menu::CLOSE.id => WindowControls::get().close(),
+        _ if id == menu::CLOSE.id => controls.close(),
         _ if id == menu::QUIT.id => {
             windows::quit_others();
-            WindowControls::get().close();
+            controls.close();
         }
         _ => {}
     }
@@ -69,7 +69,8 @@ struct About;
 
 impl App for About {
     fn render(&self) -> impl IntoElement {
-        use_menu_action(on_action);
+        let controls = WindowControls::get();
+        use_menu_action(move |id| on_action(id, &controls));
         let palette = Palette::current();
         rect()
             .width(Size::fill())
@@ -90,7 +91,8 @@ struct Settings;
 
 impl App for Settings {
     fn render(&self) -> impl IntoElement {
-        use_menu_action(on_action);
+        let controls = WindowControls::get();
+        use_menu_action(move |id| on_action(id, &controls));
         let defaults = barrier_kit::app::use_defaults::<Defaults>(APP_ID);
         let family = use_state(|| defaults.peek().font_family().to_string());
         use_side_effect(move || {

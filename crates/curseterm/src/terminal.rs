@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, channel};
 use std::time::{Duration, Instant};
@@ -16,7 +17,7 @@ use barrier_kit::titlebar::Titlebar;
 use barrier_kit_next::app_menu::use_menu_enabled;
 use barrier_kit_next::canvas::canvas;
 use barrier_kit_next::views::tab_bar::TabBar;
-use freya_clipboard::prelude::Clipboard;
+use freya_clipboard::copypasta::ClipboardProvider;
 use freya_core::prelude::*;
 use torin::prelude::{Direction, Gaps, Size};
 use vow_design::SPACE_1;
@@ -43,6 +44,7 @@ struct Tabs {
     active: usize,
     next_id: SessionId,
     grid: Option<GridSize>,
+    area: Option<(f32, f32)>,
 }
 
 impl Tabs {
@@ -60,6 +62,16 @@ struct Click {
     at: Instant,
     point: Point,
     count: u8,
+}
+
+type ClipboardState = State<Option<Box<dyn ClipboardProvider>>>;
+
+// Menu actions and wake-ups run outside Freya's context (BK-017): they use handles taken in render.
+#[derive(Clone)]
+struct Handles {
+    tabs: State<Tabs>,
+    controls: WindowControls,
+    clipboard: ClipboardState,
 }
 
 pub struct Terminal;
@@ -80,13 +92,36 @@ impl App for Terminal {
         let mut revision = use_state(|| 0u64);
         let mut dragging = use_state(|| false);
         let mut last_click = use_state(|| None::<Click>);
-        let events = use_hook(move || listen(tabs, revision));
+        let handles = use_hook(move || Handles {
+            tabs,
+            controls: WindowControls::get(),
+            clipboard: consume_root_context(),
+        });
+        use_side_effect(move || {
+            let fonts = fonts.read().clone();
+            let area = tabs.peek().area;
+            if let Some((width, height)) = area {
+                resize(tabs, &fonts, width, height);
+            }
+            *revision.write() += 1;
+        });
+        let events = use_hook({
+            let handles = handles.clone();
+            move || listen(handles, revision)
+        });
 
         use_hook({
             let events = events.clone();
             move || open_tab(tabs, &events)
         });
-        use_menu_action(move |id| on_action(id, tabs, &events));
+        use_menu_action({
+            let handles = handles.clone();
+            move |id| {
+                on_action(id, &handles, &events);
+                let mut revision = revision;
+                *revision.write() += 1;
+            }
+        });
         use_menu_enabled(
             menu::COPY.id,
             tabs.read()
@@ -94,8 +129,8 @@ impl App for Terminal {
                 .is_some_and(|session| session.selected_text().is_some()),
         );
 
-        let controls = WindowControls::get();
-        let focused = controls.status.read().activated;
+        let focused = handles.controls.status.read().activated;
+        let clipboard = handles.clipboard;
         let palette = Palette::current();
         let tabs_now = tabs.read();
         let title = tabs_now
@@ -113,7 +148,10 @@ impl App for Terminal {
                 .on_select(move |index| {
                     tabs.write().active = index;
                 })
-                .on_close(move |index| close_tab(tabs, index))
+                .on_close({
+                    let handles = handles.clone();
+                    move |index| close_tab(&handles, index)
+                })
         });
         let active = tabs_now.active().cloned();
         drop(tabs_now);
@@ -123,7 +161,15 @@ impl App for Terminal {
         let cells = fonts.read().clone();
         let painter = active.clone().map(|session| {
             let fonts = cells.clone();
-            canvas(*revision.read(), move |ctx| {
+            let mut look = DefaultHasher::new();
+            (
+                *revision.read(),
+                focused,
+                &scheme.name,
+                fonts.cell_width.to_bits(),
+            )
+                .hash(&mut look);
+            canvas(look.finish(), move |ctx| {
                 grid::draw(ctx, &session.term.lock(), &fonts, scheme, focused);
             })
         });
@@ -165,8 +211,8 @@ impl App for Terminal {
                             session.clear_selection();
                             session.write(bytes);
                         }
-                        KeyAction::Copy => copy(session),
-                        KeyAction::Paste => paste(session),
+                        KeyAction::Copy => copy(session, clipboard),
+                        KeyAction::Paste => paste(session, clipboard),
                         KeyAction::PageUp => session.scroll(Scroll::PageUp),
                         KeyAction::PageDown => session.scroll(Scroll::PageDown),
                         KeyAction::Ignore => return,
@@ -243,7 +289,7 @@ impl App for Terminal {
                                     let Some(session) = &active else {
                                         return;
                                     };
-                                    let lines = (event.data().delta_y as f32 / fonts.cell_height)
+                                    let lines = (-event.data().delta_y as f32 / fonts.cell_height)
                                         .round()
                                         as i32;
                                     wheel(session, lines);
@@ -286,18 +332,30 @@ fn wheel(session: &Session, lines: i32) {
     }
 }
 
-fn copy(session: &Session) {
-    if let Some(text) = session.selected_text()
-        && let Err(error) = Clipboard::set(text)
-    {
-        tracing::warn!(?error, "could not copy");
+fn copy(session: &Session, clipboard: ClipboardState) {
+    if let Some(text) = session.selected_text() {
+        set_clipboard(clipboard, text);
     }
 }
 
-fn paste(session: &Session) {
-    match Clipboard::get() {
-        Ok(text) => session.paste(&text),
-        Err(error) => tracing::warn!(?error, "could not paste"),
+fn set_clipboard(mut clipboard: ClipboardState, text: String) {
+    let copied = clipboard
+        .write()
+        .as_mut()
+        .map(|provider| provider.set_contents(text));
+    if !matches!(copied, Some(Ok(()))) {
+        tracing::warn!("could not copy to the clipboard");
+    }
+}
+
+fn clipboard_text(mut clipboard: ClipboardState) -> Option<String> {
+    clipboard.write().as_mut()?.get_contents().ok()
+}
+
+fn paste(session: &Session, clipboard: ClipboardState) {
+    match clipboard_text(clipboard) {
+        Some(text) => session.paste(&text),
+        None => tracing::warn!("could not read the clipboard"),
     }
 }
 
@@ -310,6 +368,7 @@ fn resize(mut tabs: State<Tabs>, fonts: &Fonts, width: f32, height: f32) {
     };
     let mut tabs = tabs.write();
     tabs.grid = Some(grid);
+    tabs.area = Some((width, height));
     for tab in &tabs.tabs {
         tab.session.resize(grid);
     }
@@ -320,7 +379,7 @@ type Events = Rc<(
     barrier_kit::platform::WakeHandle,
 )>;
 
-fn listen(tabs: State<Tabs>, revision: State<u64>) -> Events {
+fn listen(handles: Handles, revision: State<u64>) -> Events {
     let (sender, receiver) = channel();
     let receiver: RefCell<Receiver<(SessionId, TermEvent)>> = RefCell::new(receiver);
     let wake = Timers::get().wakeup(move || {
@@ -329,7 +388,7 @@ fn listen(tabs: State<Tabs>, revision: State<u64>) -> Events {
             return;
         }
         for (id, event) in pending {
-            on_term_event(tabs, id, event);
+            on_term_event(&handles, id, event);
         }
         let mut revision = revision;
         *revision.write() += 1;
@@ -337,7 +396,8 @@ fn listen(tabs: State<Tabs>, revision: State<u64>) -> Events {
     Rc::new((sender, wake))
 }
 
-fn on_term_event(mut tabs: State<Tabs>, id: SessionId, event: TermEvent) {
+fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent) {
+    let mut tabs = handles.tabs;
     let Some(index) = tabs.peek().index_of(id) else {
         return;
     };
@@ -346,11 +406,9 @@ fn on_term_event(mut tabs: State<Tabs>, id: SessionId, event: TermEvent) {
         TermEvent::Title(title) => tabs.write().tabs[index].title = title,
         TermEvent::ResetTitle => tabs.write().tabs[index].title = "CurseTerm".into(),
         TermEvent::PtyWrite(text) => session.write(text.into_bytes()),
-        TermEvent::ClipboardStore(_, text) => {
-            let _ = Clipboard::set(text);
-        }
+        TermEvent::ClipboardStore(_, text) => set_clipboard(handles.clipboard, text),
         TermEvent::ClipboardLoad(_, format) => {
-            if let Ok(text) = Clipboard::get() {
+            if let Some(text) = clipboard_text(handles.clipboard) {
                 session.write(format(&text).into_bytes());
             }
         }
@@ -366,7 +424,7 @@ fn on_term_event(mut tabs: State<Tabs>, id: SessionId, event: TermEvent) {
                 .into_bytes(),
             );
         }
-        TermEvent::ChildExit(_) | TermEvent::Exit => close_tab(tabs, index),
+        TermEvent::ChildExit(_) | TermEvent::Exit => close_tab(handles, index),
         _ => {}
     }
 }
@@ -398,39 +456,45 @@ fn open_tab(mut tabs: State<Tabs>, events: &Events) {
     }
 }
 
-fn close_tab(mut tabs: State<Tabs>, index: usize) {
+fn close_tab(handles: &Handles, index: usize) {
+    let mut tabs = handles.tabs;
     let mut state = tabs.write();
     if index >= state.tabs.len() {
         return;
     }
     state.tabs.remove(index);
     if state.tabs.is_empty() {
-        WindowControls::get().close();
+        handles.controls.close();
         return;
     }
     state.active = state.active.min(state.tabs.len() - 1);
 }
 
-fn on_action(id: &str, tabs: State<Tabs>, events: &Events) {
+fn on_action(id: &str, handles: &Handles, events: &Events) {
+    let tabs = handles.tabs;
+    tracing::debug!(id, "menu action");
     let active = tabs.peek().active().cloned();
     match id {
         _ if id == menu::ABOUT.id => windows::open(Some("--about")),
         _ if id == menu::SETTINGS.id => windows::open(Some("--settings")),
         _ if id == menu::QUIT.id => {
             windows::quit_others();
-            WindowControls::get().close();
+            handles.controls.close();
         }
         _ if id == menu::NEW_WINDOW.id => windows::open(None),
         _ if id == menu::NEW_TAB.id => open_tab(tabs, events),
-        _ if id == menu::CLOSE.id => close_tab(tabs, tabs.peek().active),
+        _ if id == menu::CLOSE.id => {
+            let active_index = tabs.peek().active;
+            close_tab(handles, active_index);
+        }
         _ if id == menu::COPY.id => {
             if let Some(session) = &active {
-                copy(session);
+                copy(session, handles.clipboard);
             }
         }
         _ if id == menu::PASTE.id => {
             if let Some(session) = &active {
-                paste(session);
+                paste(session, handles.clipboard);
             }
         }
         _ if id == menu::SELECT_ALL.id => {
