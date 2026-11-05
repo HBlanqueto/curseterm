@@ -26,6 +26,28 @@ pub struct Profile {
     pub color_scheme: Option<String>,
     pub command: Option<String>,
     pub working_directory: WorkingDirectory,
+    pub triggers: Vec<Trigger>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Trigger {
+    pub regex: String,
+    pub action: TriggerAction,
+    pub parameter: String,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TriggerAction {
+    #[default]
+    Highlight,
+    Bell,
+    SendText,
+}
+
+impl TriggerAction {
+    pub const ALL: [Self; 3] = [Self::Highlight, Self::Bell, Self::SendText];
 }
 
 impl Default for Profile {
@@ -37,6 +59,7 @@ impl Default for Profile {
             color_scheme: None,
             command: None,
             working_directory: WorkingDirectory::Home,
+            triggers: Vec::new(),
         }
     }
 }

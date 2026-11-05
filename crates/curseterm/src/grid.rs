@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::time::Duration;
 
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::term::cell::{Cell, Flags};
@@ -11,6 +12,7 @@ use freya_engine::prelude::{
     Color4f, Font, FontEdging, FontMgr, FontStyle, Paint, PaintStyle, PathBuilder, Rect as SkRect,
     Typeface,
 };
+use vow_design::DURATION_FAST_MS;
 
 use crate::config::Scheme;
 use crate::io::Extras;
@@ -18,6 +20,8 @@ use crate::session::Listener;
 
 const BROADCAST_ALPHA: f32 = 0.12;
 const BROADCAST_STRIPE: f32 = 6.0;
+const HIGHLIGHT_ALPHA: f32 = 0.45;
+const BELL_ALPHA: f32 = 0.2;
 
 pub struct Fonts {
     family: String,
@@ -211,6 +215,7 @@ pub fn draw(
     ctx.canvas.translate((overlay.inset, overlay.inset));
     let offset = display_offset as i32;
     let top = term.history_size() as i64 - i64::from(offset);
+    draw_highlights(ctx, overlay.extras, top, fonts, scheme);
     let frame = Frame {
         palette,
         fonts,
@@ -232,6 +237,37 @@ pub fn draw(
     draw_images(ctx, overlay.extras, top, fonts);
     draw_marks(ctx, overlay, top, term.screen_lines() as i64, fonts, scheme);
     ctx.canvas.restore();
+    let ringing = overlay
+        .extras
+        .bell
+        .is_some_and(|rang| rang.elapsed() < Duration::from_millis(DURATION_FAST_MS));
+    if ringing {
+        let mut flash = paint(scheme.foreground);
+        flash.set_alpha_f(BELL_ALPHA);
+        ctx.canvas
+            .draw_rect(SkRect::new(0.0, 0.0, ctx.width, ctx.height), &flash);
+    }
+}
+
+fn draw_highlights(
+    ctx: &mut CanvasContext,
+    extras: &Extras,
+    top: i64,
+    fonts: &Fonts,
+    scheme: &Scheme,
+) {
+    let mut ink = paint(scheme.ansi[usize::from(NamedColor::Yellow as u8)]);
+    ink.set_alpha_f(HIGHLIGHT_ALPHA);
+    for highlight in &extras.highlights {
+        let y = (highlight.line - top) as f32 * fonts.cell_height;
+        if y + fonts.cell_height < 0.0 || y > ctx.height {
+            continue;
+        }
+        let left = *highlight.columns.start() as f32 * fonts.cell_width;
+        let right = (*highlight.columns.end() + 1) as f32 * fonts.cell_width;
+        ctx.canvas
+            .draw_rect(SkRect::new(left, y, right, y + fonts.cell_height), &ink);
+    }
 }
 
 fn draw_images(ctx: &mut CanvasContext, extras: &Extras, top: i64, fonts: &Fonts) {

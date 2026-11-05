@@ -109,3 +109,16 @@ broadcast-menu = Difundir la entrada
 broadcast-off = Enviar la entrada solo a la sesión actual
 broadcast-all-tabs = Difundir a todos los paneles de todas las pestañas
 broadcast-current-tab = Difundir a todos los paneles de la pestaña actual
+triggers-menu = Triggers
+triggers-enabled = Activar los triggers
+edit-triggers = Editar los triggers…
+section-triggers = Triggers
+trigger-number = Trigger { $number }
+trigger-add = Añadir un trigger
+trigger-remove = Quitar el trigger
+trigger-action = Acción
+trigger-highlight = Resaltar el texto
+trigger-bell = Hacer sonar la campana
+trigger-send-text = Enviar texto
+trigger-regex = Expresión regular
+trigger-parameter = Texto que enviar (\n = Intro)

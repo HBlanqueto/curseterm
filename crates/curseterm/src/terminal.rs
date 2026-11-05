@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender, channel};
+use std::time::{Duration, Instant};
 
 use alacritty_terminal::event::{Event as TermEvent, WindowSize};
 use alacritty_terminal::grid::Scroll;
@@ -21,7 +22,7 @@ use freya_clipboard::copypasta::ClipboardProvider;
 use freya_core::prelude::*;
 use torin::prelude::{Content, Direction, Size};
 
-use vow_design::SPACE_1;
+use vow_design::{DURATION_FAST_MS, SPACE_1};
 
 use crate::config::{APP_ID, Defaults, Profile, WorkingDirectory, change_defaults};
 use crate::grid::Fonts;
@@ -53,6 +54,7 @@ struct Handles {
     text_zoom: State<i32>,
     fonts: FontCache,
     controls: WindowControls,
+    timers: Timers,
     clipboard: ClipboardState,
     broadcast: State<Broadcast>,
     find: Find,
@@ -154,6 +156,7 @@ impl App for Terminal {
             text_zoom,
             fonts: FontCache::default(),
             controls: WindowControls::get(),
+            timers: Timers::get(),
             clipboard: consume_root_context(),
             broadcast,
             find,
@@ -164,8 +167,10 @@ impl App for Terminal {
                 let defaults = defaults.read().clone();
                 text_zoom.read();
                 for session in sessions.peek().values() {
-                    let fonts = handles.fonts_for(&defaults.profile(&session.profile));
+                    let profile = defaults.profile(&session.profile);
+                    let fonts = handles.fonts_for(&profile);
                     session.refit(fonts.cell_width, fonts.cell_height);
+                    session.extras().set_triggers(&profile.triggers);
                 }
                 *revision.write() += 1;
             }
@@ -384,6 +389,10 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::COPY.id, selection);
     use_menu_enabled(menu::USE_SELECTION_FOR_FIND.id, selection);
     let marks = handles.active().is_some_and(|session| session.has_marks());
+    let triggers = handles
+        .active()
+        .is_some_and(|session| session.extras().triggers_enabled);
+    use_menu_checked(menu::TRIGGERS_ENABLED.id, triggers);
     use_menu_enabled(menu::JUMP_TO_MARK.id, marks);
     use_menu_enabled(menu::NEXT_MARK, marks);
     use_menu_enabled(menu::PREVIOUS_MARK, marks);
@@ -495,13 +504,14 @@ fn find_bar(handles: &Handles, mut revision: State<u64>) -> Element {
 fn listen(handles: Handles, revision: State<u64>) -> Events {
     let (sender, receiver) = channel();
     let receiver: RefCell<Receiver<(SessionId, TermEvent)>> = RefCell::new(receiver);
-    let wake = Timers::get().wakeup(move || {
+    let timers = handles.timers.clone();
+    let wake = timers.wakeup(move || {
         let pending: Vec<_> = receiver.borrow().try_iter().collect();
         if pending.is_empty() {
             return;
         }
         for (id, event) in pending {
-            on_term_event(&handles, id, event);
+            on_term_event(&handles, id, event, revision);
         }
         let mut revision = revision;
         *revision.write() += 1;
@@ -509,7 +519,7 @@ fn listen(handles: Handles, revision: State<u64>) -> Events {
     Rc::new((sender, wake))
 }
 
-fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent) {
+fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: State<u64>) {
     let Some(session) = handles.sessions.peek().get(&id).cloned() else {
         return;
     };
@@ -536,6 +546,15 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent) {
                 .into_bytes(),
             );
         }
+        TermEvent::Bell => {
+            session.extras().bell = Some(Instant::now());
+            handles
+                .timers
+                .after(Duration::from_millis(DURATION_FAST_MS), move || {
+                    let mut revision = revision;
+                    *revision.write() += 1;
+                });
+        }
         TermEvent::ChildExit(_) | TermEvent::Exit => close_session(handles, id),
         _ => {}
     }
@@ -556,8 +575,10 @@ fn spawn(handles: &Handles, events: &Events, launch: Launch) -> Option<SessionId
     let id = *next_id.peek();
     *next_id.write() += 1;
     let listener = Listener::new(id, events.0.clone(), events.1.clone());
+    let triggers = handles.defaults.peek().profile(&launch.profile).triggers;
     match Session::spawn(id, size, launch, listener) {
         Ok(session) => {
+            session.extras().set_triggers(&triggers);
             let mut sessions = handles.sessions;
             sessions.write().insert(id, Rc::new(session));
             Some(id)
@@ -748,6 +769,13 @@ fn on_action(id: &str, handles: &Handles, events: &Events) {
                 session.reset();
             }
         }
+        _ if id == menu::TRIGGERS_ENABLED.id => {
+            if let Some(session) = &active {
+                let mut extras = session.extras();
+                extras.triggers_enabled = !extras.triggers_enabled;
+            }
+        }
+        _ if id == menu::EDIT_TRIGGERS.id => windows::open(&["--settings"]),
         _ if id == menu::RESTART_SESSION.id => {
             if let Some(session) = active {
                 restart(handles, events, &session);

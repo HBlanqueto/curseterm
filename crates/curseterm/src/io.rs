@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 use std::fs::File;
 use std::io::{self, Read, Write};
+use std::ops::RangeInclusive;
 use std::path::PathBuf;
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex};
@@ -17,8 +18,10 @@ use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::tty::{EventedReadWrite, Pty};
 use alacritty_terminal::vte::ansi::{Handler, Processor};
 use freya_engine::prelude::{Data, Image};
+use regex::Regex;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 
+use crate::config::{Trigger, TriggerAction};
 use crate::integration::{self, Dimension, InlineImage, Report};
 use crate::osc::{Piece, Splitter};
 use crate::session::Listener;
@@ -33,29 +36,81 @@ pub struct Placed {
     pub image: Image,
 }
 
+pub struct Highlight {
+    pub line: i64,
+    pub columns: RangeInclusive<usize>,
+}
+
+struct Compiled {
+    regex: Regex,
+    action: TriggerAction,
+    text: String,
+}
+
 #[derive(Default)]
 pub struct Extras {
     pub directory: Option<PathBuf>,
     pub marks: Vec<i64>,
     pub images: Vec<Placed>,
+    pub highlights: Vec<Highlight>,
     pub cell: (f32, f32),
+    pub bell: Option<Instant>,
+    pub triggers_enabled: bool,
+    triggers: Vec<Trigger>,
+    compiled: Vec<Compiled>,
 }
 
 impl Extras {
+    pub fn new(cell: (f32, f32)) -> Self {
+        Self {
+            cell,
+            triggers_enabled: true,
+            ..Self::default()
+        }
+    }
+
     pub fn add_mark(&mut self, line: i64) {
         if let Err(at) = self.marks.binary_search(&line) {
             self.marks.insert(at, line);
         }
     }
 
+    pub fn set_triggers(&mut self, triggers: &[Trigger]) {
+        if self.triggers == triggers {
+            return;
+        }
+        self.triggers = triggers.to_vec();
+        self.compiled = triggers
+            .iter()
+            .filter_map(|trigger| {
+                Some(Compiled {
+                    regex: Regex::new(&trigger.regex).ok()?,
+                    action: trigger.action,
+                    text: trigger.parameter.replace("\\n", "\r"),
+                })
+            })
+            .collect();
+    }
+
+    pub fn forget_everything(&mut self) {
+        self.marks.clear();
+        self.images.clear();
+        self.highlights.clear();
+    }
+
     fn anchored_lines(&mut self) -> impl Iterator<Item = &mut i64> {
         let images = self.images.iter_mut().map(|image| &mut image.line);
-        self.marks.iter_mut().chain(images)
+        let highlights = self
+            .highlights
+            .iter_mut()
+            .map(|highlight| &mut highlight.line);
+        self.marks.iter_mut().chain(images).chain(highlights)
     }
 
     pub fn forget_lines_above(&mut self, line: i64) {
         self.marks.retain(|mark| *mark >= line);
         self.images.retain(|image| image.line >= line);
+        self.highlights.retain(|highlight| highlight.line >= line);
         self.anchored_lines().for_each(|anchored| *anchored -= line);
     }
 }
@@ -166,6 +221,7 @@ fn read_loop(
     let mut processor: Processor = Processor::new();
     let mut splitter = Splitter::default();
     let mut buffer = vec![0; READ_BUFFER];
+    let mut scanned = 0;
     loop {
         let deadline = processor.sync_timeout().sync_timeout();
         if !wait(&reader, PollFlags::IN, deadline) {
@@ -200,10 +256,72 @@ fn read_loop(
                     }
                 }
             }
+            run_triggers(&term, &extras, &mut scanned, &listener);
         }
         listener.send_event(Event::Wakeup);
     }
     listener.send_event(Event::Exit);
+}
+
+fn run_triggers(
+    term: &Term<Listener>,
+    extras: &Mutex<Extras>,
+    scanned: &mut i64,
+    listener: &Listener,
+) {
+    let cursor = absolute_line(term);
+    let from = (*scanned).clamp(0, cursor);
+    *scanned = cursor;
+    let Ok(mut extras) = extras.lock() else {
+        return;
+    };
+    if !extras.triggers_enabled || extras.compiled.is_empty() {
+        return;
+    }
+    let history = term.history_size() as i64;
+    let Extras {
+        compiled,
+        highlights,
+        ..
+    } = &mut *extras;
+    for row in from..cursor {
+        let (text, columns) = row_text(term, Line((row - history) as i32));
+        for trigger in compiled.iter() {
+            for found in trigger
+                .regex
+                .find_iter(&text)
+                .filter(|found| !found.is_empty())
+            {
+                match trigger.action {
+                    TriggerAction::Highlight => highlights.push(Highlight {
+                        line: row,
+                        columns: columns[found.start()]..=columns[found.end() - 1],
+                    }),
+                    TriggerAction::Bell => listener.send_event(Event::Bell),
+                    TriggerAction::SendText => {
+                        listener.send_event(Event::PtyWrite(trigger.text.clone()))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// A row's text without trailing blanks, and the column of each of its bytes.
+fn row_text(term: &Term<Listener>, line: Line) -> (String, Vec<usize>) {
+    let mut text = String::new();
+    let mut columns = Vec::new();
+    for (column, cell) in term.grid()[line].into_iter().enumerate() {
+        if cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
+            continue;
+        }
+        text.push(cell.c);
+        columns.extend(std::iter::repeat_n(column, cell.c.len_utf8()));
+    }
+    let length = text.trim_end().len();
+    text.truncate(length);
+    columns.truncate(length);
+    (text, columns)
 }
 
 fn apply(term: &mut Term<Listener>, extras: &Mutex<Extras>, report: Report) {

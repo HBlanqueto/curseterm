@@ -109,3 +109,16 @@ broadcast-menu = Broadcast Input
 broadcast-off = Send Input to Current Session Only
 broadcast-all-tabs = Broadcast Input to All Panes in All Tabs
 broadcast-current-tab = Broadcast Input to All Panes in Current Tab
+triggers-menu = Triggers
+triggers-enabled = Enable Triggers
+edit-triggers = Edit Triggers…
+section-triggers = Triggers
+trigger-number = Trigger { $number }
+trigger-add = Add Trigger
+trigger-remove = Remove Trigger
+trigger-action = Action
+trigger-highlight = Highlight Text
+trigger-bell = Ring Bell
+trigger-send-text = Send Text
+trigger-regex = Regular Expression
+trigger-parameter = Text to send (\n = Return)

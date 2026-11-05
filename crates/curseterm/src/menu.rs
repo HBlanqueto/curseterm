@@ -46,6 +46,9 @@ pub const CLEAR_BUFFER: Action =
 pub const CLEAR_SCROLLBACK: Action = Action::new("clear-scrollback", || tr!("clear-scrollback"))
     .shortcut(super_with(Modifiers::SHIFT, 'k'));
 pub const RESTART_SESSION: Action = Action::new("restart-session", || tr!("restart-session"));
+pub const TRIGGERS_MENU: &str = "triggers-menu";
+pub const TRIGGERS_ENABLED: Action = Action::new("triggers-enabled", || tr!("triggers-enabled"));
+pub const EDIT_TRIGGERS: Action = Action::new("edit-triggers", || tr!("edit-triggers"));
 pub const RESET: Action = Action::new("reset", || tr!("reset")).shortcut(super_key('r'));
 pub const SELECT_ALL: Action =
     Action::new("select-all", || tr!("select-all")).shortcut(super_key('a'));
@@ -198,6 +201,15 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 RESTART_SESSION.item(true),
                 MenuItem::Separator,
                 RESET.item(true),
+                MenuItem::Separator,
+                submenu(
+                    TRIGGERS_MENU,
+                    tr!("triggers-menu"),
+                    vec![
+                        TRIGGERS_ENABLED.item_with(true, CheckState::Checkbox(true)),
+                        EDIT_TRIGGERS.item(true),
+                    ],
+                ),
             ],
         ),
         Menu::new(tr!("menu-profiles"), profile_items(profiles)),

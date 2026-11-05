@@ -16,6 +16,7 @@ base64.workspace = true
 barrier-kit.workspace = true
 barrier-kit-next.workspace = true
 freya-clipboard.workspace = true
+regex.workspace = true
 freya-core.workspace = true
 freya-engine.workspace = true
 i18n-embed.workspace = true

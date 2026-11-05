@@ -125,10 +125,7 @@ impl Session {
             &size.term_size(),
             listener.clone(),
         )));
-        let extras = Arc::new(Mutex::new(Extras {
-            cell: (size.cell_width, size.cell_height),
-            ..Extras::default()
-        }));
+        let extras = Arc::new(Mutex::new(Extras::new((size.cell_width, size.cell_height))));
         let sender = pty_io::start(&mut pty, term.clone(), listener, extras.clone())?;
         Ok(Self {
             id,
@@ -238,7 +235,7 @@ impl Session {
 
     pub fn reset(&self) {
         self.term.lock().reset_state();
-        self.forget_everything();
+        self.extras().forget_everything();
     }
 
     pub fn clear_scrollback(&self) {
@@ -254,13 +251,7 @@ impl Session {
         term.scroll_up(cursor.line.0.max(0) as usize);
         term.grid_mut().clear_history();
         term.goto(0, cursor.column.0);
-        self.forget_everything();
-    }
-
-    fn forget_everything(&self) {
-        let mut extras = self.extras();
-        extras.marks.clear();
-        extras.images.clear();
+        self.extras().forget_everything();
     }
 
     pub fn set_mark(&self) {

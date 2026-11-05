@@ -25,7 +25,9 @@ use torin::prelude::{Alignment, Content, Direction, Gaps, Size};
 use vow_design::{CAPTION, SIDEBAR, SPACE_1, SPACE_3, WINDOW_MIN_SIZE};
 
 use crate::auxiliary::on_action;
-use crate::config::{APP_ID, Defaults, Profile, WorkingDirectory, change_defaults};
+use crate::config::{
+    APP_ID, Defaults, Profile, Trigger, TriggerAction, WorkingDirectory, change_defaults,
+};
 use crate::itermcolors;
 use crate::localize::tr;
 use crate::menu;
@@ -149,7 +151,8 @@ impl Component for ProfilesPane {
         let form = match *section.read() {
             0 => general_section(defaults, index, &profile),
             1 => colors_section(defaults, index, &profile),
-            _ => text_section(index, &profile),
+            2 => text_section(index, &profile),
+            _ => triggers_section(index, &profile),
         };
         rect()
             .width(Size::fill())
@@ -222,6 +225,7 @@ impl Component for ProfilesPane {
                                     .segment(tr!("section-general"))
                                     .segment(tr!("section-colors"))
                                     .segment(tr!("section-text"))
+                                    .segment(tr!("section-triggers"))
                                     .selected(*section.read())
                                     .on_change(move |choice| section.set(choice)),
                             ),
@@ -385,12 +389,77 @@ fn text_section(index: usize, profile: &Profile) -> Section {
         )
 }
 
+fn triggers_section(index: usize, profile: &Profile) -> Section {
+    let rows = profile
+        .triggers
+        .iter()
+        .enumerate()
+        .map(|(position, trigger)| {
+            let number = position as u64 + 1;
+            Row::new(intern(&tr!("trigger-number", number = number)))
+                .control(trigger_editor(index, position, trigger))
+        });
+    rows.fold(Section::titled(tr!("section-triggers")), Section::row)
+        .row(Row::new(tr!("trigger-add")).control(
+            IconButton::new(Symbol::Plus, tr!("trigger-add")).on_press(move |_| {
+                edit(index, |profile| profile.triggers.push(Trigger::default()))
+            }),
+        ))
+}
+
+fn trigger_editor(index: usize, position: usize, trigger: &Trigger) -> Rect {
+    let action = TriggerAction::ALL
+        .iter()
+        .position(|action| *action == trigger.action)
+        .unwrap_or_default();
+    let text = |field, value: &str| {
+        rect().width(Size::flex(1.0)).child(ProfileText {
+            index,
+            field,
+            value: value.to_string(),
+        })
+    };
+    rect()
+        .width(Size::fill())
+        .direction(Direction::Horizontal)
+        .content(Content::flex())
+        .cross_align(Alignment::Center)
+        .spacing(SPACE_1)
+        .child(text(Field::TriggerRegex(position), &trigger.regex))
+        .child(
+            PopUpButton::new(tr!("trigger-action"))
+                .item(tr!("trigger-highlight"))
+                .item(tr!("trigger-bell"))
+                .item(tr!("trigger-send-text"))
+                .selected(action)
+                .on_change(move |choice: usize| {
+                    edit(index, |profile| {
+                        if let Some(trigger) = profile.triggers.get_mut(position) {
+                            trigger.action = TriggerAction::ALL[choice];
+                        }
+                    })
+                }),
+        )
+        .child(text(Field::TriggerParameter(position), &trigger.parameter))
+        .child(
+            IconButton::new(Symbol::Minus, tr!("trigger-remove")).on_press(move |_| {
+                edit(index, |profile| {
+                    if position < profile.triggers.len() {
+                        profile.triggers.remove(position);
+                    }
+                })
+            }),
+        )
+}
+
 #[derive(Clone, Copy, PartialEq)]
 enum Field {
     Name,
     Command,
     Directory,
     Family,
+    TriggerRegex(usize),
+    TriggerParameter(usize),
 }
 
 impl Field {
@@ -400,12 +469,14 @@ impl Field {
             Self::Command => tr!("profile-command-placeholder"),
             Self::Directory => tr!("directory-path"),
             Self::Family => tr!("font-family"),
+            Self::TriggerRegex(_) => tr!("trigger-regex"),
+            Self::TriggerParameter(_) => tr!("trigger-parameter"),
         }
     }
 
     fn store(self, index: usize, value: &str) {
         let value = value.trim().to_string();
-        if value.is_empty() && self != Self::Command {
+        if value.is_empty() && !matches!(self, Self::Command | Self::TriggerParameter(_)) {
             return;
         }
         change_defaults(|defaults| {
@@ -424,6 +495,14 @@ impl Field {
                     profile.working_directory = WorkingDirectory::Fixed(value.clone().into())
                 }
                 Self::Family => profile.font_family = value.clone(),
+                Self::TriggerRegex(position) | Self::TriggerParameter(position) => {
+                    if let Some(trigger) = profile.triggers.get_mut(position) {
+                        match self {
+                            Self::TriggerRegex(_) => trigger.regex = value.clone(),
+                            _ => trigger.parameter = value.clone(),
+                        }
+                    }
+                }
             }
             if self == Self::Name && defaults.default_profile == old {
                 defaults.default_profile = Some(value);
