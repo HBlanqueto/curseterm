@@ -4,7 +4,7 @@ use barrier_kit::adornments::divider;
 use barrier_kit::compact::IconButton;
 use barrier_kit::interaction::use_interaction;
 use barrier_kit::style::{Palette, text};
-use barrier_kit::symbol::Symbol;
+use barrier_kit::symbol::{Symbol, symbol};
 use barrier_kit::theme::color;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Size};
@@ -12,11 +12,17 @@ use vow_design::CAPTION;
 
 use crate::tokens::TAB_BAR;
 
+#[derive(Clone, Copy, PartialEq)]
+pub struct Badge {
+    pub symbol: Symbol,
+    pub label: &'static str,
+}
+
 #[derive(PartialEq)]
 pub struct TabBar {
     label: &'static str,
     close_label: &'static str,
-    titles: Vec<String>,
+    tabs: Vec<(String, Option<Badge>)>,
     selected: usize,
     on_select: Option<Callback<usize, ()>>,
     on_close: Option<Callback<usize, ()>>,
@@ -28,7 +34,7 @@ impl TabBar {
         Self {
             label,
             close_label,
-            titles: Vec::new(),
+            tabs: Vec::new(),
             selected: 0,
             on_select: None,
             on_close: None,
@@ -42,7 +48,12 @@ impl TabBar {
     }
 
     pub fn tab(mut self, title: impl Into<String>) -> Self {
-        self.titles.push(title.into());
+        self.tabs.push((title.into(), None));
+        self
+    }
+
+    pub fn badged_tab(mut self, title: impl Into<String>, badge: Badge) -> Self {
+        self.tabs.push((title.into(), Some(badge)));
         self
     }
 
@@ -78,9 +89,10 @@ impl Component for TabBar {
                     .direction(Direction::Horizontal)
                     .content(Content::flex())
                     .cross_align(Alignment::Center)
-                    .children(self.titles.iter().enumerate().map(|(index, title)| {
+                    .children(self.tabs.iter().enumerate().map(|(index, (title, badge))| {
                         Tab {
                             title: title.clone(),
+                            badge: *badge,
                             close_label: self.close_label,
                             selected: index == self.selected,
                             index,
@@ -100,6 +112,7 @@ impl Component for TabBar {
 #[derive(PartialEq)]
 struct Tab {
     title: String,
+    badge: Option<Badge>,
     close_label: &'static str,
     selected: bool,
     index: usize,
@@ -136,7 +149,10 @@ impl Component for Tab {
         let tab = interaction
             .attach(rect(), true)
             .a11y_role(AccessibilityRole::Tab)
-            .a11y_alt(self.title.clone())
+            .a11y_alt(match self.badge {
+                Some(badge) => format!("{}, {}", self.title, badge.label),
+                None => self.title.clone(),
+            })
             .width(Size::flex(1.0))
             .max_width(Size::px(TAB_BAR.tab_max_width))
             .height(Size::fill())
@@ -153,7 +169,14 @@ impl Component for Tab {
             .child(
                 rect()
                     .width(Size::flex(1.0))
+                    .direction(Direction::Horizontal)
                     .main_align(Alignment::Center)
+                    .cross_align(Alignment::Center)
+                    .spacing(TAB_BAR.badge_gap)
+                    .maybe_child(
+                        self.badge
+                            .map(|badge| symbol(badge.symbol, TAB_BAR.badge, palette.accent)),
+                    )
                     .child(text(self.title.clone(), CAPTION, ink)),
             )
             .maybe_child(close);

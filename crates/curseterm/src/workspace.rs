@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::config::APP_NAME;
 use crate::panes::{Axis, Pane, Toward};
@@ -16,6 +16,7 @@ pub struct Workspace {
     pub tabs: Vec<Tab>,
     pub active: usize,
     titles: HashMap<SessionId, String>,
+    bells: HashSet<SessionId>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -98,7 +99,7 @@ impl Workspace {
 
     pub fn close(&mut self, id: SessionId) -> Option<Closed> {
         let index = self.tab_of(id)?;
-        self.titles.remove(&id);
+        self.forget(id);
         let tab = &mut self.tabs[index];
         if tab.root == Pane::Leaf(id) {
             self.remove_tab(index);
@@ -117,7 +118,7 @@ impl Workspace {
     }
 
     pub fn replace(&mut self, old: SessionId, new: SessionId) {
-        self.titles.remove(&old);
+        self.forget(old);
         for tab in &mut self.tabs {
             if tab.root.replace(old, new) && tab.active == old {
                 tab.active = new;
@@ -131,7 +132,7 @@ impl Workspace {
         };
         let sessions = tab.root.leaves();
         for id in &sessions {
-            self.titles.remove(id);
+            self.forget(*id);
         }
         self.remove_tab(index);
         sessions
@@ -142,6 +143,33 @@ impl Workspace {
         if self.active > index || self.active == self.tabs.len() {
             self.active = self.active.saturating_sub(1);
         }
+        self.hear_active_tab();
+    }
+
+    fn forget(&mut self, id: SessionId) {
+        self.titles.remove(&id);
+        self.bells.remove(&id);
+    }
+
+    pub fn ring(&mut self, id: SessionId) {
+        if self.tab_of(id) != Some(self.active) {
+            self.bells.insert(id);
+        }
+    }
+
+    fn hear_active_tab(&mut self) {
+        if let Some(tab) = self.tabs.get(self.active) {
+            for id in tab.root.leaves() {
+                self.bells.remove(&id);
+            }
+        }
+    }
+
+    pub fn rang_tabs(&self) -> Vec<bool> {
+        self.tabs
+            .iter()
+            .map(|tab| tab.root.leaves().iter().any(|id| self.bells.contains(id)))
+            .collect()
     }
 
     fn tab_of(&self, id: SessionId) -> Option<usize> {
@@ -154,12 +182,14 @@ impl Workspace {
         if let Some(index) = self.tab_of(id) {
             self.active = index;
             self.tabs[index].active = id;
+            self.hear_active_tab();
         }
     }
 
     pub fn select_tab(&mut self, index: usize) {
         if index < self.tabs.len() {
             self.active = index;
+            self.hear_active_tab();
         }
     }
 
@@ -167,6 +197,7 @@ impl Workspace {
         if !self.tabs.is_empty() {
             self.active =
                 (self.active as isize + step).rem_euclid(self.tabs.len() as isize) as usize;
+            self.hear_active_tab();
         }
     }
 
@@ -208,6 +239,19 @@ impl Workspace {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_bell_in_a_background_tab_shows_until_that_tab_is_selected() {
+        let mut workspace = Workspace::default();
+        workspace.open_tab(1);
+        workspace.open_tab(2);
+        workspace.ring(2);
+        workspace.ring(1);
+        assert_eq!(workspace.rang_tabs(), vec![true, false]);
+        workspace.select_tab(0);
+        workspace.select_tab(1);
+        assert_eq!(workspace.rang_tabs(), vec![false, false]);
+    }
 
     #[test]
     fn closing_panes_collapses_the_tab_then_the_window() {

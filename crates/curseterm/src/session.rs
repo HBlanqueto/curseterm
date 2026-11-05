@@ -11,14 +11,14 @@ use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Boundary, Column, Direction, Line, Point, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::sync::FairMutex;
-use alacritty_terminal::term::search::RegexSearch;
+use alacritty_terminal::term::search::{Match, RegexSearch};
 use alacritty_terminal::term::test::TermSize;
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::tty;
 use alacritty_terminal::vte::ansi::Handler;
 use barrier_kit::platform::WakeHandle;
 
-use crate::config::APP_NAME;
+use crate::config::{APP_NAME, Profile, SCROLLBACK_LIMIT};
 use crate::io::{self as pty_io, Extras};
 
 pub type SessionId = u64;
@@ -98,6 +98,7 @@ pub struct Session {
     size: Cell<GridSize>,
     area: Cell<Option<(f32, f32)>>,
     shell_pid: u32,
+    scrollback: Cell<usize>,
 }
 
 impl Session {
@@ -138,7 +139,19 @@ impl Session {
             size: Cell::new(size),
             area: Cell::new(None),
             shell_pid,
+            scrollback: Cell::new(Config::default().scrolling_history),
         })
+    }
+
+    pub fn apply_profile(&self, profile: &Profile) {
+        self.extras().set_triggers(&profile.triggers);
+        let lines = profile.scrollback_lines.min(SCROLLBACK_LIMIT) as usize;
+        if self.scrollback.replace(lines) != lines {
+            self.term.lock().set_options(Config {
+                scrolling_history: lines,
+                ..Config::default()
+            });
+        }
     }
 
     pub fn write(&self, bytes: impl Into<Cow<'static, [u8]>>) {
@@ -312,6 +325,25 @@ impl Session {
         true
     }
 
+    pub fn find_position(&self, query: &str) -> Option<(usize, usize)> {
+        let term = self.term.lock();
+        let start = Point::new(Line(-(term.history_size() as i32)), Column(0));
+        let end = Point::new(
+            Line(term.screen_lines() as i32 - 1),
+            Column(term.columns() - 1),
+        );
+        let all = matches_between(&term, query, start, end);
+        let selected = term
+            .selection
+            .as_ref()
+            .and_then(|selection| selection.to_range(&term))
+            .map(|range| range.start);
+        let current = all
+            .iter()
+            .position(|found| Some(*found.start()) == selected)?;
+        Some((current + 1, all.len()))
+    }
+
     pub fn has_scrollback(&self) -> bool {
         self.term.lock().history_size() > 0
     }
@@ -319,6 +351,33 @@ impl Session {
     pub fn display_offset(&self) -> usize {
         self.term.lock().grid().display_offset()
     }
+}
+
+pub fn visible_matches(term: &Term<Listener>, query: &str) -> Vec<Match> {
+    let offset = term.grid().display_offset() as i32;
+    let start = Point::new(Line(-offset), Column(0));
+    let end = Point::new(
+        Line(term.screen_lines() as i32 - 1 - offset),
+        Column(term.columns() - 1),
+    );
+    matches_between(term, query, start, end)
+}
+
+fn matches_between(term: &Term<Listener>, query: &str, start: Point, end: Point) -> Vec<Match> {
+    let Ok(mut regex) = RegexSearch::new(&literal_pattern(query)) else {
+        return Vec::new();
+    };
+    let mut found = Vec::new();
+    let mut origin = start;
+    while let Some(next) = term.regex_search_right(&mut regex, origin, end) {
+        let last = *next.end() >= end;
+        origin = next.end().add(term, Boundary::None, 1);
+        found.push(next);
+        if last {
+            break;
+        }
+    }
+    found
 }
 
 fn literal_pattern(query: &str) -> String {

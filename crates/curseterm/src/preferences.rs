@@ -25,7 +25,8 @@ use vow_design::{CAPTION, SIDEBAR, SPACE_1, SPACE_3, WINDOW_MIN_SIZE};
 
 use crate::auxiliary::on_action;
 use crate::config::{
-    APP_ID, Defaults, Profile, Trigger, TriggerAction, WorkingDirectory, change_defaults,
+    APP_ID, Defaults, Profile, SCROLLBACK_LIMIT, Trigger, TriggerAction, WorkingDirectory,
+    change_defaults,
 };
 use crate::itermcolors;
 use crate::localize::tr;
@@ -147,6 +148,7 @@ impl Component for ProfilesPane {
             0 => general_section(defaults, index, &profile),
             1 => colors_section(defaults, index, &profile),
             2 => text_section(index, &profile),
+            3 => terminal_section(index, &profile),
             _ => triggers_section(index, &profile),
         };
         rect()
@@ -220,7 +222,8 @@ impl Component for ProfilesPane {
                                     .segment(tr!("section-general"))
                                     .segment(tr!("section-colors"))
                                     .segment(tr!("section-text"))
-                                    .segment(tr!("section-triggers"))
+                                    .segment(tr!("section-terminal"))
+                                    .segment(tr!("section-advanced"))
                                     .selected(*section.read())
                                     .on_change(move |choice| section.set(choice)),
                             ),
@@ -386,6 +389,40 @@ fn text_section(index: usize, profile: &Profile) -> Section {
         )
 }
 
+fn terminal_section(index: usize, profile: &Profile) -> Section {
+    Section::titled(tr!("section-terminal"))
+        .row(
+            Row::new(tr!("scrollback-lines"))
+                .detail(intern(&tr!(
+                    "scrollback-lines-detail",
+                    limit = u64::from(SCROLLBACK_LIMIT)
+                )))
+                .control(ProfileText {
+                    index,
+                    field: Field::Scrollback,
+                    value: profile.scrollback_lines.to_string(),
+                }),
+        )
+        .row(
+            Row::new(tr!("flash-visual-bell")).control(
+                Switch::new(tr!("flash-visual-bell"))
+                    .on(profile.flash_visual_bell)
+                    .on_toggle(move |on: bool| {
+                        edit(index, |profile| profile.flash_visual_bell = on)
+                    }),
+            ),
+        )
+        .row(
+            Row::new(tr!("bell-icon-in-tabs")).control(
+                Switch::new(tr!("bell-icon-in-tabs"))
+                    .on(profile.bell_icon_in_tabs)
+                    .on_toggle(move |on: bool| {
+                        edit(index, |profile| profile.bell_icon_in_tabs = on)
+                    }),
+            ),
+        )
+}
+
 fn triggers_section(index: usize, profile: &Profile) -> Section {
     let rows = profile
         .triggers
@@ -457,6 +494,7 @@ enum Field {
     Family,
     TriggerRegex(usize),
     TriggerParameter(usize),
+    Scrollback,
 }
 
 impl Field {
@@ -468,6 +506,7 @@ impl Field {
             Self::Family => tr!("font-family"),
             Self::TriggerRegex(_) => tr!("trigger-regex"),
             Self::TriggerParameter(_) => tr!("trigger-parameter"),
+            Self::Scrollback => tr!("scrollback-lines"),
         }
     }
 
@@ -492,6 +531,11 @@ impl Field {
                     profile.working_directory = WorkingDirectory::Fixed(value.clone().into())
                 }
                 Self::Family => profile.font_family = value.clone(),
+                Self::Scrollback => {
+                    if let Ok(lines) = value.parse::<u32>() {
+                        profile.scrollback_lines = lines.min(SCROLLBACK_LIMIT);
+                    }
+                }
                 Self::TriggerRegex(position) | Self::TriggerParameter(position) => {
                     if let Some(trigger) = profile.triggers.get_mut(position) {
                         match self {

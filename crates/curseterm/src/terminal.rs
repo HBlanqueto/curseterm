@@ -12,18 +12,19 @@ use barrier_kit::app::use_menu_action;
 use barrier_kit::app_menu::MenuHandle;
 use barrier_kit::controls::{Button, SearchField};
 use barrier_kit::platform::{Timers, WakeHandle, WindowControls};
-use barrier_kit::style::Palette;
+use barrier_kit::style::{Palette, text};
+use barrier_kit::symbol::Symbol;
 use barrier_kit::theme::color;
 use barrier_kit::titlebar::Titlebar;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
 use barrier_kit_next::tokens::TERMINAL;
 use barrier_kit_next::views::split_panes::SplitPanes;
-use barrier_kit_next::views::tab_bar::TabBar;
+use barrier_kit_next::views::tab_bar::{Badge, TabBar};
 use freya_clipboard::copypasta::ClipboardProvider;
 use freya_core::prelude::*;
-use torin::prelude::{Content, Direction, Size};
+use torin::prelude::{Alignment, Content, Direction, Size};
 
-use vow_design::{DURATION_FAST_MS, SPACE_1};
+use vow_design::{CAPTION, DURATION_FAST_MS, SPACE_1};
 
 use crate::config::{APP_ID, APP_NAME, Defaults, Profile, WorkingDirectory, change_defaults};
 use crate::grid::Fonts;
@@ -65,9 +66,15 @@ struct Find {
     open: State<bool>,
     query: State<String>,
     focused: State<bool>,
+    position: State<Option<(usize, usize)>>,
 }
 
 impl Find {
+    fn show_position(self, session: &Session, query: &str) {
+        let mut position = self.position;
+        position.set(session.find_position(query));
+    }
+
     fn close(self) {
         let (mut open, mut focused) = (self.open, self.focused);
         open.set(false);
@@ -93,6 +100,7 @@ impl Handles {
         let query = self.find.query.peek().clone();
         if let Some(session) = self.active().filter(|_| !query.is_empty()) {
             session.find(&query, direction);
+            self.find.show_position(&session, &query);
         }
     }
 
@@ -148,6 +156,7 @@ impl App for Terminal {
             open: use_state(|| false),
             query: use_state(String::new),
             focused: use_state(|| false),
+            position: use_state(|| None),
         };
         let handles = use_hook(move || Handles {
             workspace,
@@ -171,7 +180,7 @@ impl App for Terminal {
                     let profile = defaults.profile(&session.profile);
                     let fonts = handles.fonts_for(&profile);
                     session.refit(fonts.cell_width, fonts.cell_height);
-                    session.extras().set_triggers(&profile.triggers);
+                    session.apply_profile(&profile);
                 }
                 *revision.write() += 1;
             }
@@ -183,6 +192,7 @@ impl App for Terminal {
                 if let Some(session) = handles.active().filter(|_| !query.is_empty()) {
                     session.clear_selection();
                     session.find(&query, SearchDirection::Left);
+                    find.show_position(&session, &query);
                     *revision.write() += 1;
                 }
             }
@@ -221,10 +231,22 @@ impl App for Terminal {
         let show_tab_bar = defaults.read().show_tab_bar;
         let tab_bar = (state.tabs.len() > 1 || show_tab_bar).then(|| {
             let (on_close, on_add) = (handles.clone(), handles.clone());
+            // BK-024: the kit has no bell symbol; SpeakerWave stands in for iTerm2's bell.
+            let bell = Badge {
+                symbol: Symbol::SpeakerWave,
+                label: tr!("tab-bell"),
+            };
             state
                 .tab_titles()
                 .into_iter()
-                .fold(TabBar::new(tr!("tabs"), tr!("close-tab")), TabBar::tab)
+                .zip(state.rang_tabs())
+                .fold(
+                    TabBar::new(tr!("tabs"), tr!("close-tab")),
+                    |bar, (title, rang)| match rang {
+                        true => bar.badged_tab(title, bell),
+                        false => bar.tab(title),
+                    },
+                )
                 .selected(state.active)
                 .on_select(move |index| {
                     let mut workspace = workspace;
@@ -252,6 +274,8 @@ impl App for Terminal {
                 revision: *revision.read(),
                 workspace,
                 tab: state.active,
+                find: (*find.open.read() && !find.query.read().is_empty())
+                    .then(|| Rc::from(find.query.read().as_str())),
                 receivers: match *broadcast.read() {
                     Broadcast::Off => Vec::new(),
                     mode => state.receivers(mode),
@@ -320,6 +344,7 @@ struct Painting {
     workspace: State<Workspace>,
     tab: usize,
     receivers: Vec<SessionId>,
+    find: Option<Rc<str>>,
 }
 
 fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
@@ -335,6 +360,7 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                     focused: painting.window_focused && *id == painting.active,
                     revision: painting.revision,
                     broadcast: painting.receivers.contains(id),
+                    find: painting.find.clone().filter(|_| *id == painting.active),
                     on_focus: Callback::new(move |id| workspace.write().focus(id)),
                 }
                 .into_element()
@@ -479,6 +505,7 @@ fn find_bar(handles: &Handles, mut revision: State<u64>) -> Element {
         .width(Size::fill())
         .direction(Direction::Horizontal)
         .content(Content::flex())
+        .cross_align(Alignment::Center)
         .padding(SPACE_1)
         .spacing(SPACE_1)
         .child(
@@ -498,6 +525,16 @@ fn find_bar(handles: &Handles, mut revision: State<u64>) -> Element {
                     *revision.write() += 1;
                 }),
         )
+        .maybe_child((!find.query.read().is_empty()).then(|| {
+            let position = match *find.position.read() {
+                Some((current, total)) => {
+                    let (current, total) = (current as u64, total as u64);
+                    tr!("find-count", current = current, total = total)
+                }
+                None => tr!("find-none").to_string(),
+            };
+            text(position, CAPTION, Palette::current().secondary_label)
+        }))
         .child(Button::new(tr!("find-close")).on_press(move |_| find.close()))
         .into_element()
 }
@@ -548,13 +585,19 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
             );
         }
         TermEvent::Bell => {
-            session.extras().bell = Some(Instant::now());
-            handles
-                .timers
-                .after(Duration::from_millis(DURATION_FAST_MS), move || {
-                    let mut revision = revision;
-                    *revision.write() += 1;
-                });
+            let profile = handles.defaults.peek().profile(&session.profile);
+            if profile.bell_icon_in_tabs {
+                workspace.write().ring(id);
+            }
+            if profile.flash_visual_bell {
+                session.extras().bell = Some(Instant::now());
+                handles
+                    .timers
+                    .after(Duration::from_millis(DURATION_FAST_MS), move || {
+                        let mut revision = revision;
+                        *revision.write() += 1;
+                    });
+            }
         }
         TermEvent::ChildExit(_) | TermEvent::Exit => close_session(handles, id),
         _ => {}
@@ -576,10 +619,10 @@ fn spawn(handles: &Handles, events: &Events, launch: Launch) -> Option<SessionId
     let id = *next_id.peek();
     *next_id.write() += 1;
     let listener = Listener::new(id, events.0.clone(), events.1.clone());
-    let triggers = handles.defaults.peek().profile(&launch.profile).triggers;
+    let profile = handles.defaults.peek().profile(&launch.profile);
     match Session::spawn(id, size, launch, listener) {
         Ok(session) => {
-            session.extras().set_triggers(&triggers);
+            session.apply_profile(&profile);
             let mut sessions = handles.sessions;
             sessions.write().insert(id, Rc::new(session));
             Some(id)

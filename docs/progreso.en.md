@@ -382,3 +382,33 @@ nothing twice, with a reply it did; the cause was not investigated.
 4. **Profile › Advanced:** triggers move to the Advanced section, where
    iTerm2 keeps them.
 5. **Test** in headless sway and documentation in both languages.
+
+### Result (2026-11-05)
+
+Tested on headless sway as in the previous phases. `./dev.sh check` is clean
+in both kit modes; 27 app tests and 1 block test.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Find "orden 3" after 40 commands: the 11 visible matches highlighted, the current one with the selection and "10 of 11" | ✓ | `fase5-buscar-todas.png` |
+| Find "2" after `seq 1 30`: "13 of 13" (`22` counts twice) | ✓ | — |
+| `scrollback_lines = 50` written to the `.domain` with the window open; after `seq 1 500` the oldest line is 416, 50 lines above the first visible one | ✓ | — |
+| `printf '\a'` in a background tab: a badge on that tab, which goes away when it is selected | ✓ | `fase5-campana-en-pestana.png` |
+| "Show bell icon in tabs" off: no badge | ✓ | — |
+| Settings › Profiles › Terminal: scrollback lines and both switches, saved to the `.domain` | ✓ | `fase5-ajustes-terminal.png` |
+| Settings › Profiles › Advanced with the triggers | ✓ | `fase5-ajustes-avanzado.png` |
+
+**Not tested:** "Flash visual bell" off (the branch is one condition, no
+screenshot); a scrollback of 0 lines; the 100,000 limit with a larger value in
+the field.
+
+**Differs from iTerm2:**
+
+- No "Unlimited scrollback" or "Silence bell": there is no audible bell
+  (BK-026).
+- The badge uses `SpeakerWave` instead of a bell (BK-024).
+- Find has no case or regular expression options, and the count is computed
+  when searching, not when new text arrives.
+- The profile still lacks Window, Session and Keys.

@@ -123,3 +123,12 @@ trigger-send-text = Send Text
 trigger-regex = Regular Expression
 trigger-parameter = Text to send (\n = Return)
 profile-default-row = ★ { $name }
+section-terminal = Terminal
+section-advanced = Advanced
+scrollback-lines = Scrollback lines
+scrollback-lines-detail = Up to { $limit }; 0 turns scrollback off.
+flash-visual-bell = Flash visual bell
+bell-icon-in-tabs = Show bell icon in tabs
+tab-bell = The bell rang
+find-count = { $current } of { $total }
+find-none = No matches

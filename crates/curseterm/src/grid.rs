@@ -1,10 +1,12 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ops::RangeInclusive;
 use std::time::Duration;
 
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::term::color::Colors;
+use alacritty_terminal::term::search::Match;
 use alacritty_terminal::term::{RenderableContent, RenderableCursor, Term};
 use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Rgb};
 use barrier_kit_next::canvas::CanvasContext;
@@ -178,6 +180,7 @@ fn bold_bright(color: Color, flags: Flags) -> Color {
 
 pub struct Overlay<'a> {
     pub extras: &'a Extras,
+    pub matches: &'a [Match],
     pub inset: f32,
     pub broadcast: Option<Rgb>,
 }
@@ -212,6 +215,7 @@ pub fn draw(
     let offset = display_offset as i32;
     let top = term.history_size() as i64 - i64::from(offset);
     draw_highlights(ctx, overlay.extras, top, fonts, scheme);
+    draw_matches(ctx, overlay.matches, offset, term.columns(), fonts, scheme);
     let frame = Frame {
         palette,
         fonts,
@@ -245,6 +249,53 @@ pub fn draw(
     }
 }
 
+fn draw_matches(
+    ctx: &mut CanvasContext,
+    matches: &[Match],
+    offset: i32,
+    columns: usize,
+    fonts: &Fonts,
+    scheme: &Scheme,
+) {
+    let ink = highlight_ink(scheme);
+    for found in matches {
+        let (start, end) = (*found.start(), *found.end());
+        for line in start.line.0..=end.line.0 {
+            let first = if line == start.line.0 {
+                start.column.0
+            } else {
+                0
+            };
+            let last = if line == end.line.0 {
+                end.column.0
+            } else {
+                columns - 1
+            };
+            let y = (line + offset) as f32 * fonts.cell_height;
+            fill_cells(ctx, &ink, y, first..=last, fonts);
+        }
+    }
+}
+
+fn highlight_ink(scheme: &Scheme) -> Paint {
+    let mut ink = paint(scheme.ansi[usize::from(NamedColor::Yellow as u8)]);
+    ink.set_alpha_f(TERMINAL.highlight_alpha);
+    ink
+}
+
+fn fill_cells(
+    ctx: &mut CanvasContext,
+    ink: &Paint,
+    y: f32,
+    columns: RangeInclusive<usize>,
+    fonts: &Fonts,
+) {
+    let left = *columns.start() as f32 * fonts.cell_width;
+    let right = (*columns.end() + 1) as f32 * fonts.cell_width;
+    ctx.canvas
+        .draw_rect(SkRect::new(left, y, right, y + fonts.cell_height), ink);
+}
+
 fn draw_highlights(
     ctx: &mut CanvasContext,
     extras: &Extras,
@@ -252,17 +303,13 @@ fn draw_highlights(
     fonts: &Fonts,
     scheme: &Scheme,
 ) {
-    let mut ink = paint(scheme.ansi[usize::from(NamedColor::Yellow as u8)]);
-    ink.set_alpha_f(TERMINAL.highlight_alpha);
+    let ink = highlight_ink(scheme);
     for highlight in &extras.highlights {
         let y = (highlight.line - top) as f32 * fonts.cell_height;
         if y + fonts.cell_height < 0.0 || y > ctx.height {
             continue;
         }
-        let left = *highlight.columns.start() as f32 * fonts.cell_width;
-        let right = (*highlight.columns.end() + 1) as f32 * fonts.cell_width;
-        ctx.canvas
-            .draw_rect(SkRect::new(left, y, right, y + fonts.cell_height), &ink);
+        fill_cells(ctx, &ink, y, highlight.columns.clone(), fonts);
     }
 }
 

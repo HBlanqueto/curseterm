@@ -8,6 +8,9 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 pub const APP_ID: &str = "org.curseterm.CurseTerm";
 pub const APP_NAME: &str = "CurseTerm";
 const DEFAULT_PROFILE: &str = "Default";
+// alacritty_terminal's Grid::clear_history reallocates every row up to this limit:
+// https://docs.rs/crate/alacritty_terminal/0.26.0/source/src/grid/mod.rs
+pub const SCROLLBACK_LIMIT: u32 = 100_000;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -28,6 +31,9 @@ pub struct Profile {
     pub command: Option<String>,
     pub working_directory: WorkingDirectory,
     pub triggers: Vec<Trigger>,
+    pub scrollback_lines: u32,
+    pub flash_visual_bell: bool,
+    pub bell_icon_in_tabs: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -61,6 +67,9 @@ impl Default for Profile {
             command: None,
             working_directory: WorkingDirectory::Home,
             triggers: Vec::new(),
+            scrollback_lines: 1000,
+            flash_visual_bell: true,
+            bell_icon_in_tabs: true,
         }
     }
 }

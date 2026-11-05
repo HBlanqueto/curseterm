@@ -14,7 +14,7 @@ use vow_design::SPACE_2;
 
 use crate::config::Scheme;
 use crate::grid::{self, Fonts};
-use crate::session::{Session, SessionId};
+use crate::session::{self, Session, SessionId};
 
 pub struct TerminalPane {
     pub session: Rc<Session>,
@@ -23,6 +23,7 @@ pub struct TerminalPane {
     pub focused: bool,
     pub revision: u64,
     pub broadcast: bool,
+    pub find: Option<Rc<str>>,
     pub on_focus: Callback<SessionId, ()>,
 }
 
@@ -34,6 +35,7 @@ impl PartialEq for TerminalPane {
             && self.focused == other.focused
             && self.revision == other.revision
             && self.broadcast == other.broadcast
+            && self.find == other.find
     }
 }
 
@@ -54,6 +56,7 @@ impl Component for TerminalPane {
         let scheme = self.scheme.clone();
         let focused = self.focused;
         let broadcast = self.broadcast;
+        let find = self.find.clone();
         let on_focus = self.on_focus.clone();
 
         let mut look = DefaultHasher::new();
@@ -62,6 +65,7 @@ impl Component for TerminalPane {
             *repaint.read(),
             focused,
             broadcast,
+            &find,
             &scheme.name,
             fonts.cell_width.to_bits(),
         )
@@ -73,8 +77,13 @@ impl Component for TerminalPane {
             canvas(look.finish(), move |ctx| {
                 let term = session.term.lock();
                 let extras = session.extras();
+                let matches = find
+                    .as_deref()
+                    .map(|query| session::visible_matches(&term, query))
+                    .unwrap_or_default();
                 let overlay = grid::Overlay {
                     extras: &extras,
+                    matches: &matches,
                     inset: SPACE_2,
                     broadcast: broadcast.then_some(scheme.ansi[1]),
                 };

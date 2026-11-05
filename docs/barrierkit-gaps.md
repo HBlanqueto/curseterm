@@ -2,7 +2,7 @@
 
 Versión/commit de BarrierKit usado: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Resumen: documento vivo; estado al cerrar la fase 4 (2026-11-05), probado en
+Resumen: documento vivo; estado al cerrar la fase 5 (2026-11-05), probado en
 sway sin pantalla con lavapipe (`progreso.md`). Lo más serio: los handlers de
 `use_menu_action` corren fuera del contexto de Freya y hacen abortar la app si
 tocan el portapapeles o `WindowControls::get()` (BK-017); el menú solo se
@@ -53,7 +53,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-021 | controles | `RadioGroup` es siempre horizontal | baja | Workaround: un grupo de una opción por fila |
 | BK-022 | plataforma / persistencia | Un cambio de `.domain` no repinta las ventanas sin foco | alta | Parche 0005 probado |
 | BK-023 | app | Sin selector de archivos | media | Workaround: ruta en un campo y `--import-colors` |
-| BK-024 | símbolos | Faltan símbolos para una barra de ajustes (engranaje, persona, teclado) | baja | Se usan `CircleHalf` y `ListBullet` |
+| BK-024 | símbolos | Faltan símbolos para una barra de ajustes y para la campana | baja | Se usan `CircleHalf`, `ListBullet` y `SpeakerWave` |
 | BK-025 | plataforma / input | Sin atajos globales ni forma de ocultar y mostrar la ventana | media | Workaround probado: `curseterm --hotkey` |
 | BK-026 | app / plataforma | Sin campana, petición de atención ni notificaciones | baja | Workaround probado: campana visual |
 | BK-027 | controles / input | Una vista con teclado global no sabe si un campo de texto tiene el foco | baja | Workaround: foco seguido con `on_focus_change` |
@@ -503,16 +503,18 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Gravedad**: media
 - **Cómo reproducirlo**: buscar `FileChooser` en `crates/barrier-kit/src`: no aparece.
 
-### BK-024 — Faltan símbolos para una barra de ajustes
+### BK-024 — Faltan símbolos para una barra de ajustes y para la campana
 - **Área**: símbolos
 - **Qué necesitaba CurseTerm**: los iconos de la barra de Settings de iTerm2
-  (engranaje, ojo, persona, teclado, puntero, rayo).
+  (engranaje, ojo, persona, teclado, puntero, rayo) y la campana que marca
+  una pestaña de fondo donde ha sonado (fase 5).
 - **Qué ofrece hoy BarrierKit**: 31 símbolos en `symbol.rs`; ninguno de esos.
 - **Qué falta**: ampliar el registro.
-- **Cómo lo resolví en CurseTerm**: `CircleHalf` para Appearance y
-  `ListBullet` para Profiles.
+- **Cómo lo resolví en CurseTerm**: `CircleHalf` para Appearance,
+  `ListBullet` para Profiles y `SpeakerWave` en la insignia de la pestaña
+  (`Badge` del bloque `views::tab_bar`).
 - **Coste del workaround**: menos parecido a iTerm2.
-- **API propuesta para el kit**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt}`.
+- **API propuesta para el kit**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt, Bell}`.
 - **Gravedad**: baja
 - **Cómo reproducirlo**: leer `enum Symbol` en `crates/barrier-kit/src/symbol.rs`.
 

@@ -379,3 +379,33 @@ dos veces, con respuesta sí; no se investigó la causa.
 4. **Perfil › Advanced:** los triggers pasan a la sección Advanced, donde los
    tiene iTerm2.
 5. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla como en las fases anteriores. `./dev.sh check`
+limpio en los dos modos del kit; 27 tests de la app y 1 del bloque.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Find «orden 3» tras 40 órdenes: las 11 coincidencias visibles resaltadas, la actual con la selección y «10 of 11» | ✓ | `fase5-buscar-todas.png` |
+| Find «2» tras `seq 1 30`: «13 of 13» (`22` cuenta dos veces) | ✓ | — |
+| `scrollback_lines = 50` escrito en el `.domain` con la ventana abierta; tras `seq 1 500` lo más antiguo es la 416, 50 líneas sobre la primera visible | ✓ | — |
+| `printf '\a'` en una pestaña de fondo: insignia en esa pestaña, que desaparece al seleccionarla | ✓ | `fase5-campana-en-pestana.png` |
+| «Show bell icon in tabs» apagado: sin insignia | ✓ | — |
+| Ajustes › Perfiles › Terminal: líneas de historial y los dos interruptores, guardados en el `.domain` | ✓ | `fase5-ajustes-terminal.png` |
+| Ajustes › Perfiles › Advanced con los triggers | ✓ | `fase5-ajustes-avanzado.png` |
+
+**No probado:** «Flash visual bell» apagado (la rama es una condición, sin
+captura); un historial de 0 líneas; el límite de 100 000 con un valor mayor en
+el campo.
+
+**Difiere de iTerm2:**
+
+- Sin «Unlimited scrollback» ni «Silence bell»: no hay campana sonora
+  (BK-026).
+- La insignia usa `SpeakerWave` en lugar de una campana (BK-024).
+- Find no tiene las opciones de mayúsculas ni de expresión regular, y el
+  contador se calcula al buscar, no cuando llega texto nuevo.
+- El perfil sigue sin Window, Session y Keys.

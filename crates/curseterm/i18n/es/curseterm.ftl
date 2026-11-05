@@ -123,3 +123,12 @@ trigger-send-text = Enviar texto
 trigger-regex = Expresión regular
 trigger-parameter = Texto que enviar (\n = Intro)
 profile-default-row = ★ { $name }
+section-terminal = Terminal
+section-advanced = Avanzado
+scrollback-lines = Líneas de historial
+scrollback-lines-detail = Hasta { $limit }; 0 desactiva el historial.
+flash-visual-bell = Destello de la campana visual
+bell-icon-in-tabs = Mostrar el icono de la campana en las pestañas
+tab-bell = Ha sonado la campana
+find-count = { $current } de { $total }
+find-none = Sin coincidencias

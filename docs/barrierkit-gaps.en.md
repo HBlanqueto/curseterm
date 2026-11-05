@@ -2,7 +2,7 @@
 
 BarrierKit version/commit used: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Summary: living document; state at the close of phase 4 (2026-11-05), tested on
+Summary: living document; state at the close of phase 5 (2026-11-05), tested on
 headless sway with lavapipe (`progreso.en.md`). The most serious: the
 `use_menu_action` handlers run outside Freya's context and abort the app if
 they touch the clipboard or `WindowControls::get()` (BK-017); the menu is only
@@ -53,7 +53,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-021 | controls | `RadioGroup` is always horizontal | low | Workaround: one single-option group per row |
 | BK-022 | platform / persistence | A `.domain` change does not repaint unfocused windows | high | Patch 0005 tested |
 | BK-023 | app | No file chooser | medium | Workaround: path in a field and `--import-colors` |
-| BK-024 | symbols | Missing symbols for a settings bar (gear, person, keyboard) | low | `CircleHalf` and `ListBullet` are used |
+| BK-024 | symbols | Missing symbols for a settings bar and for the bell | low | `CircleHalf`, `ListBullet` and `SpeakerWave` are used |
 | BK-025 | platform / input | No global shortcuts nor a way to hide and show the window | medium | Tested workaround: `curseterm --hotkey` |
 | BK-026 | app / platform | No bell, attention request or notifications | low | Tested workaround: visual bell |
 | BK-027 | controls / input | A view with global keyboard does not know whether a text field has focus | low | Workaround: focus tracked with `on_focus_change` |
@@ -501,16 +501,18 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Severity**: medium
 - **How to reproduce**: search for `FileChooser` in `crates/barrier-kit/src`: it does not appear.
 
-### BK-024 — Missing symbols for a settings bar
+### BK-024 — Missing symbols for a settings bar and for the bell
 - **Area**: symbols
 - **What CurseTerm needed**: the icons of iTerm2's Settings bar
-  (gear, eye, person, keyboard, pointer, bolt).
+  (gear, eye, person, keyboard, pointer, bolt) and the bell that marks a
+  background tab where it rang (phase 5).
 - **What BarrierKit offers today**: 31 symbols in `symbol.rs`; none of those.
 - **What is missing**: extending the registry.
-- **How CurseTerm solves it**: `CircleHalf` for Appearance and
-  `ListBullet` for Profiles.
+- **How CurseTerm solves it**: `CircleHalf` for Appearance,
+  `ListBullet` for Profiles and `SpeakerWave` in the tab badge (`Badge` of
+  the `views::tab_bar` block).
 - **Cost of the workaround**: less like iTerm2.
-- **Proposed kit API**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt}`.
+- **Proposed kit API**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt, Bell}`.
 - **Severity**: low
 - **How to reproduce**: read `enum Symbol` in `crates/barrier-kit/src/symbol.rs`.
 
