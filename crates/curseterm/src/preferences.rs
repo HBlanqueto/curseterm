@@ -39,7 +39,7 @@ thread_local! {
     static INTERNED: RefCell<HashSet<&'static str>> = RefCell::new(HashSet::new());
 }
 
-// BK-021: pop-up items take `&'static str`; scheme names are interned once.
+// BK-020: pop-up items take `&'static str`; scheme names are interned once.
 fn intern(text: &str) -> &'static str {
     INTERNED.with(|interned| {
         let mut interned = interned.borrow_mut();
@@ -266,28 +266,7 @@ fn general_section(defaults: &Defaults, index: usize, profile: &Profile) -> Sect
                     value: profile.command.clone().unwrap_or_default(),
                 }),
         )
-        .row(
-            Row::new(tr!("profile-directory")).control(
-                RadioGroup::new(tr!("profile-directory"))
-                    .option(tr!("directory-home"))
-                    .option(tr!("directory-previous"))
-                    .option(tr!("directory-fixed"))
-                    .selected(directory_kind)
-                    .on_change(move |choice: usize| {
-                        edit(index, |profile| {
-                            profile.working_directory = match choice {
-                                0 => WorkingDirectory::Home,
-                                1 => WorkingDirectory::Previous,
-                                _ => WorkingDirectory::Fixed(
-                                    std::env::var_os("HOME")
-                                        .map(PathBuf::from)
-                                        .unwrap_or_default(),
-                                ),
-                            };
-                        });
-                    }),
-            ),
-        )
+        .row(Row::new(tr!("profile-directory")).control(directory_choices(index, directory_kind)))
         .row(Row::new(tr!("directory-path")).control(ProfileText {
             index,
             field: Field::Directory,
@@ -320,6 +299,40 @@ fn general_section(defaults: &Defaults, index: usize, profile: &Profile) -> Sect
                 }
             })),
         )
+}
+
+// BK-021: RadioGroup is always horizontal; one single-option group per row stacks them like iTerm2.
+fn directory_choices(index: usize, chosen: usize) -> Rect {
+    [
+        tr!("directory-home"),
+        tr!("directory-previous"),
+        tr!("directory-fixed"),
+    ]
+    .into_iter()
+    .enumerate()
+    .fold(
+        rect().direction(Direction::Vertical).spacing(SPACE_1),
+        |column, (kind, label)| {
+            column.child(
+                RadioGroup::new(label)
+                    .option(label)
+                    .selected(if kind == chosen { 0 } else { 1 })
+                    .on_change(move |_: usize| {
+                        edit(index, |profile| {
+                            profile.working_directory = match kind {
+                                0 => WorkingDirectory::Home,
+                                1 => WorkingDirectory::Previous,
+                                _ => WorkingDirectory::Fixed(
+                                    std::env::var_os("HOME")
+                                        .map(PathBuf::from)
+                                        .unwrap_or_default(),
+                                ),
+                            };
+                        });
+                    }),
+            )
+        },
+    )
 }
 
 fn colors_section(defaults: &Defaults, index: usize, profile: &Profile) -> Section {
@@ -457,13 +470,19 @@ impl Component for ImportColors {
         let index = self.index;
         let palette = Palette::current();
         rect()
+            .width(Size::fill())
             .direction(Direction::Vertical)
             .spacing(SPACE_1)
             .child(
                 rect()
+                    .width(Size::fill())
                     .direction(Direction::Horizontal)
+                    .content(Content::flex())
                     .spacing(SPACE_1)
-                    .child(TextField::new(path, tr!("import-colors-placeholder")))
+                    .child(
+                        TextField::new(path, tr!("import-colors-placeholder"))
+                            .width(Size::flex(1.0)),
+                    )
                     .child(Button::new(tr!("import")).on_press(move |_| {
                         outcome.set(import_into(index, Path::new(path.peek().trim())));
                     })),
