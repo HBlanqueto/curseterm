@@ -1,0 +1,15 @@
+[package]
+name = "barrier-kit-next"
+description = "Components missing from BarrierKit, written to move into the kit unchanged (ADR 0001)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+barrier-kit.workspace = true
+freya-core.workspace = true
+freya-engine.workspace = true
+torin.workspace = true
+vow-design.workspace = true
