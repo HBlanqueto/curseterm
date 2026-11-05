@@ -409,3 +409,20 @@ el campo.
 - Find no tiene las opciones de mayúsculas ni de expresión regular, y el
   contador se calcula al buscar, no cuando llega texto nuevo.
 - El perfil sigue sin Window, Session y Keys.
+
+## Fase 6 — Perfil Window, Session y Keys
+
+### Plan
+
+1. **Window:** «Columns» y «Rows» (80 × 25 por omisión, como iTerm2) para
+   las ventanas nuevas. El kit restaura siempre el último tamaño guardado y
+   no deja pedir otro (BK-012): la ventana nueva olvida el tamaño guardado y
+   calcula el suyo con las métricas de la fuente del perfil.
+2. **Session:** «When the session ends» (cerrar, reiniciar o dejar abierta
+   con un aviso) y «Prompt before closing» (siempre, nunca o si hay procesos
+   además de la shell), con el `Alert` del kit en Shell › Close y al cerrar
+   una pestaña.
+3. **Keys:** «Alt key acts as» Normal o Esc+. En Linux AltGr compone
+   caracteres y no llega como Alt, así que hay una sola opción y no una por
+   lado como en iTerm2.
+4. **Prueba** en sway sin pantalla y documentación en los dos idiomas.

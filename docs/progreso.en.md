@@ -412,3 +412,20 @@ the field.
 - Find has no case or regular expression options, and the count is computed
   when searching, not when new text arrives.
 - The profile still lacks Window, Session and Keys.
+
+## Phase 6 — Window, Session and Keys profile
+
+### Plan
+
+1. **Window:** "Columns" and "Rows" (80 × 25 by default, like iTerm2) for
+   new windows. The kit always restores the last saved size and cannot ask
+   for another (BK-012): the new window forgets the saved size and computes
+   its own from the profile's font metrics.
+2. **Session:** "When the session ends" (close, restart or stay open with a
+   notice) and "Prompt before closing" (always, never or if there are
+   processes besides the shell), with the kit's `Alert` in Shell › Close and
+   when closing a tab.
+3. **Keys:** "Alt key acts as" Normal or Esc+. On Linux AltGr composes
+   characters and does not arrive as Alt, so there is one option and not one
+   per side as in iTerm2.
+4. **Test** in headless sway and documentation in both languages.
