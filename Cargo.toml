@@ -26,6 +26,7 @@ alacritty_terminal = "0.26"
 toml = "0.8"
 rustix = { version = "1", features = ["process", "event", "termios"] }
 base64 = "0.22"
+libc = "0.2"
 regex = "1"
 plist = "1.10"
 thiserror = "2"

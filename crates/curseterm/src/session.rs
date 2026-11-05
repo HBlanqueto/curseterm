@@ -426,11 +426,16 @@ impl Session {
 
     pub fn show_ended(&self, notice: &str) {
         self.ended.set(true);
+        self.feed(format!("\r\n{notice}\r\n").as_bytes());
+    }
+
+    pub fn reset_character_set(&self) {
+        self.feed(b"\x1b(B\x1b)B\x0f");
+    }
+
+    fn feed(&self, bytes: &[u8]) {
         let mut processor: Processor = Processor::new();
-        processor.advance(
-            &mut *self.term.lock(),
-            format!("\r\n{notice}\r\n").as_bytes(),
-        );
+        processor.advance(&mut *self.term.lock(), bytes);
     }
 
     pub fn has_scrollback(&self) -> bool {

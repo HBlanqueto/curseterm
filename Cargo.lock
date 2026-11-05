@@ -657,6 +657,7 @@ dependencies = [
  "freya-engine",
  "i18n-embed",
  "i18n-embed-fl",
+ "libc",
  "plist",
  "regex",
  "rust-embed",

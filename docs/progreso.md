@@ -639,3 +639,28 @@ El menú en D-Bus también cerró pruebas pendientes de las fases 7 y 8:
 2. **Session › Reset Character Set:** devuelve G0 y G1 a ASCII, para cuando
    un programa deja la pantalla con caracteres de dibujo de líneas.
 3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla; Reset Character Set, que no tiene atajo, con el
+kit parcheado y el menú en D-Bus. `./dev.sh check` limpio en los dos modos del
+kit; 32 tests de la app y 1 del bloque. Ningún gap nuevo. La hora local sale
+de `localtime_r` con `libc`, que ya estaba en el árbol de dependencias.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `echo uno`, dos segundos, `echo dos` y ⇧⌘E: cada línea lleva su hora a la derecha, tres segundos más tarde la segunda pareja, y coincide con `date` | ✓ | `fase10-marcas-de-tiempo.png` |
+| ⇧⌘E otra vez: las horas desaparecen; «Show Timestamps» marcada en el menú solo mientras están | ✓ | — |
+| `printf '\033(0'` deja el prompt en dibujo de líneas; Reset Character Set y `echo despues`: lo nuevo sale en ASCII | ✓ | `fase10-juego-de-caracteres.png` |
+
+**No probado:** las horas tras redimensionar con reajuste de líneas; una
+sesión que llega al límite del historial.
+
+**Difiere de iTerm2:**
+
+- La hora es la del último trozo de salida que tocó la línea, no la de cada
+  carácter; las líneas que llegan en el mismo trozo comparten hora.
+- No hay formato relativo («hace 5 minutos») ni ajuste para elegirlo.
+- Las horas tapan el final de las líneas largas en lugar de apartarlas.

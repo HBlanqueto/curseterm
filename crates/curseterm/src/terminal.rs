@@ -531,6 +531,10 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::SELECT_OUTPUT.id, output);
     let copy_mode = handles.active().is_some_and(|session| session.copy_mode());
     use_menu_checked(menu::COPY_MODE.id, copy_mode);
+    let timestamps = handles
+        .active()
+        .is_some_and(|session| session.extras().show_timestamps);
+    use_menu_checked(menu::SHOW_TIMESTAMPS.id, timestamps);
     let marks = handles.active().is_some_and(|session| session.has_marks());
     let triggers = handles
         .active()
@@ -1293,6 +1297,17 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         _ if id == menu::COPY_MODE.id => {
             if let Some(session) = &active {
                 session.toggle_copy_mode();
+            }
+        }
+        _ if id == menu::SHOW_TIMESTAMPS.id => {
+            if let Some(session) = &active {
+                let mut extras = session.extras();
+                extras.show_timestamps = !extras.show_timestamps;
+            }
+        }
+        _ if id == menu::RESET_CHARSET.id => {
+            if let Some(session) = &active {
+                session.reset_character_set();
             }
         }
         _ if id == menu::FIND_CURSOR.id => {

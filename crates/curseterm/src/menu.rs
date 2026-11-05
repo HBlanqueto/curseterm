@@ -87,6 +87,9 @@ pub const BROADCAST_CURRENT_TAB: &str = "broadcast-current-tab";
 pub const SHOW_TAB_BAR: Action = Action::new("show-tab-bar", || tr!("show-tab-bar"));
 pub const FULL_SCREEN: Action =
     Action::new("full-screen", || tr!("full-screen")).shortcut(super_with(Modifiers::CONTROL, 'f'));
+pub const SHOW_TIMESTAMPS: Action = Action::new("show-timestamps", || tr!("show-timestamps"))
+    .shortcut(super_with(Modifiers::SHIFT, 'e'));
+pub const RESET_CHARSET: Action = Action::new("reset-charset", || tr!("reset-charset"));
 pub const FIND_CURSOR: Action =
     Action::new("find-cursor", || tr!("find-cursor")).shortcut(super_key('/'));
 pub const MAXIMIZE_PANE: &str = "maximize-pane";
@@ -201,6 +204,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 FULL_SCREEN.item(true),
                 MenuItem::Separator,
                 FIND_CURSOR.item(true),
+                SHOW_TIMESTAMPS.item_with(true, CheckState::Checkbox(false)),
                 keyed(MAXIMIZE_PANE, tr!("maximize-pane"), "Super+Shift+Return")
                     .with_enabled(false)
                     .with_check(CheckState::Checkbox(false)),
@@ -218,6 +222,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 PASTE_HISTORY.item(false),
                 MenuItem::Separator,
                 RESET.item(true),
+                RESET_CHARSET.item(true),
                 MenuItem::Separator,
                 submenu(
                     TRIGGERS_MENU,

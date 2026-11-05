@@ -642,3 +642,28 @@ The D-Bus menu also closed pending tests from phases 7 and 8:
 2. **Session › Reset Character Set:** sets G0 and G1 back to ASCII, for when
    a program leaves the screen with line-drawing characters.
 3. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-05)
+
+Tested on headless sway; Reset Character Set, which has no shortcut, with the
+patched kit and the D-Bus menu. `./dev.sh check` clean in both kit modes; 32
+app tests and 1 block test. No new gap. The local time comes from
+`localtime_r` through `libc`, already in the dependency tree.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `echo uno`, two seconds, `echo dos` and ⇧⌘E: each line has its time on the right, the second pair three seconds later, matching `date` | ✓ | `fase10-marcas-de-tiempo.png` |
+| ⇧⌘E again: the times go away; "Show Timestamps" checked in the menu only while they show | ✓ | — |
+| `printf '\033(0'` leaves the prompt in line drawing; Reset Character Set and `echo despues`: the new text is ASCII | ✓ | `fase10-juego-de-caracteres.png` |
+
+**Not tested:** the times after a resize that reflows lines; a session that
+reaches the scrollback limit.
+
+**Differs from iTerm2:**
+
+- The time is that of the last output chunk that touched the line, not of
+  each character; lines that arrive in the same chunk share a time.
+- There is no relative format ("5 minutes ago") nor a setting to choose it.
+- The times cover the end of long lines instead of moving them aside.

@@ -1,13 +1,14 @@
 //! PTY reading and writing threads (ADR 0005).
 
 use std::borrow::Cow;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::ops::RangeInclusive;
 use std::path::PathBuf;
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Instant, SystemTime};
 
 use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::Dimensions;
@@ -57,6 +58,8 @@ pub struct Extras {
     pub highlights: Vec<Highlight>,
     pub cell: (f32, f32),
     pub bell: Option<Instant>,
+    pub stamps: VecDeque<(i64, SystemTime)>,
+    pub show_timestamps: bool,
     pub cursor_spotlight: Option<Instant>,
     pub triggers_enabled: bool,
     triggers: Vec<Trigger>,
@@ -86,6 +89,24 @@ impl Extras {
         self.output = (end >= start).then_some([start, end]);
     }
 
+    pub fn stamp(&mut self, line: i64, at: SystemTime, keep: usize) {
+        match self
+            .stamps
+            .binary_search_by_key(&line, |(stamped, _)| *stamped)
+        {
+            Ok(index) => self.stamps[index].1 = at,
+            Err(index) => self.stamps.insert(index, (line, at)),
+        }
+        while self.stamps.len() > keep {
+            self.stamps.pop_front();
+        }
+    }
+
+    pub fn stamp_of(&self, line: i64) -> Option<SystemTime> {
+        let index = self.stamps.partition_point(|(stamped, _)| *stamped < line);
+        self.stamps.get(index).map(|(_, at)| *at)
+    }
+
     pub fn set_triggers(&mut self, triggers: &[Trigger]) {
         if self.triggers == triggers {
             return;
@@ -107,6 +128,7 @@ impl Extras {
         self.marks.clear();
         self.output = None;
         self.output_start = None;
+        self.stamps.clear();
         self.images.clear();
         self.highlights.clear();
     }
@@ -124,12 +146,14 @@ impl Extras {
             .chain(self.output_start.iter_mut())
             .chain(images)
             .chain(highlights)
+            .chain(self.stamps.iter_mut().map(|(line, _)| line))
     }
 
     pub fn forget_lines_above(&mut self, line: i64) {
         self.marks.retain(|mark| *mark >= line);
         self.output = self.output.filter(|[start, _]| *start >= line);
         self.output_start = self.output_start.filter(|start| *start >= line);
+        self.stamps.retain(|(stamped, _)| *stamped >= line);
         self.images.retain(|image| image.line >= line);
         self.highlights.retain(|highlight| highlight.line >= line);
         self.anchored_lines().for_each(|anchored| *anchored -= line);
@@ -277,6 +301,9 @@ fn read_loop(
                 }
             }
             run_triggers(&term, &extras, &mut scanned, &listener);
+            if let Ok(mut extras) = extras.lock() {
+                extras.stamp(absolute_line(&term), SystemTime::now(), term.total_lines());
+            }
         }
         listener.send_event(Event::Wakeup);
     }
@@ -410,4 +437,26 @@ fn place(
         height,
         image,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    #[test]
+    fn a_line_takes_the_time_of_the_next_stamp_and_old_stamps_fall_off() {
+        let at = |seconds| SystemTime::UNIX_EPOCH + Duration::from_secs(seconds);
+        let mut extras = Extras::default();
+        extras.stamp(2, at(1), 3);
+        extras.stamp(5, at(2), 3);
+        extras.stamp(2, at(3), 3);
+        assert_eq!(extras.stamp_of(0), Some(at(3)));
+        assert_eq!(extras.stamp_of(4), Some(at(2)));
+        assert_eq!(extras.stamp_of(6), None);
+        extras.stamp(7, at(4), 3);
+        extras.stamp(9, at(5), 3);
+        assert_eq!(extras.stamp_of(2), Some(at(2)));
+    }
 }

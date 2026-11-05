@@ -17,9 +17,12 @@ use freya_engine::prelude::{
 };
 use vow_design::{DURATION_FAST_MS, DURATION_SLOW_MS};
 
+use crate::clock::local_time;
 use crate::config::Scheme;
-use crate::io::Extras;
+use crate::io::{Extras, absolute_line};
 use crate::session::Listener;
+
+const TIMESTAMP_COLUMNS: usize = "00:00:00".len();
 
 pub struct Fonts {
     family: String,
@@ -240,6 +243,18 @@ pub fn draw(
     draw_cursor(ctx, term, cursor, offset, &frame.palette, fonts, focused);
     draw_images(ctx, overlay.extras, top, fonts);
     draw_marks(ctx, overlay, top, term.screen_lines() as i64, fonts, scheme);
+    if overlay.extras.show_timestamps {
+        let last = absolute_line(term) - top;
+        draw_timestamps(
+            ctx,
+            overlay.extras,
+            top,
+            last,
+            term.columns(),
+            fonts,
+            scheme,
+        );
+    }
     ctx.canvas.restore();
     let ringing = overlay
         .extras
@@ -372,6 +387,38 @@ fn draw_marks(
         path.line_to((-size, middle + size / 2.0));
         path.close();
         ctx.canvas.draw_path(&path.detach(), &ink);
+    }
+}
+
+fn draw_timestamps(
+    ctx: &mut CanvasContext,
+    extras: &Extras,
+    top: i64,
+    last: i64,
+    columns: usize,
+    fonts: &Fonts,
+    scheme: &Scheme,
+) {
+    let width = TIMESTAMP_COLUMNS as f32 * fonts.cell_width;
+    let x = columns as f32 * fonts.cell_width - width;
+    let mut fill = paint(scheme.background);
+    fill.set_anti_alias(false);
+    let ink = paint(dim(scheme.foreground));
+    for row in 0..=last {
+        let Some(at) = extras.stamp_of(top + row) else {
+            continue;
+        };
+        let y = row as f32 * fonts.cell_height;
+        ctx.canvas.draw_rect(
+            SkRect::new(x - fonts.cell_width, y, x + width, y + fonts.cell_height),
+            &fill,
+        );
+        ctx.canvas.draw_str(
+            local_time(at),
+            (x, y + fonts.ascent),
+            &fonts.face('0', 0),
+            &ink,
+        );
     }
 }
 

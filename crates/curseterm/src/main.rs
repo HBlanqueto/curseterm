@@ -1,4 +1,5 @@
 mod auxiliary;
+mod clock;
 mod config;
 mod grid;
 mod integration;
