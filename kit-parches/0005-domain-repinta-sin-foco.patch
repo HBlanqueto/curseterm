@@ -1,0 +1,34 @@
+From 0870b51bc86b847533ed7aed54f467965d6b8b35 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 5 Nov 2026 20:40:35 +0000
+Subject: [PATCH] =?UTF-8?q?fix(kit):=20un=20cambio=20de=20.domain=20repint?=
+ =?UTF-8?q?a=20tambi=C3=A9n=20las=20ventanas=20sin=20foco?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+El cambio de apariencia ya pide request_redraw_all; el de las preferencias de
+la app solo subía defaults_revision, y una ventana sin foco no se repintaba
+hasta el siguiente evento. Lo nota CurseTerm (BK-022).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F89v1xFeQ2WCVD25PBsobh
+---
+ crates/barrier-kit/src/platform/runtime.rs | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/crates/barrier-kit/src/platform/runtime.rs b/crates/barrier-kit/src/platform/runtime.rs
+index c37a7c0..92b1b31 100644
+--- a/crates/barrier-kit/src/platform/runtime.rs
++++ b/crates/barrier-kit/src/platform/runtime.rs
+@@ -254,6 +254,7 @@ fn insert_ping(event_loop: &mut EventLoop<Runtime>, shell: &mut Runtime) -> Resu
+                 {
+                     if events.contains(&AppearanceEvent::Defaults) {
+                         *shell.defaults_revision.write() += 1;
++                        shell.request_redraw_all = true;
+                         shell.ping.ping();
+                     }
+                     if events.iter().any(|event| event.restyles()) {
+-- 
+2.43.0
+
