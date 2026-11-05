@@ -1,10 +1,13 @@
 mod auxiliary;
 mod config;
 mod grid;
+mod integration;
+mod io;
 mod itermcolors;
 mod keys;
 mod localize;
 mod menu;
+mod osc;
 mod pane_view;
 mod panes;
 mod preferences;

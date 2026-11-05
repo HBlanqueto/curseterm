@@ -1,22 +1,24 @@
 use std::borrow::Cow;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::mpsc::Sender;
+use std::sync::{Arc, Mutex, MutexGuard};
 
-use alacritty_terminal::event::{Event, EventListener, WindowSize};
-use alacritty_terminal::event_loop::{EventLoop, EventLoopSender, Msg};
+use alacritty_terminal::event::{Event, EventListener, OnResize, WindowSize};
 use alacritty_terminal::grid::{Dimensions, Scroll};
-use alacritty_terminal::index::{Column, Line, Point, Side};
+use alacritty_terminal::index::{Boundary, Column, Direction, Line, Point, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::sync::FairMutex;
+use alacritty_terminal::term::search::RegexSearch;
 use alacritty_terminal::term::test::TermSize;
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::tty;
 use alacritty_terminal::vte::ansi::Handler;
 use barrier_kit::platform::WakeHandle;
+
+use crate::io::{self as pty_io, Extras};
 
 pub type SessionId = u64;
 
@@ -73,6 +75,12 @@ impl GridSize {
     }
 }
 
+pub enum MarkJump {
+    Latest,
+    Previous,
+    Next,
+}
+
 pub struct Launch {
     pub profile: String,
     pub command: Option<String>,
@@ -83,7 +91,9 @@ pub struct Session {
     pub id: SessionId,
     pub profile: String,
     pub term: Arc<FairMutex<Term<Listener>>>,
-    sender: EventLoopSender,
+    extras: Arc<Mutex<Extras>>,
+    pty: RefCell<tty::Pty>,
+    sender: Sender<Cow<'static, [u8]>>,
     size: Cell<GridSize>,
     area: Cell<Option<(f32, f32)>>,
     shell_pid: u32,
@@ -108,20 +118,24 @@ impl Session {
                 ("TERM_PROGRAM".into(), "CurseTerm".into()),
             ]),
         };
-        let pty = tty::new(&options, size.window_size(), id)?;
+        let mut pty = tty::new(&options, size.window_size(), id)?;
         let shell_pid = pty.child().id();
         let term = Arc::new(FairMutex::new(Term::new(
             Config::default(),
             &size.term_size(),
             listener.clone(),
         )));
-        let event_loop = EventLoop::new(term.clone(), listener, pty, false, false)?;
-        let sender = event_loop.channel();
-        event_loop.spawn();
+        let extras = Arc::new(Mutex::new(Extras {
+            cell: (size.cell_width, size.cell_height),
+            ..Extras::default()
+        }));
+        let sender = pty_io::start(&mut pty, term.clone(), listener, extras.clone())?;
         Ok(Self {
             id,
             profile: launch.profile,
             term,
+            extras,
+            pty: RefCell::new(pty),
             sender,
             size: Cell::new(size),
             area: Cell::new(None),
@@ -135,7 +149,7 @@ impl Session {
             return;
         }
         self.term.lock().scroll_display(Scroll::Bottom);
-        if let Err(error) = self.sender.send(Msg::Input(bytes)) {
+        if let Err(error) = self.sender.send(bytes) {
             tracing::warn!(%error, session = self.id, "the shell no longer reads input");
         }
     }
@@ -145,7 +159,14 @@ impl Session {
     }
 
     pub fn working_directory(&self) -> Option<PathBuf> {
-        std::fs::read_link(format!("/proc/{}/cwd", self.shell_pid)).ok()
+        let reported = self.extras().directory.clone();
+        reported.or_else(|| std::fs::read_link(format!("/proc/{}/cwd", self.shell_pid)).ok())
+    }
+
+    pub fn extras(&self) -> MutexGuard<'_, Extras> {
+        self.extras
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     pub fn fit(&self, width: f32, height: f32, cell_width: f32, cell_height: f32) {
@@ -164,8 +185,12 @@ impl Session {
             return;
         }
         self.size.set(size);
-        self.term.lock().resize(size.term_size());
-        let _ = self.sender.send(Msg::Resize(size.window_size()));
+        let mut term = self.term.lock();
+        let mut extras = self.extras();
+        pty_io::reflow(&mut term, &mut extras, |term| term.resize(size.term_size()));
+        extras.cell = (size.cell_width, size.cell_height);
+        drop((extras, term));
+        self.pty.borrow_mut().on_resize(size.window_size());
     }
 
     pub fn mode(&self) -> TermMode {
@@ -213,10 +238,14 @@ impl Session {
 
     pub fn reset(&self) {
         self.term.lock().reset_state();
+        self.forget_everything();
     }
 
     pub fn clear_scrollback(&self) {
-        self.term.lock().grid_mut().clear_history();
+        let mut term = self.term.lock();
+        let history = term.history_size() as i64;
+        term.grid_mut().clear_history();
+        self.extras().forget_lines_above(history);
     }
 
     pub fn clear_buffer(&self) {
@@ -225,6 +254,68 @@ impl Session {
         term.scroll_up(cursor.line.0.max(0) as usize);
         term.grid_mut().clear_history();
         term.goto(0, cursor.column.0);
+        self.forget_everything();
+    }
+
+    fn forget_everything(&self) {
+        let mut extras = self.extras();
+        extras.marks.clear();
+        extras.images.clear();
+    }
+
+    pub fn set_mark(&self) {
+        let line = pty_io::absolute_line(&self.term.lock());
+        self.extras().add_mark(line);
+    }
+
+    pub fn has_marks(&self) -> bool {
+        !self.extras().marks.is_empty()
+    }
+
+    pub fn jump_to_mark(&self, jump: MarkJump) {
+        let mut term = self.term.lock();
+        let history = term.history_size() as i64;
+        let offset = term.grid().display_offset() as i64;
+        let top = history - offset;
+        let extras = self.extras();
+        let marks = &extras.marks;
+        let target = match jump {
+            MarkJump::Latest => marks.last(),
+            MarkJump::Previous => marks.iter().rev().find(|mark| **mark < top),
+            MarkJump::Next => marks.iter().find(|mark| **mark > top),
+        };
+        if let Some(line) = target {
+            let wanted = (history - line).clamp(0, history);
+            term.scroll_display(Scroll::Delta((wanted - offset) as i32));
+        }
+    }
+
+    pub fn find(&self, query: &str, direction: Direction) -> bool {
+        let Ok(mut regex) = RegexSearch::new(&literal_pattern(query)) else {
+            return false;
+        };
+        let mut term = self.term.lock();
+        let current = term
+            .selection
+            .as_ref()
+            .and_then(|selection| selection.to_range(&term));
+        let origin = match (current, direction) {
+            (Some(range), Direction::Right) => range.end.add(&*term, Boundary::Grid, 1),
+            (Some(range), Direction::Left) => range.start.sub(&*term, Boundary::Grid, 1),
+            (None, _) => term.grid().cursor.point,
+        };
+        let side = match direction {
+            Direction::Right => Side::Left,
+            Direction::Left => Side::Right,
+        };
+        let Some(found) = term.search_next(&mut regex, origin, direction, side, None) else {
+            return false;
+        };
+        term.scroll_to_point(*found.start());
+        let mut selection = Selection::new(SelectionType::Simple, *found.start(), Side::Left);
+        selection.update(*found.end(), Side::Right);
+        term.selection = Some(selection);
+        true
     }
 
     pub fn has_scrollback(&self) -> bool {
@@ -236,10 +327,15 @@ impl Session {
     }
 }
 
-impl Drop for Session {
-    fn drop(&mut self) {
-        let _ = self.sender.send(Msg::Shutdown);
-    }
+fn literal_pattern(query: &str) -> String {
+    query
+        .chars()
+        .flat_map(|c| match c {
+            '\\' | '.' | '+' | '*' | '?' | '(' | ')' | '|' | '[' | ']' | '{' | '}' | '^' | '$'
+            | '#' | '&' | '-' | '~' => vec!['\\', c],
+            c => vec![c],
+        })
+        .collect()
 }
 
 fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {

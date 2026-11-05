@@ -12,6 +12,7 @@ kit-parcheado = []
 
 [dependencies]
 alacritty_terminal.workspace = true
+base64.workspace = true
 barrier-kit.workspace = true
 barrier-kit-next.workspace = true
 freya-clipboard.workspace = true
