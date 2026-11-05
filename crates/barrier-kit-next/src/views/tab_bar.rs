@@ -7,7 +7,7 @@ use barrier_kit::style::{Palette, text};
 use barrier_kit::symbol::Symbol;
 use barrier_kit::theme::color;
 use freya_core::prelude::*;
-use torin::prelude::{Alignment, Direction, Gaps, Size};
+use torin::prelude::{Alignment, Content, Direction, Gaps, Size};
 use vow_design::CAPTION;
 
 use crate::tokens::TAB_BAR;
@@ -20,6 +20,7 @@ pub struct TabBar {
     selected: usize,
     on_select: Option<Callback<usize, ()>>,
     on_close: Option<Callback<usize, ()>>,
+    add: Option<(&'static str, Callback<(), ()>)>,
 }
 
 impl TabBar {
@@ -31,7 +32,13 @@ impl TabBar {
             selected: 0,
             on_select: None,
             on_close: None,
+            add: None,
         }
+    }
+
+    pub fn on_add(mut self, label: &'static str, callback: impl Into<Callback<(), ()>>) -> Self {
+        self.add = Some((label, callback.into()));
+        self
     }
 
     pub fn tab(mut self, title: impl Into<String>) -> Self {
@@ -69,6 +76,8 @@ impl Component for TabBar {
                     .width(Size::fill())
                     .height(Size::px(TAB_BAR.height))
                     .direction(Direction::Horizontal)
+                    .content(Content::flex())
+                    .cross_align(Alignment::Center)
                     .children(self.titles.iter().enumerate().map(|(index, title)| {
                         Tab {
                             title: title.clone(),
@@ -79,6 +88,9 @@ impl Component for TabBar {
                             on_close: self.on_close.clone(),
                         }
                         .into_element()
+                    }))
+                    .maybe_child(self.add.clone().map(|(label, on_add)| {
+                        IconButton::new(Symbol::Plus, label).on_press(move |_| on_add.call(()))
                     })),
             )
             .child(divider())
@@ -130,6 +142,7 @@ impl Component for Tab {
             .height(Size::fill())
             .padding(Gaps::new(0.0, TAB_BAR.padding, 0.0, TAB_BAR.padding))
             .direction(Direction::Horizontal)
+            .content(Content::flex())
             .cross_align(Alignment::Center)
             .background(color(background))
             .on_press(move |_| {

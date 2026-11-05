@@ -22,3 +22,14 @@ pub const TAB_BAR: TabBarMetrics = TabBarMetrics {
     tab_max_width: 240.0,
     padding: 8.0,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SplitPanesMetrics {
+    pub divider: f32,
+    pub pane_min: f32,
+}
+
+pub const SPLIT_PANES: SplitPanesMetrics = SplitPanesMetrics {
+    divider: 3.0,
+    pane_min: 60.0,
+};
