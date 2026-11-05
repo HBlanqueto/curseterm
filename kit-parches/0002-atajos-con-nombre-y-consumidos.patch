@@ -1,0 +1,127 @@
+From 000e794f11dd1ba62f11b271741382794a2e59ea Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 5 Nov 2026 18:44:14 +0000
+Subject: [PATCH] =?UTF-8?q?feat(kit):=20atajos=20con=20NamedKey=20y=20que?=
+ =?UTF-8?q?=20no=20lleguen=20tambi=C3=A9n=20como=20tecla?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+ShortcutKey::Named admite flechas, teclas de función y de edición. Un atajo
+que dispara su acción ya no se reenvía a la app. Lo pide CurseTerm (BK-003):
+un terminal no debe recibir la tecla de un atajo del menú.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F89v1xFeQ2WCVD25PBsobh
+---
+ crates/barrier-kit/src/app/action.rs          | 12 ++++++++++++
+ crates/barrier-kit/src/platform/input/seat.rs |  3 ++-
+ docs/barrierkit/11-app.en.md                  |  4 ++--
+ docs/barrierkit/11-app.md                     |  4 ++--
+ 4 files changed, 18 insertions(+), 5 deletions(-)
+
+diff --git a/crates/barrier-kit/src/app/action.rs b/crates/barrier-kit/src/app/action.rs
+index 387483d..afae01e 100644
+--- a/crates/barrier-kit/src/app/action.rs
++++ b/crates/barrier-kit/src/app/action.rs
+@@ -10,6 +10,7 @@ pub enum ShortcutKey {
+     Char(char),
+     Left,
+     Right,
++    Named(NamedKey),
+ }
+ 
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+@@ -34,6 +35,7 @@ impl Shortcut {
+             }
+             (ShortcutKey::Left, Key::Named(NamedKey::ArrowLeft))
+             | (ShortcutKey::Right, Key::Named(NamedKey::ArrowRight)) => true,
++            (ShortcutKey::Named(named), Key::Named(pressed)) => named == *pressed,
+             _ => false,
+         };
+         same_key && modifiers == self.modifiers
+@@ -55,6 +57,7 @@ impl Shortcut {
+             ShortcutKey::Char(c) => c.to_uppercase().to_string(),
+             ShortcutKey::Left => "Left".into(),
+             ShortcutKey::Right => "Right".into(),
++            ShortcutKey::Named(named) => named.to_string(),
+         });
+         parts.join("+")
+     }
+@@ -208,11 +211,20 @@ mod tests {
+                 Modifiers::CONTROL | Modifiers::SHIFT,
+                 ShortcutKey::Char('z'),
+             ),
++            Shortcut::new(
++                Modifiers::META | Modifiers::ALT,
++                ShortcutKey::Named(NamedKey::ArrowUp),
++            ),
++            Shortcut::new(Modifiers::empty(), ShortcutKey::Named(NamedKey::F11)),
++            Shortcut::new(Modifiers::SHIFT, ShortcutKey::Named(NamedKey::PageDown)),
+         ];
+         let keys = [
+             Key::Character("n".into()),
+             Key::Named(NamedKey::ArrowLeft),
+             Key::Character("z".into()),
++            Key::Named(NamedKey::ArrowUp),
++            Key::Named(NamedKey::F11),
++            Key::Named(NamedKey::PageDown),
+         ];
+         for (shortcut, key) in shortcuts.iter().zip(&keys) {
+             assert!(shortcut.matches(shortcut.modifiers, key));
+diff --git a/crates/barrier-kit/src/platform/input/seat.rs b/crates/barrier-kit/src/platform/input/seat.rs
+index 976bf12..2a99851 100644
+--- a/crates/barrier-kit/src/platform/input/seat.rs
++++ b/crates/barrier-kit/src/platform/input/seat.rs
+@@ -461,10 +461,11 @@ impl Runtime {
+             modifiers,
+         };
+         if let Some(idx) = index {
+-            self.surfaces[idx].app.push(platform_event);
+             if shortcut_action.is_some() {
+                 self.poll_all();
+                 self.redraw_all();
++            } else {
++                self.surfaces[idx].app.push(platform_event);
+             }
+         }
+     }
+diff --git a/docs/barrierkit/11-app.en.md b/docs/barrierkit/11-app.en.md
+index a4b79f0..44293ab 100644
+--- a/docs/barrierkit/11-app.en.md
++++ b/docs/barrierkit/11-app.en.md
+@@ -23,11 +23,11 @@ use_menu_action(move |id| {
+ ```
+ 
+ - `Shortcut::new(modificadores, tecla)` or `Shortcut::ctrl(tecla)`; the keys
+-  are `ShortcutKey::Char(c)`, `Left` and `Right`.
++  are `ShortcutKey::Char(c)`, `Left`, `Right` and `Named(NamedKey)` (`ArrowUp`, `F11`, `PageDown`…).
+ - `RESET.item(true)` creates the menu entry; `item_with(true, CheckState::Checkbox(on))`
+   creates it with a checkbox.
+ - The handler always runs on the interface thread.
+-- A shortcut only arrives if its action is in the window's menu.
++- A shortcut only arrives if its action is in the window's menu. When it fires its action, the key no longer reaches the app.
+ 
+ | Kit action | Shortcut |
+ |---|---|
+diff --git a/docs/barrierkit/11-app.md b/docs/barrierkit/11-app.md
+index 5ca5e64..1c53334 100644
+--- a/docs/barrierkit/11-app.md
++++ b/docs/barrierkit/11-app.md
+@@ -24,11 +24,11 @@ use_menu_action(move |id| {
+ ```
+ 
+ - `Shortcut::new(modificadores, tecla)` o `Shortcut::ctrl(tecla)`; las teclas
+-  son `ShortcutKey::Char(c)`, `Left` y `Right`.
++  son `ShortcutKey::Char(c)`, `Left`, `Right` y `Named(NamedKey)` (`ArrowUp`, `F11`, `PageDown`…).
+ - `RESET.item(true)` crea la entrada del menú; `item_with(true, CheckState::Checkbox(on))`
+   la crea con casilla.
+ - El handler corre siempre en el hilo de la interfaz.
+-- Un atajo solo llega si su acción está en el menú de la ventana.
++- Un atajo solo llega si su acción está en el menú de la ventana. Cuando dispara su acción, la tecla ya no llega a la app.
+ 
+ | Acción del kit | Atajo |
+ |---|---|
+-- 
+2.43.0
+
