@@ -875,3 +875,16 @@ rebuilds the Profiles menu; Open Quickly with split panes.
 - Open Quickly only searches this window's sessions (one process per window,
   BK-001) and offers no commands, profiles or arrangements.
 - Open Profiles always opens a tab; iTerm2 lets you choose a new window.
+
+## Phase 16 — Terminal State, Edit Session and help
+
+### Plan
+
+1. **Session › Terminal State:** checkboxes with the modes the session's
+   program asked for (alternate screen, focus reporting, mouse reporting,
+   bracketed paste, application cursor and keypad); clicking one changes it
+   by sending the terminal the same sequence a program would send.
+2. **Session › Edit Session… (⌘I):** opens Settings with the active
+   session's profile already chosen.
+3. **Help › CurseTerm Help:** opens the project repository with `xdg-open`.
+4. **Test** on headless sway and documentation in both languages.

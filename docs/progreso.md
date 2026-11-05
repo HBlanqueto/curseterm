@@ -874,3 +874,17 @@ reconstruye el menú Profiles; Open Quickly con paneles divididos.
 - Open Quickly solo busca sesiones de esta ventana (un proceso por ventana,
   BK-001) y no ofrece órdenes, perfiles ni arreglos.
 - Open Profiles abre siempre una pestaña; iTerm2 deja elegir ventana nueva.
+
+## Fase 16 — Terminal State, Edit Session y ayuda
+
+### Plan
+
+1. **Session › Terminal State:** casillas con los modos que la aplicación de
+   la sesión ha pedido (pantalla alternativa, informe de foco, informe del
+   ratón, pegado entre corchetes, cursor y teclado de aplicación); pulsar una
+   la cambia mandando al terminal la misma secuencia que mandaría un programa.
+2. **Session › Edit Session… (⌘I):** abre Ajustes con el perfil de la sesión
+   activa ya elegido.
+3. **Help › CurseTerm Help:** abre el repositorio del proyecto con
+   `xdg-open`.
+4. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
