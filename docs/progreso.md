@@ -888,3 +888,30 @@ reconstruye el menú Profiles; Open Quickly con paneles divididos.
 3. **Help › CurseTerm Help:** abre el repositorio del proyecto con
    `xdg-open`.
 4. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla con el kit parcheado para leer y pulsar el
+submenú desde D-Bus, y con el `xdg-open` falso de la fase 11. `./dev.sh
+check` limpio en los dos modos del kit; 36 tests de la app y 1 del bloque.
+Ningún gap nuevo.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `printf '\e[?2004h\e[?1h'; cat`: Paste Bracketing y Application Cursor marcadas; el resto, no | ✓ | — |
+| Pulsar Application Cursor la desmarca; pulsar Alternate Screen vacía la vista y volver a pulsarla devuelve el texto | ✓ | — |
+| Pestaña con «New Profile» y ⌘I: Ajustes se abre con «New Profile» elegido | ✓ | `fase16-editar-sesion.png` |
+| ⇧⌘? abre `https://github.com/HBlanqueto/curseterm` | ✓ | — |
+
+**No probado:** Focus Reporting y Mouse Reporting con un programa que los
+use; CurseTerm aún no manda eventos de foco ni de ratón a la aplicación,
+solo muestra y cambia el modo.
+
+**Difiere de iTerm2:**
+
+- Edit Session edita el perfil, no una copia propia de la sesión.
+- Terminal State no tiene «Standard Key Reporting», «Literal mode» ni el
+  restablecimiento de todo el estado.
+- La ayuda abre el repositorio; no hay manual integrado.

@@ -51,9 +51,9 @@ fn intern(text: &str) -> &'static str {
     })
 }
 
-pub fn run() -> Result<(), RunError> {
+pub fn run(profile: Option<String>) -> Result<(), RunError> {
     run_window(
-        AppComponent::new(Settings),
+        AppComponent::new(Settings { profile }),
         WindowOptions::new(tr!("settings-title"), "curseterm")
             .app_id(APP_ID)
             .size(SETTINGS_WINDOW_SIZE)
@@ -62,7 +62,9 @@ pub fn run() -> Result<(), RunError> {
     )
 }
 
-struct Settings;
+struct Settings {
+    profile: Option<String>,
+}
 
 impl App for Settings {
     fn render(&self) -> impl IntoElement {
@@ -91,6 +93,7 @@ impl App for Settings {
                             tr!("pane-profiles"),
                             ProfilesPane {
                                 defaults: defaults.clone(),
+                                opened: self.profile.clone(),
                             },
                         )
                         .selected(*tab.read())
@@ -119,14 +122,19 @@ fn appearance(defaults: &Defaults) -> Rect {
 #[derive(PartialEq)]
 struct ProfilesPane {
     defaults: Defaults,
+    opened: Option<String>,
 }
 
 impl Component for ProfilesPane {
     fn render(&self) -> impl IntoElement {
-        let mut selected = use_state(|| 0usize);
-        let mut section = use_state(|| 0usize);
         let defaults = &self.defaults;
         let profiles = defaults.profiles();
+        let opened = profiles
+            .iter()
+            .position(|profile| Some(&profile.name) == self.opened.as_ref())
+            .unwrap_or_default();
+        let mut selected = use_state(|| opened);
+        let mut section = use_state(|| 0usize);
         let index = (*selected.read()).min(profiles.len() - 1);
         let profile = profiles[index].clone();
         let default_name = defaults.default_profile_name();

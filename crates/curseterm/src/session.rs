@@ -468,6 +468,14 @@ impl Session {
         self.feed(b"\x1b(B\x1b)B\x0f");
     }
 
+    pub fn has_state(&self, state: TerminalState) -> bool {
+        self.mode().intersects(state.mode())
+    }
+
+    pub fn toggle_state(&self, state: TerminalState) {
+        self.feed(state.sequence(!self.has_state(state)));
+    }
+
     fn feed(&self, bytes: &[u8]) {
         let mut processor: Processor = Processor::new();
         processor.advance(&mut *self.term.lock(), bytes);
@@ -532,6 +540,55 @@ fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
         format!("\x1b[200~{clean}\x1b[201~").into_bytes()
     } else {
         text.replace("\r\n", "\r").replace('\n', "\r").into_bytes()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TerminalState {
+    AlternateScreen,
+    FocusReporting,
+    MouseReporting,
+    BracketedPaste,
+    ApplicationCursor,
+    ApplicationKeypad,
+}
+
+impl TerminalState {
+    pub const ALL: [Self; 6] = [
+        Self::AlternateScreen,
+        Self::FocusReporting,
+        Self::MouseReporting,
+        Self::BracketedPaste,
+        Self::ApplicationCursor,
+        Self::ApplicationKeypad,
+    ];
+
+    fn mode(self) -> TermMode {
+        match self {
+            Self::AlternateScreen => TermMode::ALT_SCREEN,
+            Self::FocusReporting => TermMode::FOCUS_IN_OUT,
+            Self::MouseReporting => TermMode::MOUSE_MODE,
+            Self::BracketedPaste => TermMode::BRACKETED_PASTE,
+            Self::ApplicationCursor => TermMode::APP_CURSOR,
+            Self::ApplicationKeypad => TermMode::APP_KEYPAD,
+        }
+    }
+
+    fn sequence(self, on: bool) -> &'static [u8] {
+        match (self, on) {
+            (Self::AlternateScreen, true) => b"\x1b[?1049h",
+            (Self::AlternateScreen, false) => b"\x1b[?1049l",
+            (Self::FocusReporting, true) => b"\x1b[?1004h",
+            (Self::FocusReporting, false) => b"\x1b[?1004l",
+            (Self::MouseReporting, true) => b"\x1b[?1000h",
+            (Self::MouseReporting, false) => b"\x1b[?1000l\x1b[?1002l\x1b[?1003l",
+            (Self::BracketedPaste, true) => b"\x1b[?2004h",
+            (Self::BracketedPaste, false) => b"\x1b[?2004l",
+            (Self::ApplicationCursor, true) => b"\x1b[?1h",
+            (Self::ApplicationCursor, false) => b"\x1b[?1l",
+            (Self::ApplicationKeypad, true) => b"\x1b=",
+            (Self::ApplicationKeypad, false) => b"\x1b>",
+        }
     }
 }
 

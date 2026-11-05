@@ -40,7 +40,9 @@ use crate::pane_view::TerminalPane;
 use crate::panes::{Axis, Pane, Toward};
 use crate::paste_history;
 use crate::pick;
-use crate::session::{self, GridSize, Launch, Listener, MarkJump, Session, SessionId};
+use crate::session::{
+    self, GridSize, Launch, Listener, MarkJump, Session, SessionId, TerminalState,
+};
 use crate::windows;
 use crate::workspace::{Broadcast, Closed, Tab, Workspace};
 
@@ -598,6 +600,12 @@ fn use_live_menu(handles: &Handles) {
         .active()
         .is_some_and(|session| session.extras().show_timestamps);
     use_menu_checked(menu::SHOW_TIMESTAMPS.id, timestamps);
+    for state in TerminalState::ALL {
+        let on = handles
+            .active()
+            .is_some_and(|session| session.has_state(state));
+        use_menu_checked(menu::terminal_state_entry(state).0, on);
+    }
     use_menu_enabled(menu::USE_TRANSPARENCY.id, transparency_supported());
     use_menu_checked(menu::USE_TRANSPARENCY.id, *handles.transparency.read());
     let marks = handles.active().is_some_and(|session| session.has_marks());
@@ -1515,6 +1523,19 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             let mut transparency = handles.transparency;
             let next = !*transparency.peek();
             transparency.set(next);
+        }
+        _ if id == menu::EDIT_SESSION.id => {
+            let profile = handles.current_profile();
+            windows::open(&["--settings", &profile]);
+        }
+        _ if id == menu::HELP.id => links::open(env!("CARGO_PKG_REPOSITORY")),
+        _ if let Some(state) = TerminalState::ALL
+            .into_iter()
+            .find(|state| menu::terminal_state_entry(*state).0 == id) =>
+        {
+            if let Some(session) = &active {
+                session.toggle_state(state);
+            }
         }
         _ if id == menu::SHOW_TIMESTAMPS.id => {
             if let Some(session) = &active {

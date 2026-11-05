@@ -888,3 +888,29 @@ rebuilds the Profiles menu; Open Quickly with split panes.
    session's profile already chosen.
 3. **Help › CurseTerm Help:** opens the project repository with `xdg-open`.
 4. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-05)
+
+Tested on headless sway with the patched kit to read and click the submenu
+over D-Bus, and with phase 11's fake `xdg-open`. `./dev.sh check` clean in
+both kit modes; 36 app tests and 1 block test. No new gap.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `printf '\e[?2004h\e[?1h'; cat`: Paste Bracketing and Application Cursor checked; the rest, not | ✓ | — |
+| Clicking Application Cursor unchecks it; clicking Alternate Screen empties the view and clicking it again brings the text back | ✓ | — |
+| Tab with "New Profile" and ⌘I: Settings opens with "New Profile" chosen | ✓ | `fase16-editar-sesion.png` |
+| ⇧⌘? opens `https://github.com/HBlanqueto/curseterm` | ✓ | — |
+
+**Not tested:** Focus Reporting and Mouse Reporting with a program that uses
+them; CurseTerm does not yet send focus or mouse events to the program, it
+only shows and changes the mode.
+
+**Differs from iTerm2:**
+
+- Edit Session edits the profile, not a copy of its own for the session.
+- Terminal State has no "Standard Key Reporting", "Literal mode" nor a reset
+  of the whole state.
+- Help opens the repository; there is no built-in manual.

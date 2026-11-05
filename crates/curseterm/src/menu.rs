@@ -6,6 +6,7 @@ use freya_core::prelude::Modifiers;
 
 use crate::config::APP_NAME;
 use crate::localize::tr;
+use crate::session::TerminalState;
 use crate::workspace::Broadcast;
 
 const fn super_key(c: char) -> Shortcut {
@@ -99,6 +100,11 @@ pub const FULL_SCREEN: Action =
     Action::new("full-screen", || tr!("full-screen")).shortcut(super_with(Modifiers::CONTROL, 'f'));
 pub const SHOW_TIMESTAMPS: Action = Action::new("show-timestamps", || tr!("show-timestamps"))
     .shortcut(super_with(Modifiers::SHIFT, 'e'));
+pub const EDIT_SESSION: Action =
+    Action::new("edit-session", || tr!("edit-session")).shortcut(super_key('i'));
+pub const TERMINAL_STATE_MENU: &str = "terminal-state-menu";
+pub const HELP: Action =
+    Action::new("help", || tr!("help")).shortcut(super_with(Modifiers::SHIFT, '?'));
 pub const RESET_CHARSET: Action = Action::new("reset-charset", || tr!("reset-charset"));
 pub const USE_TRANSPARENCY: Action =
     Action::new("use-transparency", || tr!("use-transparency")).shortcut(super_key('u'));
@@ -143,6 +149,21 @@ pub const DIVIDER_UP: &str = "divider-up";
 pub const DIVIDER_DOWN: &str = "divider-down";
 pub const DIVIDER_LEFT: &str = "divider-left";
 pub const DIVIDER_RIGHT: &str = "divider-right";
+
+pub fn terminal_state_entry(state: TerminalState) -> (&'static str, &'static str) {
+    match state {
+        TerminalState::AlternateScreen => ("state-alternate-screen", tr!("state-alternate-screen")),
+        TerminalState::FocusReporting => ("state-focus-reporting", tr!("state-focus-reporting")),
+        TerminalState::MouseReporting => ("state-mouse-reporting", tr!("state-mouse-reporting")),
+        TerminalState::BracketedPaste => ("state-bracketed-paste", tr!("state-bracketed-paste")),
+        TerminalState::ApplicationCursor => {
+            ("state-application-cursor", tr!("state-application-cursor"))
+        }
+        TerminalState::ApplicationKeypad => {
+            ("state-application-keypad", tr!("state-application-keypad"))
+        }
+    }
+}
 
 fn keyed(id: &'static str, label: &str, shortcut: &str) -> MenuItem {
     MenuItem::action(id, label).with_shortcut(shortcut)
@@ -248,6 +269,8 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
         Menu::new(
             tr!("menu-session"),
             vec![
+                EDIT_SESSION.item(true),
+                MenuItem::Separator,
                 RESTART_SESSION.item(true),
                 MenuItem::Separator,
                 PASTE_HISTORY.item(false),
@@ -260,6 +283,16 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 MenuItem::Separator,
                 RESET.item(true),
                 RESET_CHARSET.item(true),
+                submenu(
+                    TERMINAL_STATE_MENU,
+                    tr!("terminal-state-menu"),
+                    TerminalState::ALL
+                        .map(|state| {
+                            let (id, label) = terminal_state_entry(state);
+                            MenuItem::action(id, label).with_check(CheckState::Checkbox(false))
+                        })
+                        .to_vec(),
+                ),
                 MenuItem::Separator,
                 submenu(
                     TRIGGERS_MENU,
@@ -298,7 +331,10 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 submenu(SPLIT_PANE, tr!("split-pane"), split_pane_items()),
             ],
         ),
-        Menu::new(tr!("menu-help"), vec![COPY_MODE_KEYS.item(true)]),
+        Menu::new(
+            tr!("menu-help"),
+            vec![HELP.item(true), COPY_MODE_KEYS.item(true)],
+        ),
     ])
 }
 

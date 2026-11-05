@@ -100,7 +100,7 @@ fn main() -> ExitCode {
     };
     let result = match arguments.first().map(String::as_str) {
         Some("--about") => auxiliary::run_about(),
-        Some("--settings") => preferences::run(),
+        Some("--settings") => preferences::run(arguments.get(1).cloned()),
         _ => {
             let size = terminal_size(profile.as_deref());
             run_window(
