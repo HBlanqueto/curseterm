@@ -2,12 +2,15 @@
 
 Versión/commit de BarrierKit usado: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Resumen: documento vivo. Esta primera versión sale del estudio previo (lectura
-de código y documentación, sin ejecutar nada): los gaps están **detectados**,
-no medidos, y aún no tienen workaround. Lo más serio para un terminal: una sola
-ventana por proceso y sin título en vivo; atajos que no se consumen y con pocas
-teclas; sin IME ni selección primaria; sin pestañas de documento ni divisor
-genérico; sin cara monoespaciada en Tengen.
+Resumen: documento vivo; estado al cerrar la fase 1 (2026-11-05), probado en
+sway sin pantalla con lavapipe (`progreso.md`). Lo más serio: los handlers de
+`use_menu_action` corren fuera del contexto de Freya y hacen abortar la app si
+tocan el portapapeles o `WindowControls::get()` (BK-017); el menú solo se
+publica en D-Bus con `org_kde_kwin_appmenu_manager`, al contrario de lo que
+dice la documentación (BK-018); una ventana por proceso y sin título en vivo
+(BK-001, BK-002); sin IME ni selección primaria. El lienzo, las pestañas, el
+token `MONO` y el estado vivo del menú se resolvieron como bloques; el título,
+los atajos y el menú en D-Bus, como parches probados.
 
 Estados: **detectado** (leído en el código), **confirmado** (reproducido al
 ejecutar CurseTerm), **resuelto en CurseTerm** (con workaround).
@@ -24,9 +27,9 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 
 | ID | Área | Gap | Gravedad | Workaround en CurseTerm |
 |---|---|---|---|---|
-| BK-001 | ventana | Una ventana por proceso | alta | Workaround: un proceso por ventana (`windows.rs`) |
-| BK-002 | ventana | Título de ventana fijo | media | Parche 0001 `set_title`; tal cual, solo la `Titlebar` |
-| BK-003 | input / menú global | Atajos no consumidos y `ShortcutKey` limitado | alta | Parche 0002; tal cual, el codificador ignora Super |
+| BK-001 | ventana | Una ventana por proceso | alta | Workaround probado: un proceso por ventana (`windows.rs`) |
+| BK-002 | ventana | Título de ventana fijo | media | Parche 0001 probado; tal cual, solo la `Titlebar` |
+| BK-003 | input / menú global | Atajos no consumidos y `ShortcutKey` limitado | alta | Parche 0002 (tests del kit); tal cual, el codificador ignora Super |
 | BK-004 | IME | Sin `zwp_text_input_v3` | media | Ninguno |
 | BK-005 | portapapeles | Sin selección primaria | media | Ninguno |
 | BK-006 | contenedores | Sin pestañas de documento | media | Bloque `views::tab_bar` |
@@ -40,6 +43,8 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-014 | plataforma | `Timers::wakeup` no se puede dar de baja | baja | Workaround: un solo canal por ventana |
 | BK-015 | persistencia | Las preferencias van siempre a `~/.config/malaysia/` | baja | Se acepta |
 | BK-016 | input / menú global | Los atajos con Mayús comparan el carácter producido | media | Pendiente (fase 2) |
+| BK-017 | menú global / plataforma | Los handlers del menú corren fuera del contexto de Freya | **bloqueante** | Workaround probado: handles tomados en `render` |
+| BK-018 | menú global / docs | Sin `org_kde_kwin_appmenu_manager` el menú no se publica en D-Bus | alta | Parche 0003 probado |
 
 ## Gaps
 
@@ -52,8 +57,8 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
   `Runtime::create_window` (`:360`) ya sabe crear más, pero es `pub(super)`.
 - **Qué falta**: abrir y cerrar ventanas nuevas desde la app en el mismo
   runner, y enumerarlas.
-- **Cómo lo resolví en CurseTerm**: workaround, sin probar todavía. Cada
-  ventana es un proceso (`crates/curseterm/src/windows.rs`): «New Window»,
+- **Cómo lo resolví en CurseTerm**: workaround, probado en sway: New Window
+  abre un proceso nuevo y Quit cierra todos. Cada ventana es un proceso (`crates/curseterm/src/windows.rs`): «New Window»,
   «About» y «Settings…» lanzan el ejecutable con `--about` o `--settings`; cada
   proceso se registra por pid en `$XDG_RUNTIME_DIR/curseterm/windows/` y «Quit»
   manda `SIGTERM` a los demás (comprueba antes `/proc/<pid>/exe`). Ajustes
@@ -80,7 +85,8 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
   (`WindowControls::set_title` y `WindowCommand::SetTitle`, con su línea en
   `docs/barrierkit/06-ventanas{,.en}.md`). Con la feature `kit-parcheado`,
   `terminal.rs` lo llama al cambiar el título; sin ella solo cambia la
-  `Titlebar`. Sin probar todavía.
+  `Titlebar`. Probado: en sway, con el parche, la barra del compositor muestra
+  `root@vm: /tmp` tras `cd /tmp`; sin él, siempre «CurseTerm».
 - **Coste del workaround**: sin el parche, el compositor y la shell muestran
   siempre «CurseTerm».
 - **API propuesta para el kit**: `WindowControls::set_title(&self, title: impl Into<String>)`.
@@ -106,8 +112,9 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
   despachado; amplía el test `a_typed_shortcut_and_its_menu_text_match_the_same_keys`
   y `docs/barrierkit/11-app{,.en}.md`. Con el kit tal cual,
   `crates/curseterm/src/keys.rs` nunca envía al PTY una tecla con Super
-  (ADR 0003), así que los atajos de CurseTerm no llegan a la shell. Sin probar
-  todavía.
+  (ADR 0003), así que los atajos de CurseTerm no llegan a la shell. El parche
+  pasa `cargo test -p barrier-kit --lib` (incluido el test ampliado) y
+  `clippy -D warnings`; los atajos Super funcionan en los dos modos.
 - **Coste del workaround**: solo funciona porque todos los atajos usan Super; un
   atajo sin Super llegaría dos veces. Las teclas sin tipo se declaran como
   texto en `MenuItem`.
@@ -158,7 +165,8 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
   (`crates/barrier-kit-next/src/views/tab_bar.rs`): títulos `String`, botón de
   cerrar en la pestaña elegida o bajo el puntero, `use_interaction` y
   `Palette`; su alto es `tokens::TAB_BAR`. Falta «+», reordenar e indicador de
-  actividad (fase 2). Sin probar todavía.
+  actividad (fase 2). Probado: tres pestañas con título por OSC, elegir y
+  cerrar (`docs/capturas/fase1-pestanas.png`).
 - **Coste del workaround**: —
 - **API propuesta para el kit**: `TabBar::new(label).tab(Tab::new(id, title: String).closable(true)).on_select(..).on_close(..).on_add(..)`.
 - **Gravedad**: media
@@ -207,7 +215,9 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
   recorta, traslada y escala a píxeles lógicos y llama al pintor con el
   `Canvas` de Skia y la `FontCollection`; vuelve a pintar cuando cambia
   `revision`. La rejilla del terminal (`crates/curseterm/src/grid.rs`) lo usa.
-  Sin probar todavía.
+  Probado a escala 1 y 1,5, sin costuras; en reposo no produce frames. La app
+  debe meter en `revision` todo lo que cambia el dibujo (foco, esquema,
+  fuente): el lienzo no ve el estado que lee el pintor.
 - **Coste del workaround**: depende de `ElementExt`, API de Freya que el kit no
   documenta; la rejilla dibuja celda a celda.
 - **API propuesta para el kit**: `canvas(|ctx: &mut CanvasContext| { .. })` con `ctx.canvas()`, `ctx.fonts()` y `ctx.scale()`.
@@ -320,13 +330,80 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Cómo reproducirlo**: un `MenuItem` con `"Super+Shift+bracketright"`;
   pulsar Super+Mayús+] no lo dispara.
 
+### BK-017 — Los handlers del menú corren fuera del contexto de Freya
+- **Área**: menú global / plataforma
+- **Qué necesitaba CurseTerm**: copiar, pegar y cerrar desde «Edit › Copy»,
+  «Paste» y «Shell › Close», o desde sus atajos.
+- **Qué ofrece hoy BarrierKit**: `use_menu_action` (`app/action.rs`). El
+  runner llama a `MenuActions::dispatch` desde `Runtime::key_event`
+  (`platform/input/seat.rs:454`) y desde las acciones de D-Bus, fuera del
+  contexto de Freya. `docs/barrierkit/11-app.md` solo dice que corre «en el
+  hilo de la interfaz». Lo mismo pasa con los callbacks de `Timers::wakeup`.
+- **Qué falta**: ejecutar los handlers dentro del contexto del árbol, como un
+  evento, o documentar qué APIs no se pueden usar en ellos.
+- **Cómo lo resolví en CurseTerm**: `Handles` en `terminal.rs` guarda el
+  `State` del portapapeles (`consume_root_context`) y `WindowControls` durante
+  `render`; los handlers y los callbacks de `wakeup` usan esas copias. Las
+  ventanas auxiliares capturan `WindowControls` igual.
+- **Coste del workaround**: la app usa el `State` interno de
+  `freya-clipboard` en vez de `Clipboard`.
+- **API propuesta para el kit**: que `MenuActions::dispatch` corra dentro de `with_context` del árbol de la ventana, o que el handler reciba un `MenuContext` con portapapeles y ventana.
+- **Gravedad**: bloqueante (la app aborta con
+  «Your trying to access Freya's current context outside of it»).
+- **Cómo reproducirlo**: `use_menu_action(|id| { let _ = Clipboard::set(id.into()); })`
+  y pulsar el atajo de esa acción.
+
+### BK-018 — Sin `org_kde_kwin_appmenu_manager` el menú no se publica en D-Bus
+- **Área**: menú global / docs
+- **Qué necesitaba CurseTerm**: el menú global en GNOME o KDE sin Malaysia, y
+  poder comprobarlo por D-Bus.
+- **Qué ofrece hoy BarrierKit**: `README.md` y `docs/barrierkit/11-app.md`
+  dicen que sin el protocolo el menú «sigue existiendo en D-Bus», pero
+  `platform/window.rs:407-419` solo llama a `app_menu::server::register` si
+  existe `appmenu_manager`.
+- **Qué falta**: registrar siempre el menú y anunciarlo solo si hay protocolo.
+- **Cómo lo resolví en CurseTerm**: parche
+  [`kit-parches/0003-menu-en-dbus-sin-appmenu.patch`](../kit-parches/0003-menu-en-dbus-sin-appmenu.patch).
+  Probado en sway: `com.canonical.dbusmenu.GetLayout` en `/MenuBar/0` devuelve
+  CurseTerm, Shell y Edit con sus atajos; «Copy» pasa de `enabled=false` a
+  `true` al seleccionar; `Event(clicked)` sobre «New Tab» abre la pestaña.
+- **Coste del workaround**: con el kit tal cual no hay forma de comprobar el
+  menú fuera de Malaysia.
+- **API propuesta para el kit**: ninguna; es el cambio del parche.
+- **Gravedad**: alta
+- **Cómo reproducirlo**: abrir cualquier app con `.menu(..)` en sway y listar
+  los objetos de su nombre en el bus: no hay `/MenuBar/*`.
+
 ## Cosas que funcionaron bien
 
-Pendiente: se rellena al ejecutar CurseTerm. Se comprobarán explícitamente la
-titlebar y sus estados, el menú global (submenús, checks, estados), el
-portapapeles de texto, el cursor por forma, el menú contextual, la escala
-fraccional, el modo claro/oscuro con `vow-appearance` y el arranque fuera de
-Malaysia.
+Comprobado en la fase 1 (sway sin pantalla, lavapipe):
+
+- **Arranque fuera de Malaysia:** el runner sigue sin
+  `org_kde_kwin_appmenu_manager` ni los protocolos Infinity y lo registra con
+  `tracing::info!`.
+- **Render de rejilla a alta frecuencia:** con el bloque `canvas`, `seq 1 300`
+  y el listado en color se dibujan sin retraso visible en un build de
+  depuración, y en reposo no hay frames (1 % de CPU).
+- **Métricas de fuente y respaldo:** Geist Mono del dev shell y el respaldo de
+  Skia (`match_family_style_character`) para CJK; los anchos dobles encajan.
+- **Escala fraccional:** a 1,5 el texto sale nítido y las celdas sin costuras.
+- **Portapapeles de texto:** copiar y pegar con otras apps (`wl-copy`,
+  `wl-paste`) funciona en los dos sentidos, también desde OSC 52.
+- **Apariencia en vivo:** cambiar `appearance.domain` repinta al momento las
+  ventanas del kit (Ajustes) y CurseTerm.
+- **`use_defaults` entre procesos:** Ajustes guarda el `.domain` y la ventana
+  del terminal lo recibe en vivo.
+- **Patrones:** `PreferencesWindow`, `Form`, `Stepper`, `TextField`,
+  `PopUpButton` y `about_window` sirvieron sin cambios; la barra lateral se
+  pliega sola por debajo de 760 px.
+- **Teclado:** `KeyboardEventData` trae `Key` y modificadores suficientes para
+  un codificador xterm; Alt, Ctrl y las teclas con nombre llegan bien.
+- **Estado vivo del menú:** `MenuHandle::update` publica el cambio por D-Bus
+  (revisión 1 → 3 al seleccionar).
+- **Cursor por forma:** `Cursor::set(CursorIcon::Text)` sobre la rejilla.
+
+Sin probar todavía: menú contextual, arrastrar y soltar, menú global en la
+barra de Malaysia, GNOME y KDE reales.
 
 ## Documentación de BarrierKit
 
@@ -337,3 +414,14 @@ Malaysia.
   vía para cambiar el menú en vivo (la usa `app/undo.rs:111`).
 - `docs/barrierkit/11-app.md` no dice que un atajo despachado llega también
   como tecla a la app.
+- `README.md` y `docs/barrierkit/11-app.md` dicen que sin
+  `org_kde_kwin_appmenu_manager` el menú sigue en D-Bus; el código no lo
+  publica (BK-018).
+- `docs/barrierkit/11-app.md` dice que el handler de una acción corre «en el
+  hilo de la interfaz», pero no avisa de que corre fuera del contexto de Freya
+  (BK-017).
+- `docs/barrierkit/07-titlebars.md` dice que `.close_only(true)` «deja solo el
+  botón de cerrar»; el código (`traffic.rs:126`) dibuja también minimizar y
+  maximizar, en gris.
+- Nada documenta el signo de `WheelEventData::delta_y`: el runner pasa el eje
+  de Wayland tal cual (`platform/input/seat.rs:301`), negativo hacia arriba.
