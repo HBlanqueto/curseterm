@@ -759,3 +759,19 @@ warning); Paste Slowly with several broadcast sessions.
 - Paste Slowly's chunk size (16 bytes) and pause (30 ms) are fixed.
 - Paste Special has none of iTerm2's advanced editor (transforms, base64,
   tabs).
+
+## Phase 13 — Profile badge and paths with Super+click
+
+### Plan
+
+1. **Profiles › General › Badge:** a profile text drawn large and
+   translucent in the top-right corner of each pane, like iTerm2's badge.
+   `\(session.name)` is replaced by the session title; the rest is fixed
+   text.
+2. **Super+click on a path:** when there is no link under the click, the
+   clicked word (without `:line` or trailing punctuation) is looked up
+   relative to the session directory; when it exists, `xdg-open` opens it,
+   like iTerm2's "semantic history".
+3. **Transparency:** left out; the kit does not let a window ask for a
+   translucent background (recorded as a gap).
+4. **Test** on headless sway and documentation in both languages.

@@ -757,3 +757,19 @@ un aviso); Paste Slowly con varias sesiones en difusión.
 - El tamaño del trozo (16 bytes) y la pausa (30 ms) de Paste Slowly son fijos.
 - Paste Special no tiene el editor avanzado de iTerm2 (transformaciones,
   base64, tabuladores).
+
+## Fase 13 — Insignia del perfil y rutas con Super+clic
+
+### Plan
+
+1. **Profiles › General › Badge:** un texto del perfil que se dibuja grande
+   y translúcido en la esquina superior derecha de cada panel, como la
+   insignia de iTerm2. `\(session.name)` se sustituye por el título de la
+   sesión; el resto es texto fijo.
+2. **Super+clic en una ruta:** si no hay enlace bajo el clic, la palabra
+   pulsada (sin `:línea` ni puntuación final) se busca relativa al directorio
+   de la sesión; si existe, se abre con `xdg-open`, como el «semantic
+   history» de iTerm2.
+3. **Transparencia:** queda fuera; el kit no deja que una ventana pida fondo
+   translúcido (se anota como gap).
+4. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
