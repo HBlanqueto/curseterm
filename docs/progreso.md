@@ -535,3 +535,17 @@ salida del último comando tras un cambio de tamaño que reajusta las líneas.
 - La salida solo termina con OSC 133;D. El plan contaba también con el
   siguiente prompt (133;A), pero 133;A y `SetMark` llegan como la misma marca;
   una shell que no emite 133;D deja la entrada desactivada.
+
+## Fase 8 — Undo Close e historial de pegado
+
+### Plan
+
+1. **Shell › Undo Close (⇧⌘T):** al cerrar una pestaña o un panel desde el
+   menú, el teclado o la «×», sus sesiones siguen vivas cinco segundos.
+   Undo Close las devuelve como una pestaña nueva, con sus procesos y su
+   título. Una sesión cuyo proceso terminó no se puede deshacer.
+2. **Session › Open Paste History (⇧⌘H):** CurseTerm recuerda los últimos
+   textos copiados y pegados en la ventana. Una hoja del kit (`sheet`) con un
+   `SearchField` que filtra y una `Table` con las entradas: las flechas
+   eligen, Intro pega y Escape cierra.
+3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.

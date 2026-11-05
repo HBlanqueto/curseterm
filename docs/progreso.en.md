@@ -538,3 +538,17 @@ last command's output after a resize that reflows the lines.
 - The output only ends with OSC 133;D. The plan also counted on the next
   prompt (133;A), but 133;A and `SetMark` arrive as the same mark; a shell
   that does not emit 133;D leaves the item disabled.
+
+## Phase 8 — Undo Close and paste history
+
+### Plan
+
+1. **Shell › Undo Close (⇧⌘T):** when a tab or pane is closed from the menu,
+   the keyboard or the "×", its sessions stay alive for five seconds. Undo
+   Close brings them back as a new tab, with their processes and title. A
+   session whose process ended cannot be undone.
+2. **Session › Open Paste History (⇧⌘H):** CurseTerm remembers the latest
+   texts copied and pasted in the window. A kit sheet (`sheet`) with a
+   `SearchField` that filters and a `Table` with the entries: the arrows
+   choose, Enter pastes and Escape closes.
+3. **Test** on headless sway and documentation in both languages.
