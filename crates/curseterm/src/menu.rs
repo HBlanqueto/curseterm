@@ -58,6 +58,13 @@ pub const TRIGGERS_MENU: &str = "triggers-menu";
 pub const TRIGGERS_ENABLED: Action = Action::new("triggers-enabled", || tr!("triggers-enabled"));
 pub const EDIT_TRIGGERS: Action = Action::new("edit-triggers", || tr!("edit-triggers"));
 pub const RESET: Action = Action::new("reset", || tr!("reset")).shortcut(super_key('r'));
+pub const PASTE_SPECIAL_MENU: &str = "paste-special-menu";
+pub const PASTE_SLOWLY: Action = Action::new("paste-slowly", || tr!("paste-slowly"));
+pub const PASTE_ESCAPED: Action = Action::new("paste-escaped", || tr!("paste-escaped"));
+pub const PASTE_SELECTION: Action = Action::new("paste-selection", || tr!("paste-selection"));
+pub const LOG_MENU: &str = "log-menu";
+pub const LOG_START: Action = Action::new("log-start", || tr!("log-start"));
+pub const LOG_STOP: Action = Action::new("log-stop", || tr!("log-stop"));
 pub const SELECT_ALL: Action =
     Action::new("select-all", || tr!("select-all")).shortcut(super_key('a'));
 pub const SELECT_OUTPUT: Action = Action::new("select-output", || tr!("select-output"))
@@ -172,6 +179,15 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 COPY.item(false),
                 COPY_MODE.item_with(true, CheckState::Checkbox(false)),
                 PASTE.item(true),
+                submenu(
+                    PASTE_SPECIAL_MENU,
+                    tr!("paste-special-menu"),
+                    vec![
+                        PASTE_SLOWLY.item(true),
+                        PASTE_ESCAPED.item(true),
+                        PASTE_SELECTION.item(false),
+                    ],
+                ),
                 MenuItem::Separator,
                 OPEN_SELECTION.item(false),
                 MenuItem::Separator,
@@ -227,6 +243,12 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 RESTART_SESSION.item(true),
                 MenuItem::Separator,
                 PASTE_HISTORY.item(false),
+                MenuItem::Separator,
+                submenu(
+                    LOG_MENU,
+                    tr!("log-menu"),
+                    vec![LOG_START.item(true), LOG_STOP.item(false)],
+                ),
                 MenuItem::Separator,
                 RESET.item(true),
                 RESET_CHARSET.item(true),

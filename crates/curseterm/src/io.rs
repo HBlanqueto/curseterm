@@ -60,6 +60,7 @@ pub struct Extras {
     pub bell: Option<Instant>,
     pub stamps: VecDeque<(i64, SystemTime)>,
     pub show_timestamps: bool,
+    pub log: Option<File>,
     pub cursor_spotlight: Option<Instant>,
     pub triggers_enabled: bool,
     triggers: Vec<Trigger>,
@@ -288,6 +289,7 @@ fn read_loop(
             }
             Err(_) => break,
         };
+        log_output(&extras, &buffer[..read]);
         {
             let mut term = term.lock();
             for piece in splitter.feed(&buffer[..read]) {
@@ -308,6 +310,18 @@ fn read_loop(
         listener.send_event(Event::Wakeup);
     }
     listener.send_event(Event::Exit);
+}
+
+fn log_output(extras: &Mutex<Extras>, bytes: &[u8]) {
+    let Ok(mut extras) = extras.lock() else {
+        return;
+    };
+    if let Some(log) = extras.log.as_mut()
+        && let Err(error) = log.write_all(bytes)
+    {
+        tracing::warn!(%error, "could not write the session log; logging stops");
+        extras.log = None;
+    }
 }
 
 fn run_triggers(

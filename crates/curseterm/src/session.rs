@@ -242,8 +242,28 @@ impl Session {
     }
 
     pub fn paste(&self, text: &str) {
-        let bracketed = self.mode().contains(TermMode::BRACKETED_PASTE);
-        self.write(paste_bytes(text, bracketed));
+        self.write(self.pasted_bytes(text));
+    }
+
+    pub fn pasted_bytes(&self, text: &str) -> Vec<u8> {
+        paste_bytes(text, self.mode().contains(TermMode::BRACKETED_PASTE))
+    }
+
+    pub fn start_log(&self, path: &std::path::Path) -> io::Result<()> {
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
+        self.extras().log = Some(file);
+        Ok(())
+    }
+
+    pub fn stop_log(&self) {
+        self.extras().log = None;
+    }
+
+    pub fn logging(&self) -> bool {
+        self.extras().log.is_some()
     }
 
     pub fn selected_text(&self) -> Option<String> {
@@ -510,6 +530,17 @@ fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
     }
 }
 
+pub fn shell_escaped(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for c in text.chars() {
+        if " \t!\"#$&'()*,;<>?[\\]^`{|}~".contains(c) {
+            escaped.push('\\');
+        }
+        escaped.push(c);
+    }
+    escaped
+}
+
 fn toggle_vi_selection(term: &mut Term<Listener>, kind: SelectionType) {
     let same = term
         .selection
@@ -524,7 +555,17 @@ fn toggle_vi_selection(term: &mut Term<Listener>, kind: SelectionType) {
 
 #[cfg(test)]
 mod tests {
-    use super::paste_bytes;
+    use super::{paste_bytes, shell_escaped};
+
+    #[test]
+    fn shell_special_characters_get_a_backslash_and_letters_do_not() {
+        assert_eq!(
+            shell_escaped("mi archivo (1).txt"),
+            r"mi\ archivo\ \(1\).txt"
+        );
+        assert_eq!(shell_escaped("a$b"), r"a\$b");
+        assert_eq!(shell_escaped("ñandú"), "ñandú");
+    }
 
     #[test]
     fn a_bracketed_paste_is_wrapped_and_cannot_close_the_bracket_early() {

@@ -39,7 +39,7 @@ use crate::menu;
 use crate::pane_view::TerminalPane;
 use crate::panes::{Axis, Pane, Toward};
 use crate::paste_history;
-use crate::session::{GridSize, Launch, Listener, MarkJump, Session, SessionId};
+use crate::session::{self, GridSize, Launch, Listener, MarkJump, Session, SessionId};
 use crate::windows;
 use crate::workspace::{Broadcast, Closed, Tab, Workspace};
 
@@ -47,6 +47,8 @@ const INITIAL_GRID: (u16, u16) = (80, 24);
 const QUICK_EXIT: Duration = Duration::from_secs(1);
 const DIVIDER_STEP: f32 = 0.05;
 const UNDO_CLOSE: Duration = Duration::from_secs(5);
+const SLOW_PASTE_CHUNK: usize = 16;
+const SLOW_PASTE_PAUSE: Duration = Duration::from_millis(30);
 
 type Sessions = HashMap<SessionId, Rc<Session>>;
 type ClipboardState = State<Option<Box<dyn ClipboardProvider>>>;
@@ -83,6 +85,7 @@ enum Sheet {
     RenameTab(SessionId),
     RenameWindow,
     SaveSelection(SessionId),
+    Log(SessionId),
     CopyModeKeys,
 }
 
@@ -374,7 +377,7 @@ impl App for Terminal {
         let alert = (*closing.read()).map(|pending| close_alert(&handles, pending));
         let sheet_view = (*sheet.read()).map(|open| match open {
             Sheet::PasteHistory => paste_history_sheet(&handles, revision),
-            Sheet::RenameTab(_) | Sheet::RenameWindow | Sheet::SaveSelection(_) => {
+            Sheet::RenameTab(_) | Sheet::RenameWindow | Sheet::SaveSelection(_) | Sheet::Log(_) => {
                 field_sheet(&handles, open)
             }
             Sheet::CopyModeKeys => copy_mode_keys_sheet(&handles),
@@ -543,6 +546,10 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::COPY.id, selection);
     use_menu_enabled(menu::USE_SELECTION_FOR_FIND.id, selection);
     use_menu_enabled(menu::OPEN_SELECTION.id, selection);
+    use_menu_enabled(menu::PASTE_SELECTION.id, selection);
+    let logging = handles.active().is_some_and(|session| session.logging());
+    use_menu_enabled(menu::LOG_START.id, !logging);
+    use_menu_enabled(menu::LOG_STOP.id, logging);
     use_menu_enabled(menu::SAVE_SELECTION.id, selection);
     let output = handles.active().is_some_and(|session| session.has_output());
     use_menu_enabled(menu::SELECT_OUTPUT.id, output);
@@ -722,6 +729,7 @@ fn field_sheet(handles: &Handles, target: Sheet) -> Element {
             tr!("rename-confirm"),
         ),
         Sheet::SaveSelection(_) => (tr!("save-selection"), tr!("save-path"), tr!("save-confirm")),
+        Sheet::Log(_) => (tr!("log-start"), tr!("save-path"), tr!("log-confirm")),
         _ => (
             tr!("edit-window-title"),
             tr!("title-automatic"),
@@ -779,6 +787,7 @@ fn confirm_later(handles: &Handles, target: Sheet) {
         match target {
             Sheet::RenameTab(of) => workspace.write().rename_tab(of, &typed),
             Sheet::SaveSelection(of) => save_selection(&later, of, &typed),
+            Sheet::Log(of) => start_log(&later, of, &typed),
             _ => workspace.write().rename_window(&typed),
         }
         let mut sheet = later.sheet;
@@ -792,16 +801,44 @@ fn save_selection(handles: &Handles, of: SessionId, path: &str) {
         .peek()
         .get(&of)
         .and_then(|session| session.selected_text());
-    let typed = path.strip_prefix("~/").unwrap_or(path);
-    let path = match std::env::var_os("HOME") {
-        Some(home) => PathBuf::from(home).join(typed),
-        None => PathBuf::from(typed),
-    };
+    let path = from_home(path);
     if let Some(text) = text
         && let Err(error) = std::fs::write(&path, text)
     {
         tracing::warn!(%error, path = %path.display(), "could not save the selection");
     }
+}
+
+fn from_home(typed: &str) -> PathBuf {
+    let typed = typed.strip_prefix("~/").unwrap_or(typed);
+    match std::env::var_os("HOME") {
+        Some(home) => PathBuf::from(home).join(typed),
+        None => PathBuf::from(typed),
+    }
+}
+
+fn start_log(handles: &Handles, of: SessionId, path: &str) {
+    let path = from_home(path);
+    if let Some(session) = handles.sessions.peek().get(&of)
+        && let Err(error) = session.start_log(&path)
+    {
+        tracing::warn!(%error, path = %path.display(), "could not start the session log");
+    }
+}
+
+fn paste_slowly(handles: &Handles, text: String) {
+    for session in handles.receivers() {
+        let bytes = session.pasted_bytes(&text);
+        for (index, chunk) in bytes.chunks(SLOW_PASTE_CHUNK).enumerate() {
+            let (session, chunk) = (session.clone(), chunk.to_vec());
+            handles
+                .timers
+                .after(SLOW_PASTE_PAUSE * index as u32, move || {
+                    session.write(chunk.clone())
+                });
+        }
+    }
+    remember_paste(handles, text);
 }
 
 fn copy_mode_keys_sheet(handles: &Handles) -> Element {
@@ -1298,6 +1335,32 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             if let Some(session) = active {
                 handles.draft.clone().set(String::new());
                 open_sheet(handles, Sheet::SaveSelection(session.id));
+            }
+        }
+        _ if id == menu::LOG_START.id => {
+            if let Some(session) = active {
+                handles.draft.clone().set(String::new());
+                open_sheet(handles, Sheet::Log(session.id));
+            }
+        }
+        _ if id == menu::LOG_STOP.id => {
+            if let Some(session) = active {
+                session.stop_log();
+            }
+        }
+        _ if id == menu::PASTE_SLOWLY.id => {
+            if let Some(text) = clipboard_text(handles.clipboard) {
+                paste_slowly(handles, text);
+            }
+        }
+        _ if id == menu::PASTE_ESCAPED.id => {
+            if let Some(text) = clipboard_text(handles.clipboard) {
+                paste_text(handles, session::shell_escaped(&text));
+            }
+        }
+        _ if id == menu::PASTE_SELECTION.id => {
+            if let Some(text) = active.and_then(|session| session.selected_text()) {
+                paste_text(handles, text);
             }
         }
         _ if id == menu::OPEN_SELECTION.id => {

@@ -726,3 +726,34 @@ campo vacío al abrir.
    - **Paste Selection:** pega la selección del terminal sin pasar por el
      portapapeles.
 3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla con el kit parcheado, porque las entradas nuevas
+no tienen atajo y se pulsaron desde el menú en D-Bus. `./dev.sh check` limpio
+en los dos modos del kit; 34 tests de la app y 1 del bloque. Ningún gap
+nuevo.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Log to File…, `sesion.log`, `echo registrado`, Stop Logging y `echo fuera`: el archivo tiene `registrado` (orden y salida) y no `fuera`; las dos entradas se activan y desactivan a la vez | ✓ | — |
+| Copiar `mi archivo (1).txt`, `echo ` y Paste Escaping Special Characters: `echo` imprime el nombre entero | ✓ | — |
+| Paste Slowly de 63 bytes con un lector en modo raw: llegan 16, 16, 16 y 15 bytes separados 30 ms | ✓ | `fase12-pegar-despacio.png` |
+| Doble clic en `palabra`, `echo ` y Paste Selection: imprime `palabra` sin tocar el portapapeles | ✓ | — |
+
+Durante la prueba, un script propio que restauraba el tty desde un descriptor
+ya en modo raw dejó la shell sin eco; `strace` mostró que CurseTerm seguía
+escribiendo las teclas en el PTY, así que no era un fallo del terminal.
+
+**No probado:** un fallo de escritura en el registro (para el registro y deja
+un aviso); Paste Slowly con varias sesiones en difusión.
+
+**Difiere de iTerm2:**
+
+- El registro guarda los bytes crudos, con las secuencias de escape; no hay
+  opción de texto plano ni de registro automático por perfil.
+- El tamaño del trozo (16 bytes) y la pausa (30 ms) de Paste Slowly son fijos.
+- Paste Special no tiene el editor avanzado de iTerm2 (transformaciones,
+  base64, tabuladores).

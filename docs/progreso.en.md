@@ -729,3 +729,33 @@ empty.
    - **Paste Selection:** pastes the terminal selection without going
      through the clipboard.
 3. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-05)
+
+Tested on headless sway with the patched kit, because the new items have no
+shortcut and were clicked from the D-Bus menu. `./dev.sh check` clean in both
+kit modes; 34 app tests and 1 block test. No new gap.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Log to File…, `sesion.log`, `echo registrado`, Stop Logging and `echo fuera`: the file has `registrado` (command and output) and not `fuera`; both items enable and disable together | ✓ | — |
+| Copy `mi archivo (1).txt`, `echo ` and Paste Escaping Special Characters: `echo` prints the whole name | ✓ | — |
+| Paste Slowly of 63 bytes with a raw-mode reader: 16, 16, 16 and 15 bytes arrive 30 ms apart | ✓ | `fase12-pegar-despacio.png` |
+| Double click on `palabra`, `echo ` and Paste Selection: prints `palabra` without touching the clipboard | ✓ | — |
+
+During the test, a script of mine that restored the tty from a descriptor
+already in raw mode left the shell without echo; `strace` showed CurseTerm
+still wrote the keys to the PTY, so it was not a terminal bug.
+
+**Not tested:** a write failure in the log (it stops logging and leaves a
+warning); Paste Slowly with several broadcast sessions.
+
+**Differs from iTerm2:**
+
+- The log keeps the raw bytes, escape sequences included; there is no plain
+  text option nor automatic logging per profile.
+- Paste Slowly's chunk size (16 bytes) and pause (30 ms) are fixed.
+- Paste Special has none of iTerm2's advanced editor (transforms, base64,
+  tabs).
