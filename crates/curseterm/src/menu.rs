@@ -20,7 +20,12 @@ pub const QUIT: Action = Action::new("quit", || tr!("quit")).shortcut(super_key(
 
 pub const NEW_WINDOW: Action =
     Action::new("new-window", || tr!("new-window")).shortcut(super_key('n'));
+pub const NEW_WINDOW_PROFILE: Action =
+    Action::new("new-window-profile", || tr!("new-window-profile"))
+        .shortcut(super_with(Modifiers::ALT.union(Modifiers::SHIFT), 'n'));
 pub const NEW_TAB: Action = Action::new("new-tab", || tr!("new-tab")).shortcut(super_key('t'));
+pub const NEW_TAB_PROFILE: Action = Action::new("new-tab-profile", || tr!("new-tab-profile"))
+    .shortcut(super_with(Modifiers::ALT.union(Modifiers::SHIFT), 't'));
 pub const DUPLICATE_TAB: Action = Action::new("duplicate-tab", || tr!("duplicate-tab"));
 pub const SPLIT_VERTICALLY: Action =
     Action::new("split-vertically", || tr!("split-vertically")).shortcut(super_key('d'));
@@ -35,6 +40,12 @@ pub const CLOSE_PANES: Action =
 
 pub const COPY: Action = Action::new("copy", || tr!("copy")).shortcut(super_key('c'));
 pub const PASTE: Action = Action::new("paste", || tr!("paste")).shortcut(super_key('v'));
+pub const CLEAR_BUFFER: Action =
+    Action::new("clear-buffer", || tr!("clear-buffer")).shortcut(super_key('k'));
+pub const CLEAR_SCROLLBACK: Action = Action::new("clear-scrollback", || tr!("clear-scrollback"))
+    .shortcut(super_with(Modifiers::SHIFT, 'k'));
+pub const RESTART_SESSION: Action = Action::new("restart-session", || tr!("restart-session"));
+pub const RESET: Action = Action::new("reset", || tr!("reset")).shortcut(super_key('r'));
 pub const SELECT_ALL: Action =
     Action::new("select-all", || tr!("select-all")).shortcut(super_key('a'));
 
@@ -50,14 +61,16 @@ pub const TEXT_SMALLER: Action =
     Action::new("text-smaller", || tr!("text-smaller")).shortcut(super_key('-'));
 
 pub const MINIMIZE: Action = Action::new("minimize", || tr!("minimize")).shortcut(super_key('m'));
-pub const ZOOM: Action = Action::new("zoom", || tr!("zoom"));
-// BK-016: with Shift the kit matches the produced character, so ⇧] is declared as `}`.
+pub const ZOOM: &str = "zoom";
+pub const TAB_MENU: &str = "tab-menu";
+// BK-016: with Shift the kit matches the produced character, so ⇧] is declared as `}` and ⇧0 as `)`.
 pub const NEXT_TAB: &str = "next-tab";
 pub const PREVIOUS_TAB: &str = "previous-tab";
 pub const MOVE_TAB_LEFT: Action = Action::new("move-tab-left", || tr!("move-tab-left"));
 pub const MOVE_TAB_RIGHT: Action = Action::new("move-tab-right", || tr!("move-tab-right"));
 pub const SELECT_TAB: &str = "select-tab";
 pub const SELECT_TAB_PREFIX: &str = "select-tab:";
+pub const PROFILE_PREFIX: &str = "profile:";
 pub const SPLIT_PANE: &str = "split-pane";
 pub const NEXT_PANE: Action =
     Action::new("next-pane", || tr!("next-pane")).shortcut(super_key(']'));
@@ -79,18 +92,22 @@ fn keyed(id: &'static str, label: &str, shortcut: &str) -> MenuItem {
     MenuItem::action(id, label).with_shortcut(shortcut)
 }
 
-pub fn terminal_menu() -> AppMenu {
+pub fn terminal_menu(profiles: &[String]) -> AppMenu {
     AppMenu::new(vec![
         app_menu(),
         Menu::new(
             tr!("menu-shell"),
             vec![
                 NEW_WINDOW.item(true),
+                NEW_WINDOW_PROFILE.item(true),
+                MenuItem::Separator,
                 NEW_TAB.item(true),
+                NEW_TAB_PROFILE.item(true),
+                MenuItem::Separator,
                 DUPLICATE_TAB.item(true),
                 MenuItem::Separator,
-                SPLIT_VERTICALLY.item(true),
                 SPLIT_HORIZONTALLY.item(true),
+                SPLIT_VERTICALLY.item(true),
                 MenuItem::Separator,
                 CLOSE.item(true),
                 CLOSE_WINDOW.item(true),
@@ -104,6 +121,9 @@ pub fn terminal_menu() -> AppMenu {
                 PASTE.item(true),
                 MenuItem::Separator,
                 SELECT_ALL.item(true),
+                MenuItem::Separator,
+                CLEAR_BUFFER.item(true),
+                CLEAR_SCROLLBACK.item(false),
             ],
         ),
         Menu::new(
@@ -122,17 +142,34 @@ pub fn terminal_menu() -> AppMenu {
             ],
         ),
         Menu::new(
+            tr!("menu-session"),
+            vec![
+                RESTART_SESSION.item(true),
+                MenuItem::Separator,
+                RESET.item(true),
+            ],
+        ),
+        Menu::new(tr!("menu-profiles"), profile_items(profiles)),
+        Menu::new(
             tr!("menu-window"),
             vec![
                 MINIMIZE.item(true),
-                ZOOM.item(true),
+                keyed(ZOOM, tr!("zoom"), "Super+Shift+)"),
                 MenuItem::Separator,
-                keyed(NEXT_TAB, tr!("next-tab"), "Super+Shift+}").with_enabled(false),
-                keyed(PREVIOUS_TAB, tr!("previous-tab"), "Super+Shift+{").with_enabled(false),
-                MOVE_TAB_LEFT.item(false),
-                MOVE_TAB_RIGHT.item(false),
-                submenu(SELECT_TAB, tr!("select-tab"), Vec::new()),
-                MenuItem::Separator,
+                submenu(
+                    TAB_MENU,
+                    tr!("tab-menu"),
+                    vec![
+                        keyed(NEXT_TAB, tr!("next-tab"), "Super+Shift+}").with_enabled(false),
+                        keyed(PREVIOUS_TAB, tr!("previous-tab"), "Super+Shift+{")
+                            .with_enabled(false),
+                        MenuItem::Separator,
+                        MOVE_TAB_LEFT.item(false),
+                        MOVE_TAB_RIGHT.item(false),
+                        MenuItem::Separator,
+                        submenu(SELECT_TAB, tr!("select-tab"), Vec::new()),
+                    ],
+                ),
                 submenu(SPLIT_PANE, tr!("split-pane"), split_pane_items()),
             ],
         ),
@@ -165,6 +202,20 @@ pub fn select_tab_items(titles: &[String], active: usize) -> Vec<MenuItem> {
                 .with_check(CheckState::Radio(index == active));
             match index {
                 0..9 => item.with_shortcut(format!("Super+{}", index + 1)),
+                _ => item,
+            }
+        })
+        .collect()
+}
+
+pub fn profile_items(profiles: &[String]) -> Vec<MenuItem> {
+    profiles
+        .iter()
+        .enumerate()
+        .map(|(index, name)| {
+            let item = MenuItem::action(format!("{PROFILE_PREFIX}{index}"), name.clone());
+            match index {
+                0..9 => item.with_shortcut(format!("Ctrl+Super+{}", index + 1)),
                 _ => item,
             }
         })

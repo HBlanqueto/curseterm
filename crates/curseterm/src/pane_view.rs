@@ -20,7 +20,7 @@ const MULTI_CLICK: Duration = Duration::from_millis(400);
 pub struct TerminalPane {
     pub session: Rc<Session>,
     pub fonts: Rc<Fonts>,
-    pub scheme: &'static Scheme,
+    pub scheme: Rc<Scheme>,
     pub focused: bool,
     pub revision: u64,
     pub on_focus: Callback<SessionId, ()>,
@@ -30,7 +30,7 @@ impl PartialEq for TerminalPane {
     fn eq(&self, other: &Self) -> bool {
         self.session.id == other.session.id
             && Rc::ptr_eq(&self.fonts, &other.fonts)
-            && self.scheme.name == other.scheme.name
+            && *self.scheme == *other.scheme
             && self.focused == other.focused
             && self.revision == other.revision
     }
@@ -50,7 +50,7 @@ impl Component for TerminalPane {
         let mut repaint = use_state(|| 0u64);
         let session = self.session.clone();
         let fonts = self.fonts.clone();
-        let scheme = self.scheme;
+        let scheme = self.scheme.clone();
         let focused = self.focused;
         let on_focus = self.on_focus.clone();
 
@@ -66,8 +66,9 @@ impl Component for TerminalPane {
         let painter = {
             let session = session.clone();
             let fonts = fonts.clone();
+            let scheme = scheme.clone();
             canvas(look.finish(), move |ctx| {
-                grid::draw(ctx, &session.term.lock(), &fonts, scheme, focused);
+                grid::draw(ctx, &session.term.lock(), &fonts, &scheme, focused);
             })
         };
         let point_at = {

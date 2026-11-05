@@ -63,6 +63,19 @@ impl Pane {
         }
     }
 
+    pub fn replace(&mut self, old: SessionId, new: SessionId) -> bool {
+        match self {
+            Self::Leaf(id) if *id == old => {
+                *id = new;
+                true
+            }
+            Self::Leaf(_) => false,
+            Self::Split { children, .. } => {
+                children.iter_mut().any(|child| child.replace(old, new))
+            }
+        }
+    }
+
     pub fn is_split(&self) -> bool {
         matches!(self, Self::Split { .. })
     }

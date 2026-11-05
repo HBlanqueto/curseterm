@@ -34,12 +34,12 @@ impl Drop for Registration {
     }
 }
 
-pub fn open(mode: Option<&str>) {
+pub fn open(arguments: &[&str]) {
     let Ok(exe) = std::env::current_exe() else {
         tracing::warn!("cannot find the CurseTerm executable");
         return;
     };
-    if let Err(error) = Command::new(exe).args(mode).spawn() {
+    if let Err(error) = Command::new(exe).args(arguments).spawn() {
         tracing::warn!(%error, "could not open a CurseTerm window");
     }
 }

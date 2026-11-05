@@ -1,51 +1,144 @@
+use std::path::PathBuf;
 use std::sync::LazyLock;
 
 use alacritty_terminal::vte::ansi::Rgb;
 use barrier_kit_next::tokens::MONO;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub const APP_ID: &str = "org.curseterm.CurseTerm";
+const DEFAULT_PROFILE: &str = "Default";
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Defaults {
-    pub font_family: Option<String>,
-    pub font_size: Option<u32>,
+    pub default_profile: Option<String>,
+    pub profiles: Vec<Profile>,
+    pub schemes: Vec<Scheme>,
+    pub show_tab_bar: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Profile {
+    pub name: String,
+    pub font_family: String,
+    pub font_size: u32,
     pub color_scheme: Option<String>,
+    pub command: Option<String>,
+    pub working_directory: WorkingDirectory,
+}
+
+impl Default for Profile {
+    fn default() -> Self {
+        Self {
+            name: DEFAULT_PROFILE.into(),
+            font_family: MONO.family.into(),
+            font_size: MONO.size,
+            color_scheme: None,
+            command: None,
+            working_directory: WorkingDirectory::Home,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkingDirectory {
+    #[default]
+    Home,
+    Previous,
+    Fixed(PathBuf),
 }
 
 impl Defaults {
-    pub fn font_family(&self) -> &str {
-        self.font_family.as_deref().unwrap_or(MONO.family)
+    pub fn profiles(&self) -> Vec<Profile> {
+        if self.profiles.is_empty() {
+            vec![Profile::default()]
+        } else {
+            self.profiles.clone()
+        }
     }
 
-    pub fn font_size(&self) -> u32 {
-        self.font_size.unwrap_or(MONO.size)
-    }
-
-    pub fn scheme(&self, dark: bool) -> &'static Scheme {
+    pub fn default_profile_name(&self) -> String {
+        let profiles = self.profiles();
         let named = self
+            .default_profile
+            .as_ref()
+            .filter(|name| profiles.iter().any(|profile| &profile.name == *name));
+        named.cloned().unwrap_or_else(|| profiles[0].name.clone())
+    }
+
+    pub fn profile(&self, name: &str) -> Profile {
+        let profiles = self.profiles();
+        let wanted = profiles
+            .iter()
+            .find(|profile| profile.name == name)
+            .cloned();
+        wanted.unwrap_or_else(|| {
+            let fallback = self.default_profile_name();
+            profiles
+                .into_iter()
+                .find(|profile| profile.name == fallback)
+                .unwrap_or_default()
+        })
+    }
+
+    pub fn schemes(&self) -> impl Iterator<Item = &Scheme> {
+        SCHEMES.iter().chain(&self.schemes)
+    }
+
+    pub fn scheme(&self, profile: &Profile, dark: bool) -> Scheme {
+        profile
             .color_scheme
             .as_deref()
-            .and_then(|name| SCHEMES.iter().find(|scheme| scheme.name == name));
-        named.unwrap_or(&SCHEMES[usize::from(dark)])
+            .and_then(|name| self.schemes().find(|scheme| scheme.name == name))
+            .unwrap_or(&SCHEMES[usize::from(dark)])
+            .clone()
+    }
+
+    pub fn ensure_profiles(&mut self) {
+        if self.profiles.is_empty() {
+            self.profiles = self.profiles();
+        }
+    }
+
+    pub fn unique_profile_name(&self, base: &str) -> String {
+        let taken = |name: &str| self.profiles().iter().any(|profile| profile.name == name);
+        (1..)
+            .map(|copy| match copy {
+                1 => base.to_string(),
+                _ => format!("{base} {copy}"),
+            })
+            .find(|name| !taken(name))
+            .unwrap_or_default()
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub fn change_defaults(change: impl FnOnce(&mut Defaults)) {
+    let mut defaults: Defaults = barrier_kit::app::load_defaults(APP_ID);
+    let before = defaults.clone();
+    change(&mut defaults);
+    if defaults != before
+        && let Err(error) = barrier_kit::app::save_defaults(APP_ID, &defaults)
+    {
+        tracing::warn!(%error, "could not save the settings");
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Scheme {
     pub name: String,
-    #[serde(deserialize_with = "hex")]
+    #[serde(with = "hex")]
     pub foreground: Rgb,
-    #[serde(deserialize_with = "hex")]
+    #[serde(with = "hex")]
     pub background: Rgb,
-    #[serde(deserialize_with = "hex")]
+    #[serde(with = "hex")]
     pub cursor: Rgb,
-    #[serde(deserialize_with = "hex")]
+    #[serde(with = "hex")]
     pub cursor_text: Rgb,
-    #[serde(deserialize_with = "hex")]
+    #[serde(with = "hex")]
     pub selection: Rgb,
-    #[serde(deserialize_with = "hex_list")]
+    #[serde(with = "hex_list")]
     pub ansi: [Rgb; 16],
 }
 
@@ -72,18 +165,38 @@ fn parse_hex(text: &str) -> Option<Rgb> {
     })
 }
 
-fn hex<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Rgb, D::Error> {
-    let text = String::deserialize(deserializer)?;
-    parse_hex(&text)
-        .ok_or_else(|| serde::de::Error::custom(format!("not a #rrggbb colour: {text}")))
+fn to_hex(rgb: &Rgb) -> String {
+    format!("#{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b)
 }
 
-fn hex_list<'de, D: Deserializer<'de>>(deserializer: D) -> Result<[Rgb; 16], D::Error> {
-    let texts = Vec::<String>::deserialize(deserializer)?;
-    let colours: Option<Vec<Rgb>> = texts.iter().map(|text| parse_hex(text)).collect();
-    colours
-        .and_then(|colours| colours.try_into().ok())
-        .ok_or_else(|| serde::de::Error::custom("ansi needs 16 #rrggbb colours"))
+mod hex {
+    use super::*;
+
+    pub fn serialize<S: Serializer>(rgb: &Rgb, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&to_hex(rgb))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Rgb, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        parse_hex(&text)
+            .ok_or_else(|| serde::de::Error::custom(format!("not a #rrggbb colour: {text}")))
+    }
+}
+
+mod hex_list {
+    use super::*;
+
+    pub fn serialize<S: Serializer>(ansi: &[Rgb; 16], serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(ansi.iter().map(to_hex))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<[Rgb; 16], D::Error> {
+        let texts = Vec::<String>::deserialize(deserializer)?;
+        let colours: Option<Vec<Rgb>> = texts.iter().map(|text| parse_hex(text)).collect();
+        colours
+            .and_then(|colours| colours.try_into().ok())
+            .ok_or_else(|| serde::de::Error::custom("ansi needs 16 #rrggbb colours"))
+    }
 }
 
 #[cfg(test)]
@@ -91,19 +204,41 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_built_in_schemes_parse_light_first_then_dark() {
-        assert_eq!(SCHEMES.len(), 2);
+    fn without_saved_profiles_there_is_one_default_that_follows_the_system() {
         let defaults = Defaults::default();
-        assert_eq!(defaults.scheme(false).name, "CurseTerm Claro");
-        assert_eq!(defaults.scheme(true).name, "CurseTerm Oscuro");
+        let profile = defaults.profile("missing");
+        assert_eq!(profile.name, DEFAULT_PROFILE);
+        assert_eq!(defaults.scheme(&profile, false).name, "CurseTerm Claro");
+        assert_eq!(defaults.scheme(&profile, true).name, "CurseTerm Oscuro");
     }
 
     #[test]
-    fn a_named_scheme_wins_over_the_system_appearance() {
+    fn profiles_and_imported_schemes_survive_a_round_trip_through_the_domain_file() {
+        let mut imported = SCHEMES[1].clone();
+        imported.name = "Importado".into();
         let defaults = Defaults {
-            color_scheme: Some("CurseTerm Oscuro".into()),
-            ..Defaults::default()
+            default_profile: Some("Trabajo".into()),
+            profiles: vec![Profile {
+                name: "Trabajo".into(),
+                color_scheme: Some("Importado".into()),
+                working_directory: WorkingDirectory::Fixed("/tmp".into()),
+                command: Some("htop".into()),
+                ..Profile::default()
+            }],
+            schemes: vec![imported],
+            show_tab_bar: true,
         };
-        assert_eq!(defaults.scheme(false).name, "CurseTerm Oscuro");
+        let text = toml::to_string(&defaults).expect("serialize");
+        let back: Defaults = toml::from_str(&text).expect("deserialize");
+        assert_eq!(back, defaults);
+        let profile = back.profile(&back.default_profile_name());
+        assert_eq!(back.scheme(&profile, false).name, "Importado");
+    }
+
+    #[test]
+    fn a_new_profile_name_never_repeats_an_existing_one() {
+        let defaults = Defaults::default();
+        assert_eq!(defaults.unique_profile_name("Default"), "Default 2");
+        assert_eq!(defaults.unique_profile_name("Otro"), "Otro");
     }
 }

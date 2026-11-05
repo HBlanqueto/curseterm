@@ -1,11 +1,13 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender, channel};
 
 use alacritty_terminal::event::{Event as TermEvent, WindowSize};
 use alacritty_terminal::grid::Scroll;
 use barrier_kit::app::use_menu_action;
+use barrier_kit::app_menu::MenuHandle;
 use barrier_kit::platform::{Timers, WakeHandle, WindowControls};
 use barrier_kit::style::Palette;
 use barrier_kit::theme::color;
@@ -17,14 +19,14 @@ use freya_clipboard::copypasta::ClipboardProvider;
 use freya_core::prelude::*;
 use torin::prelude::{Content, Direction, Size};
 
-use crate::config::{APP_ID, Defaults, Scheme};
+use crate::config::{APP_ID, Defaults, Profile, WorkingDirectory, change_defaults};
 use crate::grid::Fonts;
 use crate::keys::{KeyAction, encode};
 use crate::localize::tr;
 use crate::menu;
 use crate::pane_view::TerminalPane;
 use crate::panes::{Axis, Pane, Toward};
-use crate::session::{GridSize, Listener, Session, SessionId};
+use crate::session::{GridSize, Launch, Listener, Session, SessionId};
 use crate::windows;
 use crate::workspace::{Closed, Workspace};
 
@@ -35,6 +37,7 @@ const TEXT_SIZE_RANGE: (i32, i32) = (6, 72);
 type Sessions = HashMap<SessionId, Rc<Session>>;
 type ClipboardState = State<Option<Box<dyn ClipboardProvider>>>;
 type Events = Rc<(Sender<(SessionId, TermEvent)>, WakeHandle)>;
+type FontCache = Rc<RefCell<HashMap<(String, i32), Rc<Fonts>>>>;
 
 // Menu actions and wake-ups run outside Freya's context (BK-017): they use handles taken in render.
 #[derive(Clone)]
@@ -42,8 +45,9 @@ struct Handles {
     workspace: State<Workspace>,
     sessions: State<Sessions>,
     next_id: State<SessionId>,
-    show_tab_bar: State<bool>,
+    defaults: Memo<Defaults>,
     text_zoom: State<i32>,
+    fonts: FontCache,
     controls: WindowControls,
     clipboard: ClipboardState,
 }
@@ -53,42 +57,74 @@ impl Handles {
         let id = self.workspace.peek().active_session()?;
         self.sessions.peek().get(&id).cloned()
     }
+
+    fn fonts_for(&self, profile: &Profile) -> Rc<Fonts> {
+        let (smallest, largest) = TEXT_SIZE_RANGE;
+        let size = (profile.font_size as i32 + *self.text_zoom.peek()).clamp(smallest, largest);
+        self.fonts
+            .borrow_mut()
+            .entry((profile.font_family.clone(), size))
+            .or_insert_with(|| Rc::new(Fonts::new(&profile.font_family, size as f32)))
+            .clone()
+    }
+
+    fn launch(&self, profile: &str, previous: Option<PathBuf>) -> Launch {
+        let profile = self.defaults.peek().profile(profile);
+        let home = std::env::var_os("HOME").map(PathBuf::from);
+        let directory = match profile.working_directory {
+            WorkingDirectory::Home => home,
+            WorkingDirectory::Previous => previous.or(home),
+            WorkingDirectory::Fixed(path) => Some(path),
+        };
+        Launch {
+            profile: profile.name,
+            command: profile.command,
+            directory,
+        }
+    }
+
+    fn current_profile(&self) -> String {
+        self.active().map_or_else(
+            || self.defaults.peek().default_profile_name(),
+            |session| session.profile.clone(),
+        )
+    }
 }
 
-pub struct Terminal;
+pub struct Terminal {
+    pub profile: Option<String>,
+}
 
 impl App for Terminal {
     fn render(&self) -> impl IntoElement {
         let defaults = barrier_kit::app::use_defaults::<Defaults>(APP_ID);
         let dark = barrier_kit::theme::resolved().scheme.is_dark();
-        let scheme: &'static Scheme = defaults.read().scheme(dark);
         let workspace = use_state(Workspace::default);
         let sessions = use_state(Sessions::new);
         let next_id = use_state(|| 0);
-        let show_tab_bar = use_state(|| false);
         let text_zoom = use_state(|| 0i32);
         let mut revision = use_state(|| 0u64);
-        let fonts = use_memo(move || {
-            let defaults = defaults.read();
-            let (smallest, largest) = TEXT_SIZE_RANGE;
-            let size = (defaults.font_size() as i32 + *text_zoom.read()).clamp(smallest, largest);
-            Rc::new(Fonts::new(defaults.font_family(), size as f32))
-        });
         let handles = use_hook(move || Handles {
             workspace,
             sessions,
             next_id,
-            show_tab_bar,
+            defaults,
             text_zoom,
+            fonts: FontCache::default(),
             controls: WindowControls::get(),
             clipboard: consume_root_context(),
         });
-        use_side_effect(move || {
-            let fonts = fonts.read().clone();
-            for session in sessions.peek().values() {
-                session.refit(fonts.cell_width, fonts.cell_height);
+        use_side_effect({
+            let handles = handles.clone();
+            move || {
+                let defaults = defaults.read().clone();
+                text_zoom.read();
+                for session in sessions.peek().values() {
+                    let fonts = handles.fonts_for(&defaults.profile(&session.profile));
+                    session.refit(fonts.cell_width, fonts.cell_height);
+                }
+                *revision.write() += 1;
             }
-            *revision.write() += 1;
         });
         let events = use_hook({
             let handles = handles.clone();
@@ -96,7 +132,12 @@ impl App for Terminal {
         });
         use_hook({
             let (handles, events) = (handles.clone(), events.clone());
-            move || new_tab(&handles, &events, None)
+            let first = self.profile.clone();
+            move || {
+                let profile =
+                    first.unwrap_or_else(|| handles.defaults.peek().default_profile_name());
+                new_tab(&handles, &events, &profile, None)
+            }
         });
         let add_events = events.clone();
         use_menu_action({
@@ -116,7 +157,8 @@ impl App for Terminal {
             .active_session()
             .map_or(crate::workspace::DEFAULT_TITLE, |id| state.title(id))
             .to_string();
-        let tab_bar = (state.tabs.len() > 1 || *show_tab_bar.read()).then(|| {
+        let show_tab_bar = defaults.read().show_tab_bar;
+        let tab_bar = (state.tabs.len() > 1 || show_tab_bar).then(|| {
             let (on_close, on_add) = (handles.clone(), handles.clone());
             state
                 .tab_titles()
@@ -129,7 +171,8 @@ impl App for Terminal {
                 })
                 .on_close(move |index| close_tab(&on_close, index))
                 .on_add(tr!("new-tab-button"), move |_| {
-                    new_tab(&on_add, &add_events, None)
+                    let profile = on_add.defaults.peek().default_profile_name();
+                    new_tab(&on_add, &add_events, &profile, None)
                 })
         });
         let body = state.active_tab().map(|tab| {
@@ -140,8 +183,9 @@ impl App for Terminal {
             };
             let painting = Painting {
                 sessions: sessions.read().clone(),
-                fonts: fonts.read().clone(),
-                scheme,
+                defaults: defaults.read().clone(),
+                handles: handles.clone(),
+                dark,
                 active: tab.active,
                 window_focused,
                 revision: *revision.read(),
@@ -193,8 +237,9 @@ impl App for Terminal {
 
 struct Painting {
     sessions: Sessions,
-    fonts: Rc<Fonts>,
-    scheme: &'static Scheme,
+    defaults: Defaults,
+    handles: Handles,
+    dark: bool,
     active: SessionId,
     window_focused: bool,
     revision: u64,
@@ -207,10 +252,11 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
         Pane::Leaf(id) => match painting.sessions.get(id) {
             Some(session) => {
                 let mut workspace = painting.workspace;
+                let profile = painting.defaults.profile(&session.profile);
                 TerminalPane {
                     session: session.clone(),
-                    fonts: painting.fonts.clone(),
-                    scheme: painting.scheme,
+                    fonts: painting.handles.fonts_for(&profile),
+                    scheme: Rc::new(painting.defaults.scheme(&profile, painting.dark)),
                     focused: painting.window_focused && *id == painting.active,
                     revision: painting.revision,
                     on_focus: Callback::new(move |id| workspace.write().focus(id)),
@@ -266,16 +312,45 @@ fn use_live_menu(handles: &Handles) {
         .active()
         .is_some_and(|session| session.selected_text().is_some());
     use_menu_enabled(menu::COPY.id, selection);
+    let scrollback = handles
+        .active()
+        .is_some_and(|session| session.has_scrollback());
+    use_menu_enabled(menu::CLEAR_SCROLLBACK.id, scrollback);
     use_menu_enabled(menu::CLOSE_PANES.id, split);
     use_menu_enabled(menu::MAXIMIZE_PANE, split);
     use_menu_checked(menu::MAXIMIZE_PANE, zoomed);
-    use_menu_checked(menu::SHOW_TAB_BAR.id, *handles.show_tab_bar.read());
+    use_menu_checked(menu::SHOW_TAB_BAR.id, handles.defaults.read().show_tab_bar);
     use_menu_enabled(menu::NEXT_TAB, tabs > 1);
     use_menu_enabled(menu::PREVIOUS_TAB, tabs > 1);
     use_menu_enabled(menu::MOVE_TAB_LEFT.id, active > 0);
     use_menu_enabled(menu::MOVE_TAB_RIGHT.id, active + 1 < tabs);
     use_menu_enabled(menu::SPLIT_PANE, split);
     use_submenu_items(menu::SELECT_TAB, menu::select_tab_items(&titles, active));
+    let profiles = handles.defaults.read().profiles();
+    use_profiles_menu(profiles.into_iter().map(|profile| profile.name).collect());
+}
+
+fn use_profiles_menu(names: Vec<String>) {
+    let handle = use_hook(try_consume_root_context::<MenuHandle>);
+    let mut published = use_state(|| None::<Vec<String>>);
+    if published.peek().as_ref() == Some(&names) {
+        return;
+    }
+    published.set(Some(names.clone()));
+    let Some(handle) = handle else {
+        return;
+    };
+    #[cfg(feature = "kit-parcheado")]
+    handle.set_menu_items(tr!("menu-profiles"), menu::profile_items(&names));
+    // BK-010: without patch 0004 only the entries the window opened with can change.
+    #[cfg(not(feature = "kit-parcheado"))]
+    for (index, name) in names.iter().enumerate() {
+        handle.update(format!("{}{index}", menu::PROFILE_PREFIX), |item| {
+            if let barrier_kit::menu::MenuItem::Action { label, .. } = item {
+                *label = name.clone();
+            }
+        });
+    }
 }
 
 fn copy(session: &Session, clipboard: ClipboardState) {
@@ -354,11 +429,7 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent) {
     }
 }
 
-fn spawn(
-    handles: &Handles,
-    events: &Events,
-    directory: Option<std::path::PathBuf>,
-) -> Option<SessionId> {
+fn spawn(handles: &Handles, events: &Events, launch: Launch) -> Option<SessionId> {
     let (columns, lines) = INITIAL_GRID;
     let size = handles.active().map_or(
         GridSize {
@@ -373,7 +444,7 @@ fn spawn(
     let id = *next_id.peek();
     *next_id.write() += 1;
     let listener = Listener::new(id, events.0.clone(), events.1.clone());
-    match Session::spawn(id, size, directory, listener) {
+    match Session::spawn(id, size, launch, listener) {
         Ok(session) => {
             let mut sessions = handles.sessions;
             sessions.write().insert(id, Rc::new(session));
@@ -386,17 +457,39 @@ fn spawn(
     }
 }
 
-fn new_tab(handles: &Handles, events: &Events, directory: Option<std::path::PathBuf>) {
-    if let Some(id) = spawn(handles, events, directory) {
+fn new_tab(handles: &Handles, events: &Events, profile: &str, directory: Option<PathBuf>) {
+    let previous = handles
+        .active()
+        .and_then(|session| session.working_directory());
+    let mut launch = handles.launch(profile, previous);
+    if directory.is_some() {
+        launch.directory = directory;
+    }
+    if let Some(id) = spawn(handles, events, launch) {
         let mut workspace = handles.workspace;
         workspace.write().open_tab(id);
     }
 }
 
 fn split(handles: &Handles, events: &Events, axis: Axis) {
-    if let Some(id) = spawn(handles, events, None) {
+    let previous = handles
+        .active()
+        .and_then(|session| session.working_directory());
+    let launch = handles.launch(&handles.current_profile(), previous);
+    if let Some(id) = spawn(handles, events, launch) {
         let mut workspace = handles.workspace;
         workspace.write().split(id, axis);
+    }
+}
+
+fn restart(handles: &Handles, events: &Events, session: &Session) {
+    let mut launch = handles.launch(&session.profile, None);
+    launch.directory = session.working_directory().or(launch.directory);
+    if let Some(id) = spawn(handles, events, launch) {
+        let mut workspace = handles.workspace;
+        workspace.write().replace(session.id, id);
+        let mut sessions = handles.sessions;
+        sessions.write().remove(&session.id);
     }
 }
 
@@ -439,20 +532,31 @@ fn on_action(id: &str, handles: &Handles, events: &Events) {
         workspace.write().select_tab(index);
         return;
     }
+    if let Some(profile) = id
+        .strip_prefix(menu::PROFILE_PREFIX)
+        .and_then(|index| index.parse::<usize>().ok())
+        .and_then(|index| handles.defaults.peek().profiles().get(index).cloned())
+    {
+        new_tab(handles, events, &profile.name, None);
+        return;
+    }
     match id {
-        _ if id == menu::ABOUT.id => windows::open(Some("--about")),
-        _ if id == menu::SETTINGS.id => windows::open(Some("--settings")),
+        _ if id == menu::ABOUT.id => windows::open(&["--about"]),
+        _ if id == menu::SETTINGS.id => windows::open(&["--settings"]),
         _ if id == menu::QUIT.id => {
             windows::quit_others();
             handles.controls.close();
         }
-        _ if id == menu::NEW_WINDOW.id => windows::open(None),
-        _ if id == menu::NEW_TAB.id => new_tab(handles, events, None),
+        _ if id == menu::NEW_WINDOW.id => windows::open(&[]),
+        _ if id == menu::NEW_TAB.id => {
+            let profile = handles.defaults.peek().default_profile_name();
+            new_tab(handles, events, &profile, None);
+        }
         _ if id == menu::DUPLICATE_TAB.id => {
             let directory = active
                 .as_ref()
                 .and_then(|session| session.working_directory());
-            new_tab(handles, events, directory);
+            new_tab(handles, events, &handles.current_profile(), directory);
         }
         _ if id == menu::SPLIT_VERTICALLY.id => split(handles, events, Axis::Row),
         _ if id == menu::SPLIT_HORIZONTALLY.id => split(handles, events, Axis::Column),
@@ -482,9 +586,7 @@ fn on_action(id: &str, handles: &Handles, events: &Events) {
             }
         }
         _ if id == menu::SHOW_TAB_BAR.id => {
-            let mut show = handles.show_tab_bar;
-            let shown = *show.peek();
-            show.set(!shown);
+            change_defaults(|defaults| defaults.show_tab_bar = !defaults.show_tab_bar);
         }
         _ if id == menu::FULL_SCREEN.id => handles.controls.toggle_fullscreen(),
         menu::MAXIMIZE_PANE => workspace.write().toggle_zoom(),
@@ -492,7 +594,33 @@ fn on_action(id: &str, handles: &Handles, events: &Events) {
         _ if id == menu::TEXT_SMALLER.id => *handles.text_zoom.clone().write() -= 1,
         _ if id == menu::TEXT_NORMAL.id => handles.text_zoom.clone().set(0),
         _ if id == menu::MINIMIZE.id => handles.controls.minimize(),
-        _ if id == menu::ZOOM.id => handles.controls.toggle_maximize(),
+        menu::ZOOM => handles.controls.toggle_maximize(),
+        _ if id == menu::NEW_WINDOW_PROFILE.id => {
+            windows::open(&["--profile", &handles.current_profile()]);
+        }
+        _ if id == menu::NEW_TAB_PROFILE.id => {
+            new_tab(handles, events, &handles.current_profile(), None);
+        }
+        _ if id == menu::CLEAR_BUFFER.id => {
+            if let Some(session) = &active {
+                session.clear_buffer();
+            }
+        }
+        _ if id == menu::CLEAR_SCROLLBACK.id => {
+            if let Some(session) = &active {
+                session.clear_scrollback();
+            }
+        }
+        _ if id == menu::RESET.id => {
+            if let Some(session) = &active {
+                session.reset();
+            }
+        }
+        _ if id == menu::RESTART_SESSION.id => {
+            if let Some(session) = active {
+                restart(handles, events, &session);
+            }
+        }
         menu::NEXT_TAB => workspace.write().step_tab(1),
         menu::PREVIOUS_TAB => workspace.write().step_tab(-1),
         _ if id == menu::MOVE_TAB_LEFT.id => workspace.write().move_tab(-1),

@@ -15,6 +15,7 @@ use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::test::TermSize;
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::tty;
+use alacritty_terminal::vte::ansi::Handler;
 use barrier_kit::platform::WakeHandle;
 
 pub type SessionId = u64;
@@ -72,8 +73,15 @@ impl GridSize {
     }
 }
 
+pub struct Launch {
+    pub profile: String,
+    pub command: Option<String>,
+    pub directory: Option<PathBuf>,
+}
+
 pub struct Session {
     pub id: SessionId,
+    pub profile: String,
     pub term: Arc<FairMutex<Term<Listener>>>,
     sender: EventLoopSender,
     size: Cell<GridSize>,
@@ -85,12 +93,14 @@ impl Session {
     pub fn spawn(
         id: SessionId,
         size: GridSize,
-        working_directory: Option<PathBuf>,
+        launch: Launch,
         listener: Listener,
     ) -> io::Result<Self> {
         let options = tty::Options {
-            shell: None,
-            working_directory,
+            shell: launch
+                .command
+                .map(|command| tty::Shell::new("/bin/sh".into(), vec!["-c".into(), command])),
+            working_directory: launch.directory,
             drain_on_exit: false,
             env: HashMap::from([
                 ("TERM".into(), "xterm-256color".into()),
@@ -110,6 +120,7 @@ impl Session {
         event_loop.spawn();
         Ok(Self {
             id,
+            profile: launch.profile,
             term,
             sender,
             size: Cell::new(size),
@@ -198,6 +209,26 @@ impl Session {
 
     pub fn clear_selection(&self) {
         self.term.lock().selection = None;
+    }
+
+    pub fn reset(&self) {
+        self.term.lock().reset_state();
+    }
+
+    pub fn clear_scrollback(&self) {
+        self.term.lock().grid_mut().clear_history();
+    }
+
+    pub fn clear_buffer(&self) {
+        let mut term = self.term.lock();
+        let cursor = term.grid().cursor.point;
+        term.scroll_up(cursor.line.0.max(0) as usize);
+        term.grid_mut().clear_history();
+        term.goto(0, cursor.column.0);
+    }
+
+    pub fn has_scrollback(&self) -> bool {
+        self.term.lock().history_size() > 0
     }
 
     pub fn display_offset(&self) -> usize {

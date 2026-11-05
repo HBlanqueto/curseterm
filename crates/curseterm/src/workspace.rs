@@ -98,6 +98,15 @@ impl Workspace {
         Some(Closed::Pane)
     }
 
+    pub fn replace(&mut self, old: SessionId, new: SessionId) {
+        self.titles.remove(&old);
+        for tab in &mut self.tabs {
+            if tab.root.replace(old, new) && tab.active == old {
+                tab.active = new;
+            }
+        }
+    }
+
     pub fn close_tab(&mut self, index: usize) -> Vec<SessionId> {
         let Some(tab) = self.tabs.get(index) else {
             return Vec::new();
