@@ -956,3 +956,15 @@ informe fuera de los tests.
 - No hay ajuste para desactivar el informe del ratón por perfil.
 - El modo UTF-8 (1005) no está; las celdas más allá de la columna 222 no se
   informan en el formato clásico.
+
+## Fase 18 — Coprocesos
+
+### Plan
+
+1. **Session › Run Coprocess…:** una hoja pide la orden; se lanza con
+   `sh -c` en el directorio de la sesión. Lo que sale del terminal le llega
+   por la entrada estándar y lo que escribe entra en la sesión como si se
+   tecleara.
+2. **Session › Stop Coprocess:** termina el coproceso. Las dos entradas se
+   activan según haya uno en marcha; cuando acaba solo, se recoge.
+3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.

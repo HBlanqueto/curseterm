@@ -955,3 +955,15 @@ report outside the tests.
 - There is no setting to turn mouse reporting off per profile.
 - UTF-8 mode (1005) is missing; cells past column 222 are not reported in
   the classic format.
+
+## Phase 18 — Coprocesses
+
+### Plan
+
+1. **Session › Run Coprocess…:** a sheet asks for the command; it runs with
+   `sh -c` in the session directory. What comes out of the terminal reaches
+   its standard input and what it writes enters the session as if typed.
+2. **Session › Stop Coprocess:** ends the coprocess. Both items enable
+   depending on whether one is running; when it ends on its own, it is
+   reaped.
+3. **Test** on headless sway and documentation in both languages.
