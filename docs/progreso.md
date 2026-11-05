@@ -993,3 +993,15 @@ entrada, pero sigue si no la lee).
   coproceso no reciba la salida.
 - Lo que escribe el coproceso se manda tal cual, sin el modo de pegado entre
   corchetes.
+
+## Fase 19 — Indicador de desplazamiento y selección inteligente
+
+### Plan
+
+1. **Indicador de desplazamiento:** al subir por el historial, una barra fina
+   en el borde derecho del panel muestra qué parte del historial se ve.
+2. **Selección inteligente (cuatro clics):** selecciona la URL entera bajo
+   el puntero o, si no hay, la palabra separada por espacios (una ruta con
+   `/` y `:`), como el «smart selection» de iTerm2. Uno, dos y tres clics
+   siguen seleccionando carácter, palabra y línea.
+3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.

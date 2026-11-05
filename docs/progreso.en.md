@@ -991,3 +991,15 @@ input, but keeps running if it does not read it).
 - There are no automatic coprocesses from triggers nor the option for the
   coprocess not to get the output.
 - What the coprocess writes is sent as is, without bracketed paste mode.
+
+## Phase 19 — Scroll indicator and smart selection
+
+### Plan
+
+1. **Scroll indicator:** when scrolled up through the scrollback, a thin bar
+   on the pane's right edge shows which part of the scrollback is visible.
+2. **Smart selection (four clicks):** selects the whole URL under the
+   pointer or, when there is none, the space-separated word (a path with `/`
+   and `:`), like iTerm2's smart selection. One, two and three clicks still
+   select character, word and line.
+3. **Test** on headless sway and documentation in both languages.
