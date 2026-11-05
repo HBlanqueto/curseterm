@@ -211,3 +211,6 @@ log-menu = Log
 log-start = Log to File…
 log-stop = Stop Logging
 log-confirm = Start Logging
+profile-badge = Badge
+profile-badge-detail = Large translucent text in the top-right corner of each pane; \(session.name) becomes the session title
+profile-badge-placeholder = No badge

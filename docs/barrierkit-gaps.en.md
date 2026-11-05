@@ -2,7 +2,7 @@
 
 BarrierKit version/commit used: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Summary: living document; state at the close of phase 12 (2026-11-05), tested on
+Summary: living document; state at the close of phase 13 (2026-11-05), tested on
 headless sway with lavapipe (`progreso.en.md`). The most serious: the
 `use_menu_action` handlers run outside Freya's context and abort the app if
 they touch the clipboard or `WindowControls::get()` (BK-017); the menu is only
@@ -60,6 +60,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-028 | controls | `SegmentedControl` labels wrap onto two lines | low | Workaround: Settings at 980 px |
 | BK-029 | controls | `TextField` cannot take the focus when it opens | medium | Patch 0006 tested |
 | BK-030 | input | Mouse events carry no modifiers | medium | Workaround: Super tracked through the keyboard |
+| BK-031 | window / appearance | A window cannot ask for a translucent background | medium | None; no View › Use Transparency |
 
 ## Gaps
 
@@ -648,6 +649,22 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Proposed kit API**: `modifiers` in the pointer data, or a query for the current modifiers.
 - **Severity**: medium
 - **How to reproduce**: read `MouseEventData` in `freya-core-0.4.3/src/events/data.rs`.
+
+### BK-031 — A window cannot ask for a translucent background
+- **Area**: window / appearance
+- **What CurseTerm needed**: View › Use Transparency (⌘U) and iTerm2's
+  per-profile transparency.
+- **What BarrierKit offers today**: the runner clears each window with
+  `surface_background` (`theme.rs:30`), which comes from the global
+  appearance; with alpha 1 it declares the region opaque
+  (`platform/surface.rs:238`). The app cannot change it.
+- **What is missing**: a per-window background, or an alpha the app can ask
+  for, composed by the compositor with its blur.
+- **How CurseTerm solves it**: it does not; View has no Use Transparency.
+- **Workaround cost**: a visible iTerm2 feature is missing.
+- **Proposed kit API**: `WindowControls::set_background(Rgba)` or `WindowOptions::background`.
+- **Severity**: medium
+- **How to reproduce**: paint the app root with alpha 0.5; the window stays opaque.
 
 ## Things that worked well
 

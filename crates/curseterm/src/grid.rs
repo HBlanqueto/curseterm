@@ -186,6 +186,7 @@ pub struct Overlay<'a> {
     pub matches: &'a [Match],
     pub inset: f32,
     pub broadcast: Option<Rgb>,
+    pub badge: Option<&'a str>,
 }
 
 pub fn draw(
@@ -212,6 +213,9 @@ pub fn draw(
         .draw_rect(SkRect::new(0.0, 0.0, ctx.width, ctx.height), &fill);
     if let Some(tint) = overlay.broadcast {
         draw_broadcast(ctx, tint);
+    }
+    if let Some(badge) = overlay.badge {
+        draw_badge(ctx, badge, fonts, scheme);
     }
     ctx.canvas.save();
     ctx.canvas.translate((overlay.inset, overlay.inset));
@@ -420,6 +424,25 @@ fn draw_timestamps(
             &ink,
         );
     }
+}
+
+fn draw_badge(ctx: &mut CanvasContext, badge: &str, fonts: &Fonts, scheme: &Scheme) {
+    let Some(font) = fonts
+        .face('A', 1)
+        .with_size(fonts.size * TERMINAL.badge_scale)
+    else {
+        return;
+    };
+    let (width, _) = font.measure_str(badge, None);
+    let margin = fonts.cell_width * 2.0;
+    let mut ink = paint(scheme.foreground);
+    ink.set_alpha_f(TERMINAL.badge_alpha);
+    ctx.canvas.draw_str(
+        badge,
+        (ctx.width - width - margin, margin + font.size()),
+        &font,
+        &ink,
+    );
 }
 
 fn draw_broadcast(ctx: &mut CanvasContext, tint: Rgb) {

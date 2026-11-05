@@ -773,3 +773,28 @@ un aviso); Paste Slowly con varias sesiones en difusión.
 3. **Transparencia:** queda fuera; el kit no deja que una ventana pida fondo
    translúcido (se anota como gap).
 4. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla con el `xdg-open` falso de la fase 11.
+`./dev.sh check` limpio en los dos modos del kit; 35 tests de la app y 1 del
+bloque. Un gap nuevo: BK-031, la ventana no puede pedir fondo translúcido.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `badge = '\(session.name) · prod'` en el `.domain`: el panel muestra «root@vm: ~ · prod» arriba a la derecha | ✓ | `fase13-insignia.png` |
+| Ajustes › Perfiles › General tiene la fila Badge; escribir `dev` cambia la insignia de la ventana abierta | ✓ | `fase13-ajustes-insignia.png` |
+| `echo 'ver notas.txt:3 y nada.txt'` en `~`; Super+clic en `notas.txt:3` abre `/root/notas.txt`; en `nada.txt`, que no existe, no abre nada | ✓ | — |
+
+**No probado:** la insignia en paneles divididos estrechos, donde el texto
+puede salirse por la izquierda.
+
+**Difiere de iTerm2:**
+
+- La insignia solo entiende `\(session.name)`; iTerm2 admite muchas
+  variables y su tamaño y posición se ajustan.
+- Super+clic en una ruta abre el archivo con `xdg-open`; iTerm2 deja elegir
+  el editor y salta a la línea.
+- Sin Use Transparency (BK-031).

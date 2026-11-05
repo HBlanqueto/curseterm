@@ -492,6 +492,10 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                     find: painting.find.clone().filter(|_| *id == painting.active),
                     on_focus: Callback::new(move |id| workspace.write().focus(id)),
                     super_held: painting.handles.super_held,
+                    badge: (!profile.badge.is_empty()).then(|| {
+                        let title = painting.workspace.peek().title(*id).to_string();
+                        Rc::from(profile.badge.replace(r"\(session.name)", &title))
+                    }),
                 }
                 .into_element()
             }

@@ -38,6 +38,7 @@ pub struct Profile {
     pub when_session_ends: SessionEnd,
     pub prompt_before_closing: ClosePrompt,
     pub alt_key: AltKey,
+    pub badge: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -117,6 +118,7 @@ impl Default for Profile {
             when_session_ends: SessionEnd::Close,
             prompt_before_closing: ClosePrompt::IfJobs,
             alt_key: AltKey::Escape,
+            badge: String::new(),
         }
     }
 }

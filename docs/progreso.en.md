@@ -775,3 +775,28 @@ warning); Paste Slowly with several broadcast sessions.
 3. **Transparency:** left out; the kit does not let a window ask for a
    translucent background (recorded as a gap).
 4. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-05)
+
+Tested on headless sway with phase 11's fake `xdg-open`. `./dev.sh check`
+clean in both kit modes; 35 app tests and 1 block test. One new gap: BK-031,
+the window cannot ask for a translucent background.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `badge = '\(session.name) · prod'` in the `.domain`: the pane shows "root@vm: ~ · prod" at the top right | ✓ | `fase13-insignia.png` |
+| Settings › Profiles › General has the Badge row; typing `dev` changes the badge of the open window | ✓ | `fase13-ajustes-insignia.png` |
+| `echo 'ver notas.txt:3 y nada.txt'` in `~`; Super+click on `notas.txt:3` opens `/root/notas.txt`; on `nada.txt`, which does not exist, nothing opens | ✓ | — |
+
+**Not tested:** the badge in narrow split panes, where the text can spill
+out on the left.
+
+**Differs from iTerm2:**
+
+- The badge only understands `\(session.name)`; iTerm2 accepts many
+  variables and adjusts its size and position.
+- Super+click on a path opens the file with `xdg-open`; iTerm2 lets you
+  choose the editor and jumps to the line.
+- No Use Transparency (BK-031).

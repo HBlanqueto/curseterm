@@ -2,7 +2,7 @@
 
 Versión/commit de BarrierKit usado: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Resumen: documento vivo; estado al cerrar la fase 12 (2026-11-05), probado en
+Resumen: documento vivo; estado al cerrar la fase 13 (2026-11-05), probado en
 sway sin pantalla con lavapipe (`progreso.md`). Lo más serio: los handlers de
 `use_menu_action` corren fuera del contexto de Freya y hacen abortar la app si
 tocan el portapapeles o `WindowControls::get()` (BK-017); el menú solo se
@@ -60,6 +60,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-028 | controles | Las etiquetas de `SegmentedControl` se parten en dos líneas | baja | Workaround: Ajustes a 980 px |
 | BK-029 | controles | `TextField` no puede tomar el foco al abrirse | media | Parche 0006 probado |
 | BK-030 | entrada | Los eventos de ratón no traen modificadores | media | Workaround: Super seguido con el teclado |
+| BK-031 | ventana / apariencia | Una ventana no puede pedir fondo translúcido | media | Ninguna; sin View › Use Transparency |
 
 ## Gaps
 
@@ -652,6 +653,23 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **API propuesta para el kit**: `modifiers` en los datos de puntero, o una consulta de los modificadores actuales.
 - **Gravedad**: media
 - **Cómo reproducirlo**: leer `MouseEventData` en `freya-core-0.4.3/src/events/data.rs`.
+
+### BK-031 — Una ventana no puede pedir fondo translúcido
+- **Área**: ventana / apariencia
+- **Qué necesitaba CurseTerm**: View › Use Transparency (⌘U) y la
+  transparencia por perfil de iTerm2.
+- **Qué ofrece hoy BarrierKit**: el runner limpia cada ventana con
+  `surface_background` (`theme.rs:30`), que sale de la apariencia global; con
+  alfa 1 declara la región opaca (`platform/surface.rs:238`). La app no puede
+  cambiarlo.
+- **Qué falta**: un fondo por ventana, o un alfa que la app pueda pedir, y que
+  el compositor lo componga con su desenfoque.
+- **Cómo lo resolví en CurseTerm**: no lo resolví; View no tiene Use
+  Transparency.
+- **Coste del workaround**: falta una función visible de iTerm2.
+- **API propuesta para el kit**: `WindowControls::set_background(Rgba)` o `WindowOptions::background`.
+- **Gravedad**: media
+- **Cómo reproducirlo**: pintar la raíz de la app con alfa 0,5; la ventana sigue opaca.
 
 ## Cosas que funcionaron bien
 

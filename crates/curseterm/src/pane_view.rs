@@ -27,6 +27,7 @@ pub struct TerminalPane {
     pub find: Option<Rc<str>>,
     pub on_focus: Callback<SessionId, ()>,
     pub super_held: State<bool>,
+    pub badge: Option<Rc<str>>,
 }
 
 impl PartialEq for TerminalPane {
@@ -38,6 +39,7 @@ impl PartialEq for TerminalPane {
             && self.revision == other.revision
             && self.broadcast == other.broadcast
             && self.find == other.find
+            && self.badge == other.badge
     }
 }
 
@@ -61,6 +63,7 @@ impl Component for TerminalPane {
         let find = self.find.clone();
         let on_focus = self.on_focus.clone();
         let super_held = self.super_held;
+        let badge = self.badge.clone();
 
         let mut look = DefaultHasher::new();
         (
@@ -70,6 +73,7 @@ impl Component for TerminalPane {
             focused,
             broadcast,
             &find,
+            &badge,
             &scheme.name,
             fonts.cell_width.to_bits(),
         )
@@ -90,6 +94,7 @@ impl Component for TerminalPane {
                     matches: &matches,
                     inset: SPACE_2,
                     broadcast: broadcast.then_some(scheme.ansi[1]),
+                    badge: badge.as_deref(),
                 };
                 grid::draw(ctx, &term, &fonts, &scheme, focused, &overlay);
             })

@@ -211,3 +211,6 @@ log-menu = Registro
 log-start = Registrar en un archivo…
 log-stop = Dejar de registrar
 log-confirm = Empezar a registrar
+profile-badge = Insignia
+profile-badge-detail = Texto grande y translúcido en la esquina superior derecha de cada panel; \(session.name) pasa a ser el título de la sesión
+profile-badge-placeholder = Sin insignia

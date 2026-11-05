@@ -328,7 +328,12 @@ impl Session {
             return Some(link.uri().to_string());
         }
         let (text, columns) = pty_io::trimmed_text_and_byte_columns(&term, point.line);
-        links::url_at(&text, &columns, point.column.0)
+        if let Some(url) = links::url_at(&text, &columns, point.column.0) {
+            return Some(url);
+        }
+        let word = links::word_at(&text, &columns, point.column.0)?;
+        let path = self.working_directory()?.join(word);
+        path.exists().then(|| path.display().to_string())
     }
 
     pub fn has_output(&self) -> bool {
