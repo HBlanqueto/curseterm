@@ -287,3 +287,27 @@ del menú, sin captura).
   (BK-023). Los colores `Calibrated` de un `.itermcolors` se toman como sRGB.
 - «Show Tab Bar» está en View; en iTerm2 actual solo existe en Appearance.
 - La ventana de Ajustes no tiene buscador.
+
+## Fase 4 — Lo característico de iTerm2
+
+### Plan
+
+1. **Bucle de E/S propio** (ADR 0005) con un separador de OSC 7, 133 y 1337.
+2. **Shell integration:** directorio actual por OSC 7 y `1337;CurrentDir`
+   (lo usan Duplicate Tab y «Reuse previous session's directory»); marcas
+   por OSC 133;A y `1337;SetMark`, con el triángulo de iTerm2 en el margen,
+   Set Mark, Jump to Mark, Next y Previous Mark.
+3. **Find** (Edit › Find ▸): barra de búsqueda en el panel con resaltado,
+   Find Next, Find Previous y Use Selection for Find, con la búsqueda regex
+   de `alacritty_terminal`.
+4. **Broadcast input** (Shell › Broadcast Input ▸): solo la sesión actual,
+   todos los paneles de la pestaña o de todas, con un indicador en los
+   paneles que reciben.
+5. **Imágenes en línea** (`1337;File=…;inline=1`), decodificadas con Skia.
+6. **Triggers** por perfil (regex y acción: resaltar, campana o enviar
+   texto), editables en Ajustes y activables desde Session › Triggers ▸.
+7. **Hotkey window:** Wayland no tiene atajos globales salvo el portal
+   `GlobalShortcuts`, que el portal de Malaysia no implementa y el kit no
+   usa. Se anota como gap y se ofrece `curseterm --hotkey`, que abre o cierra
+   una ventana dedicada, para enlazarlo a un atajo del escritorio.
+8. **Prueba** en sway sin pantalla, como en las fases anteriores.
