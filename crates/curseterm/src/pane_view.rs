@@ -14,6 +14,7 @@ use vow_design::SPACE_2;
 
 use crate::config::Scheme;
 use crate::grid::{self, Fonts};
+use crate::links;
 use crate::session::{self, Session, SessionId};
 
 pub struct TerminalPane {
@@ -25,6 +26,7 @@ pub struct TerminalPane {
     pub broadcast: bool,
     pub find: Option<Rc<str>>,
     pub on_focus: Callback<SessionId, ()>,
+    pub super_held: State<bool>,
 }
 
 impl PartialEq for TerminalPane {
@@ -58,6 +60,7 @@ impl Component for TerminalPane {
         let broadcast = self.broadcast;
         let find = self.find.clone();
         let on_focus = self.on_focus.clone();
+        let super_held = self.super_held;
 
         let mut look = DefaultHasher::new();
         (
@@ -136,6 +139,12 @@ impl Component for TerminalPane {
                             }
                             on_focus.call(session.id);
                             let (point, side) = point_at(data.element_location.to_tuple());
+                            if *super_held.peek()
+                                && let Some(link) = session.link_at(point)
+                            {
+                                links::open(&link);
+                                return;
+                            }
                             let click = next_click(*last_click.read(), point);
                             last_click.set(Some(click));
                             let kind = match click.count {

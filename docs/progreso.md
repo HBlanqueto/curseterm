@@ -678,3 +678,35 @@ sesión que llega al límite del historial.
    (empieza en la carpeta personal; `~/` se expande) que guarda la selección.
 4. **Prueba** en sway sin pantalla, con un `xdg-open` falso que anota lo que
    recibe, y documentación en los dos idiomas.
+
+### Resultado (2026-11-05)
+
+Probado en sway sin pantalla con un `xdg-open` falso al principio del `PATH`
+que anota sus argumentos; Open Selection, sin atajo, con el kit parcheado y
+el menú en D-Bus. `./dev.sh check` limpio en los dos modos del kit; 33 tests
+de la app y 1 del bloque. Un gap nuevo: BK-030, los eventos de ratón no
+traen modificadores.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Clic normal en `https://example.org/prueba,`: no abre nada | ✓ | — |
+| Super+clic en esa URL: `xdg-open https://example.org/prueba`, sin la coma | ✓ tras contar la propia tecla Meta como pulsada (BK-030) | — |
+| Super+clic en un texto con OSC 8: `xdg-open https://osc8.example/doc` | ✓ | — |
+| Doble clic en `seleccion-abierta`, ⌘S, `rel.txt` e Intro: `~/rel.txt` guarda la palabra; `~/sel.txt` y `/tmp/abs.txt` también | ✓ | `fase11-guardar-seleccion.png` |
+| Open Selection y Save Selected Text desactivadas sin selección y activadas con ella; Open Selection abre el texto elegido | ✓ | — |
+
+**No probado:** un fallo al guardar (solo deja un aviso en el registro);
+la hoja de guardar con el foco automático del parche 0006 tras dejar el
+campo vacío al abrir.
+
+**Difiere de iTerm2:**
+
+- No hay panel para elegir el archivo (BK-023): la ruta se escribe, y una
+  relativa parte de la carpeta personal.
+- Un error al guardar no se muestra en la ventana.
+- Las URL se buscan en la fila pulsada; una URL partida en dos filas solo se
+  encuentra si tiene OSC 8.
+- El doble clic separa en `:` y `/`, así que Open Selection abre lo
+  seleccionado tal cual; no hay selección inteligente de URL.

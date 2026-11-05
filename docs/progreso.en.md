@@ -681,3 +681,35 @@ reaches the scrollback limit.
    starts at the home folder; `~/` expands) that saves the selection.
 4. **Test** on headless sway, with a fake `xdg-open` that records what it
    gets, and documentation in both languages.
+
+### Result (2026-11-05)
+
+Tested on headless sway with a fake `xdg-open` at the front of `PATH` that
+records its arguments; Open Selection, which has no shortcut, with the
+patched kit and the D-Bus menu. `./dev.sh check` clean in both kit modes; 33
+app tests and 1 block test. One new gap: BK-030, mouse events carry no
+modifiers.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Plain click on `https://example.org/prueba,`: opens nothing | ✓ | — |
+| Super+click on that URL: `xdg-open https://example.org/prueba`, without the comma | ✓ after counting the Meta key itself as held (BK-030) | — |
+| Super+click on OSC 8 text: `xdg-open https://osc8.example/doc` | ✓ | — |
+| Double click on `seleccion-abierta`, ⌘S, `rel.txt` and Enter: `~/rel.txt` saves the word; `~/sel.txt` and `/tmp/abs.txt` too | ✓ | `fase11-guardar-seleccion.png` |
+| Open Selection and Save Selected Text disabled without a selection and enabled with one; Open Selection opens the chosen text | ✓ | — |
+
+**Not tested:** a failed save (it only leaves a warning in the log); the
+save sheet with patch 0006's automatic focus now that the field starts
+empty.
+
+**Differs from iTerm2:**
+
+- There is no panel to choose the file (BK-023): the path is typed, and a
+  relative one starts at the home folder.
+- A save error is not shown in the window.
+- URLs are searched in the clicked row; a URL split across two rows is only
+  found when it has OSC 8.
+- Double click splits at `:` and `/`, so Open Selection opens the selection
+  as is; there is no smart URL selection.

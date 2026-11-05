@@ -34,6 +34,9 @@ pub const SPLIT_VERTICALLY: Action =
 pub const SPLIT_HORIZONTALLY: Action =
     Action::new("split-horizontally", || tr!("split-horizontally"))
         .shortcut(super_with(Modifiers::SHIFT, 'd'));
+pub const SAVE_SELECTION: Action =
+    Action::new("save-selection", || tr!("save-selection")).shortcut(super_key('s'));
+pub const OPEN_SELECTION: Action = Action::new("open-selection", || tr!("open-selection"));
 pub const CLOSE: Action = Action::new("close", || tr!("close")).shortcut(super_key('w'));
 pub const CLOSE_WINDOW: Action =
     Action::new("close-window", || tr!("close-window")).shortcut(super_with(Modifiers::SHIFT, 'w'));
@@ -149,6 +152,8 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 SPLIT_HORIZONTALLY.item(true),
                 SPLIT_VERTICALLY.item(true),
                 MenuItem::Separator,
+                SAVE_SELECTION.item(false),
+                MenuItem::Separator,
                 CLOSE.item(true),
                 CLOSE_WINDOW.item(true),
                 CLOSE_PANES.item(false),
@@ -167,6 +172,8 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 COPY.item(false),
                 COPY_MODE.item_with(true, CheckState::Checkbox(false)),
                 PASTE.item(true),
+                MenuItem::Separator,
+                OPEN_SELECTION.item(false),
                 MenuItem::Separator,
                 SELECT_ALL.item(true),
                 SELECT_OUTPUT.item(false),

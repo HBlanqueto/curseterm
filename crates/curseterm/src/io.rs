@@ -354,7 +354,7 @@ fn run_triggers(
     }
 }
 
-fn trimmed_text_and_byte_columns(term: &Term<Listener>, line: Line) -> (String, Vec<usize>) {
+pub fn trimmed_text_and_byte_columns(term: &Term<Listener>, line: Line) -> (String, Vec<usize>) {
     let mut text = String::new();
     let mut columns = Vec::new();
     for (column, cell) in term.grid()[line].into_iter().enumerate() {

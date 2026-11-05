@@ -22,6 +22,7 @@ use barrier_kit::platform::WakeHandle;
 use crate::config::{APP_NAME, Profile, SCROLLBACK_LIMIT};
 use crate::io::{self as pty_io, Extras};
 use crate::keys::CopyCommand;
+use crate::links;
 
 pub type SessionId = u64;
 
@@ -299,6 +300,15 @@ impl Session {
     pub fn set_mark(&self) {
         let line = pty_io::absolute_line(&self.term.lock());
         self.extras().add_mark(line);
+    }
+
+    pub fn link_at(&self, point: Point) -> Option<String> {
+        let term = self.term.lock();
+        if let Some(link) = term.grid()[point].hyperlink() {
+            return Some(link.uri().to_string());
+        }
+        let (text, columns) = pty_io::trimmed_text_and_byte_columns(&term, point.line);
+        links::url_at(&text, &columns, point.column.0)
     }
 
     pub fn has_output(&self) -> bool {

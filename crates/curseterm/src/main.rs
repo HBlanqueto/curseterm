@@ -6,6 +6,7 @@ mod integration;
 mod io;
 mod itermcolors;
 mod keys;
+mod links;
 mod localize;
 mod menu;
 mod osc;

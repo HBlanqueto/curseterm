@@ -199,3 +199,7 @@ copy-select-characters = Select characters
 copy-select-lines = Select lines
 copy-and-leave = Copy and leave
 copy-leave = Leave copy mode
+save-selection = Save Selected Text…
+save-path = File name or path, from your home folder
+save-confirm = Save
+open-selection = Open Selection

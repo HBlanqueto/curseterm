@@ -33,6 +33,7 @@ use crate::config::{
 };
 use crate::grid::Fonts;
 use crate::keys::{COPY_KEYS, CopyCommand, KeyAction, copy_command, encode};
+use crate::links;
 use crate::localize::tr;
 use crate::menu;
 use crate::pane_view::TerminalPane;
@@ -73,6 +74,7 @@ struct Handles {
     paste_history: PasteHistory,
     sheet: State<Option<Sheet>>,
     draft: State<String>,
+    super_held: State<bool>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -80,6 +82,7 @@ enum Sheet {
     PasteHistory,
     RenameTab(SessionId),
     RenameWindow,
+    SaveSelection(SessionId),
     CopyModeKeys,
 }
 
@@ -196,6 +199,7 @@ impl App for Terminal {
         let buried = use_state(|| None::<Buried>);
         let pastes = use_state(Vec::<String>::new);
         let sheet = use_state(|| None::<Sheet>);
+        let mut super_held = use_state(|| false);
         let draft = use_state(String::new);
         let paste_history = PasteHistory {
             query: use_state(String::new),
@@ -226,6 +230,7 @@ impl App for Terminal {
             paste_history,
             sheet,
             draft,
+            super_held,
         });
         use_side_effect({
             let handles = handles.clone();
@@ -369,7 +374,9 @@ impl App for Terminal {
         let alert = (*closing.read()).map(|pending| close_alert(&handles, pending));
         let sheet_view = (*sheet.read()).map(|open| match open {
             Sheet::PasteHistory => paste_history_sheet(&handles, revision),
-            Sheet::RenameTab(_) | Sheet::RenameWindow => rename_sheet(&handles, open),
+            Sheet::RenameTab(_) | Sheet::RenameWindow | Sheet::SaveSelection(_) => {
+                field_sheet(&handles, open)
+            }
             Sheet::CopyModeKeys => copy_mode_keys_sheet(&handles),
         });
         rect()
@@ -378,8 +385,15 @@ impl App for Terminal {
             .direction(Direction::Vertical)
             .content(Content::flex())
             .background(color(palette.window_background))
+            .on_global_key_up(move |event: Event<KeyboardEventData>| {
+                let data = event.data();
+                let released = matches!(data.key, Key::Named(NamedKey::Meta));
+                super_held.set_if_modified(!released && data.modifiers.contains(Modifiers::META));
+            })
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
                 let data = event.data();
+                let meta = data.key == Key::Named(NamedKey::Meta);
+                super_held.set_if_modified(meta || data.modifiers.contains(Modifiers::META));
                 if keyboard.closing.peek().is_some() {
                     return;
                 }
@@ -474,6 +488,7 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                     broadcast: painting.receivers.contains(id),
                     find: painting.find.clone().filter(|_| *id == painting.active),
                     on_focus: Callback::new(move |id| workspace.write().focus(id)),
+                    super_held: painting.handles.super_held,
                 }
                 .into_element()
             }
@@ -527,6 +542,8 @@ fn use_live_menu(handles: &Handles) {
         .is_some_and(|session| session.selected_text().is_some());
     use_menu_enabled(menu::COPY.id, selection);
     use_menu_enabled(menu::USE_SELECTION_FOR_FIND.id, selection);
+    use_menu_enabled(menu::OPEN_SELECTION.id, selection);
+    use_menu_enabled(menu::SAVE_SELECTION.id, selection);
     let output = handles.active().is_some_and(|session| session.has_output());
     use_menu_enabled(menu::SELECT_OUTPUT.id, output);
     let copy_mode = handles.active().is_some_and(|session| session.copy_mode());
@@ -697,10 +714,19 @@ fn open_sheet(handles: &Handles, open: Sheet) {
     sheet.set(Some(open));
 }
 
-fn rename_sheet(handles: &Handles, target: Sheet) -> Element {
-    let heading = match target {
-        Sheet::RenameTab(_) => tr!("edit-tab-title"),
-        _ => tr!("edit-window-title"),
+fn field_sheet(handles: &Handles, target: Sheet) -> Element {
+    let (heading, placeholder, confirm_label) = match target {
+        Sheet::RenameTab(_) => (
+            tr!("edit-tab-title"),
+            tr!("title-automatic"),
+            tr!("rename-confirm"),
+        ),
+        Sheet::SaveSelection(_) => (tr!("save-selection"), tr!("save-path"), tr!("save-confirm")),
+        _ => (
+            tr!("edit-window-title"),
+            tr!("title-automatic"),
+            tr!("rename-confirm"),
+        ),
     };
     let (enter, confirm) = (handles.clone(), handles.clone());
     let mut shown = handles.sheet;
@@ -711,11 +737,11 @@ fn rename_sheet(handles: &Handles, target: Sheet) -> Element {
             .spacing(SPACE_2)
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
                 if event.key == Key::Named(NamedKey::Enter) {
-                    rename_later(&enter, target);
+                    confirm_later(&enter, target);
                 }
             })
             .child(text(heading, HEADLINE, Palette::current().label))
-            .child(rename_field(handles.draft))
+            .child(field(handles.draft, placeholder))
             .child(
                 rect()
                     .width(Size::fill())
@@ -724,9 +750,9 @@ fn rename_sheet(handles: &Handles, target: Sheet) -> Element {
                     .spacing(SPACE_2)
                     .child(Button::new(tr!("close-cancel")).on_press(move |_| shown.set(None)))
                     .child(
-                        Button::new(tr!("rename-confirm"))
+                        Button::new(confirm_label)
                             .style(ButtonStyle::Primary)
-                            .on_press(move |_| rename_later(&confirm, target)),
+                            .on_press(move |_| confirm_later(&confirm, target)),
                     ),
             ),
     )
@@ -734,29 +760,48 @@ fn rename_sheet(handles: &Handles, target: Sheet) -> Element {
 }
 
 #[cfg(feature = "kit-parcheado")]
-fn rename_field(draft: State<String>) -> TextField {
-    TextField::new(draft, tr!("title-automatic")).auto_focus(true)
+fn field(draft: State<String>, placeholder: &'static str) -> TextField {
+    TextField::new(draft, placeholder).auto_focus(true)
 }
 
 // BK-029: without patch 0006 the field only takes the focus when clicked.
 #[cfg(not(feature = "kit-parcheado"))]
-fn rename_field(draft: State<String>) -> TextField {
-    TextField::new(draft, tr!("title-automatic"))
+fn field(draft: State<String>, placeholder: &'static str) -> TextField {
+    TextField::new(draft, placeholder)
 }
 
 // BK-027: Enter also reaches the global handler, so the sheet closes one loop later.
-fn rename_later(handles: &Handles, target: Sheet) {
+fn confirm_later(handles: &Handles, target: Sheet) {
     let later = handles.clone();
     handles.timers.after(Duration::ZERO, move || {
-        let title = later.draft.peek().clone();
+        let typed = later.draft.peek().clone();
         let mut workspace = later.workspace;
         match target {
-            Sheet::RenameTab(of) => workspace.write().rename_tab(of, &title),
-            _ => workspace.write().rename_window(&title),
+            Sheet::RenameTab(of) => workspace.write().rename_tab(of, &typed),
+            Sheet::SaveSelection(of) => save_selection(&later, of, &typed),
+            _ => workspace.write().rename_window(&typed),
         }
         let mut sheet = later.sheet;
         sheet.set(None);
     });
+}
+
+fn save_selection(handles: &Handles, of: SessionId, path: &str) {
+    let text = handles
+        .sessions
+        .peek()
+        .get(&of)
+        .and_then(|session| session.selected_text());
+    let typed = path.strip_prefix("~/").unwrap_or(path);
+    let path = match std::env::var_os("HOME") {
+        Some(home) => PathBuf::from(home).join(typed),
+        None => PathBuf::from(typed),
+    };
+    if let Some(text) = text
+        && let Err(error) = std::fs::write(&path, text)
+    {
+        tracing::warn!(%error, path = %path.display(), "could not save the selection");
+    }
 }
 
 fn copy_mode_keys_sheet(handles: &Handles) -> Element {
@@ -1249,6 +1294,17 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             open_sheet(handles, Sheet::RenameWindow);
         }
         _ if id == menu::COPY_MODE_KEYS.id => open_sheet(handles, Sheet::CopyModeKeys),
+        _ if id == menu::SAVE_SELECTION.id => {
+            if let Some(session) = active {
+                handles.draft.clone().set(String::new());
+                open_sheet(handles, Sheet::SaveSelection(session.id));
+            }
+        }
+        _ if id == menu::OPEN_SELECTION.id => {
+            if let Some(text) = active.and_then(|session| session.selected_text()) {
+                links::open(text.trim());
+            }
+        }
         _ if id == menu::CLOSE_PANES.id => {
             if let Some(session) = active {
                 request_close(handles, Closing::TabOf(session.id));
