@@ -487,3 +487,19 @@ incluye. Probado en sway: `false` con «Restart» deja el aviso sin crear
 procesos; la «×» de una pestaña con `sleep 100` pregunta, cierra esa pestaña
 y termina `sleep`; escribir en una sesión terminada no deja avisos; «13 of
 13» llega tras la pausa.
+
+## Fase 7 — Salida del último comando, Copy Mode y Find Cursor
+
+### Plan
+
+1. **Edit › Select Output of Last Command (⇧⌘A):** la integración con la
+   shell marca dónde empieza la salida (OSC 133;C) y dónde acaba el comando
+   (OSC 133;D o el siguiente prompt). La orden selecciona esas líneas. Sin
+   integración, la entrada queda desactivada.
+2. **Edit › Copy Mode (⇧⌘C):** un cursor de teclado que mueve y selecciona
+   sin ratón. Se apoya en el modo vi de `alacritty_terminal`: h j k l y
+   flechas, w b e, 0 ^ $, H M L, g y G, Ctrl+B y Ctrl+F; v o espacio para
+   seleccionar caracteres y V para líneas; y copia y sale; Escape o q salen.
+3. **View › Find Cursor (⌘/):** oscurece el panel salvo un círculo alrededor
+   del cursor durante `DURATION_SLOW_MS`.
+4. **Prueba** en sway sin pantalla y documentación en los dos idiomas.

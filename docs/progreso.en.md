@@ -489,3 +489,20 @@ sway: `false` with "Restart" leaves the notice without creating processes;
 the "×" of a tab running `sleep 100` asks, closes that tab and ends `sleep`;
 typing into an ended session leaves no warnings; "13 of 13" arrives after the
 pause.
+
+## Phase 7 — Last command output, Copy Mode and Find Cursor
+
+### Plan
+
+1. **Edit › Select Output of Last Command (⇧⌘A):** shell integration marks
+   where the output starts (OSC 133;C) and where the command ends (OSC 133;D
+   or the next prompt). The command selects those lines. Without
+   integration, the item stays disabled.
+2. **Edit › Copy Mode (⇧⌘C):** a keyboard cursor that moves and selects
+   without the mouse. It builds on the vi mode of `alacritty_terminal`:
+   h j k l and arrows, w b e, 0 ^ $, H M L, g and G, Ctrl+B and Ctrl+F; v or
+   space to select characters and V for lines; y copies and leaves; Escape
+   or q leave.
+3. **View › Find Cursor (⌘/):** dims the pane except for a circle around the
+   cursor for `DURATION_SLOW_MS`.
+4. **Test** on headless sway and documentation in both languages.
