@@ -5,6 +5,7 @@ use barrier_kit_next::app_menu::submenu;
 use freya_core::prelude::Modifiers;
 
 use crate::localize::tr;
+use crate::workspace::Broadcast;
 
 const fn super_key(c: char) -> Shortcut {
     Shortcut::new(Modifiers::META, ShortcutKey::Char(c))
@@ -48,6 +49,28 @@ pub const RESTART_SESSION: Action = Action::new("restart-session", || tr!("resta
 pub const RESET: Action = Action::new("reset", || tr!("reset")).shortcut(super_key('r'));
 pub const SELECT_ALL: Action =
     Action::new("select-all", || tr!("select-all")).shortcut(super_key('a'));
+
+pub const FIND_MENU: &str = "find-menu";
+pub const FIND: Action = Action::new("find", || tr!("find")).shortcut(super_key('f'));
+pub const FIND_NEXT: Action =
+    Action::new("find-next", || tr!("find-next")).shortcut(super_key('g'));
+pub const FIND_PREVIOUS: Action = Action::new("find-previous", || tr!("find-previous"))
+    .shortcut(super_with(Modifiers::SHIFT, 'g'));
+pub const USE_SELECTION_FOR_FIND: Action =
+    Action::new("use-selection-for-find", || tr!("use-selection-for-find"))
+        .shortcut(super_key('e'));
+pub const MARKS_MENU: &str = "marks-menu";
+pub const SET_MARK: Action =
+    Action::new("set-mark", || tr!("set-mark")).shortcut(super_with(Modifiers::SHIFT, 'm'));
+pub const JUMP_TO_MARK: Action =
+    Action::new("jump-to-mark", || tr!("jump-to-mark")).shortcut(super_with(Modifiers::SHIFT, 'j'));
+pub const NEXT_MARK: &str = "next-mark";
+pub const PREVIOUS_MARK: &str = "previous-mark";
+
+pub const BROADCAST_MENU: &str = "broadcast-menu";
+pub const BROADCAST_OFF: &str = "broadcast-off";
+pub const BROADCAST_ALL_TABS: &str = "broadcast-all-tabs";
+pub const BROADCAST_CURRENT_TAB: &str = "broadcast-current-tab";
 
 pub const SHOW_TAB_BAR: Action = Action::new("show-tab-bar", || tr!("show-tab-bar"));
 pub const FULL_SCREEN: Action =
@@ -112,6 +135,12 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 CLOSE.item(true),
                 CLOSE_WINDOW.item(true),
                 CLOSE_PANES.item(false),
+                MenuItem::Separator,
+                submenu(
+                    BROADCAST_MENU,
+                    tr!("broadcast-menu"),
+                    broadcast_items(Broadcast::Off),
+                ),
             ],
         ),
         Menu::new(
@@ -121,6 +150,28 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 PASTE.item(true),
                 MenuItem::Separator,
                 SELECT_ALL.item(true),
+                MenuItem::Separator,
+                submenu(
+                    FIND_MENU,
+                    tr!("find-menu"),
+                    vec![
+                        FIND.item(true),
+                        FIND_NEXT.item(true),
+                        FIND_PREVIOUS.item(true),
+                        USE_SELECTION_FOR_FIND.item(false),
+                    ],
+                ),
+                submenu(
+                    MARKS_MENU,
+                    tr!("marks-menu"),
+                    vec![
+                        SET_MARK.item(true),
+                        JUMP_TO_MARK.item(false),
+                        keyed(NEXT_MARK, tr!("next-mark"), "Super+Shift+Down").with_enabled(false),
+                        keyed(PREVIOUS_MARK, tr!("previous-mark"), "Super+Shift+Up")
+                            .with_enabled(false),
+                    ],
+                ),
                 MenuItem::Separator,
                 CLEAR_BUFFER.item(true),
                 CLEAR_SCROLLBACK.item(false),
@@ -191,6 +242,33 @@ fn split_pane_items() -> Vec<MenuItem> {
         keyed(DIVIDER_LEFT, tr!("divider-left"), "Ctrl+Super+Left"),
         keyed(DIVIDER_RIGHT, tr!("divider-right"), "Ctrl+Super+Right"),
     ]
+}
+
+pub fn broadcast_items(current: Broadcast) -> Vec<MenuItem> {
+    [
+        (BROADCAST_OFF, tr!("broadcast-off"), Broadcast::Off, None),
+        (
+            BROADCAST_ALL_TABS,
+            tr!("broadcast-all-tabs"),
+            Broadcast::AllTabs,
+            Some("Super+Alt+i"),
+        ),
+        (
+            BROADCAST_CURRENT_TAB,
+            tr!("broadcast-current-tab"),
+            Broadcast::CurrentTab,
+            Some("Super+Shift+Alt+I"),
+        ),
+    ]
+    .into_iter()
+    .map(|(id, label, mode, shortcut)| {
+        let item = MenuItem::action(id, label).with_check(CheckState::Radio(mode == current));
+        match shortcut {
+            Some(shortcut) => item.with_shortcut(shortcut),
+            None => item,
+        }
+    })
+    .collect()
 }
 
 pub fn select_tab_items(titles: &[String], active: usize) -> Vec<MenuItem> {

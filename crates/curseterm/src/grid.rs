@@ -1,17 +1,23 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
+use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::term::color::Colors;
 use alacritty_terminal::term::{RenderableContent, RenderableCursor, Term};
 use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Rgb};
 use barrier_kit_next::canvas::CanvasContext;
 use freya_engine::prelude::{
-    Color4f, Font, FontEdging, FontMgr, FontStyle, Paint, PaintStyle, Rect as SkRect, Typeface,
+    Color4f, Font, FontEdging, FontMgr, FontStyle, Paint, PaintStyle, PathBuilder, Rect as SkRect,
+    Typeface,
 };
 
 use crate::config::Scheme;
+use crate::io::Extras;
 use crate::session::Listener;
+
+const BROADCAST_ALPHA: f32 = 0.12;
+const BROADCAST_STRIPE: f32 = 6.0;
 
 pub struct Fonts {
     family: String,
@@ -170,12 +176,19 @@ fn bold_bright(color: Color, flags: Flags) -> Color {
     }
 }
 
+pub struct Overlay<'a> {
+    pub extras: &'a Extras,
+    pub inset: f32,
+    pub broadcast: Option<Rgb>,
+}
+
 pub fn draw(
     ctx: &mut CanvasContext,
     term: &Term<Listener>,
     fonts: &Fonts,
     scheme: &Scheme,
     focused: bool,
+    overlay: &Overlay<'_>,
 ) {
     let RenderableContent {
         display_iter,
@@ -191,7 +204,13 @@ pub fn draw(
     fill.set_anti_alias(false);
     ctx.canvas
         .draw_rect(SkRect::new(0.0, 0.0, ctx.width, ctx.height), &fill);
+    if let Some(tint) = overlay.broadcast {
+        draw_broadcast(ctx, tint);
+    }
+    ctx.canvas.save();
+    ctx.canvas.translate((overlay.inset, overlay.inset));
     let offset = display_offset as i32;
+    let top = term.history_size() as i64 - i64::from(offset);
     let frame = Frame {
         palette,
         fonts,
@@ -210,6 +229,62 @@ pub fn draw(
         );
     }
     draw_cursor(ctx, term, cursor, offset, &frame.palette, fonts, focused);
+    draw_images(ctx, overlay.extras, top, fonts);
+    draw_marks(ctx, overlay, top, term.screen_lines() as i64, fonts, scheme);
+    ctx.canvas.restore();
+}
+
+fn draw_images(ctx: &mut CanvasContext, extras: &Extras, top: i64, fonts: &Fonts) {
+    for placed in &extras.images {
+        let y = (placed.line - top) as f32 * fonts.cell_height;
+        if y + placed.height < 0.0 || y > ctx.height {
+            continue;
+        }
+        let x = placed.column as f32 * fonts.cell_width;
+        let area = SkRect::new(x, y, x + placed.width, y + placed.height);
+        ctx.canvas
+            .draw_image_rect(&placed.image, None, area, &Paint::default());
+    }
+}
+
+fn draw_marks(
+    ctx: &mut CanvasContext,
+    overlay: &Overlay<'_>,
+    top: i64,
+    lines: i64,
+    fonts: &Fonts,
+    scheme: &Scheme,
+) {
+    let mut ink = paint(scheme.ansi[usize::from(NamedColor::Blue as u8)]);
+    ink.set_anti_alias(true);
+    let size = overlay.inset;
+    for mark in &overlay.extras.marks {
+        let line = mark - top;
+        if !(0..lines).contains(&line) {
+            continue;
+        }
+        let middle = line as f32 * fonts.cell_height + fonts.cell_height / 2.0;
+        let mut path = PathBuilder::new();
+        path.move_to((-size, middle - size / 2.0));
+        path.line_to((0.0, middle));
+        path.line_to((-size, middle + size / 2.0));
+        path.close();
+        ctx.canvas.draw_path(&path.detach(), &ink);
+    }
+}
+
+fn draw_broadcast(ctx: &mut CanvasContext, tint: Rgb) {
+    let mut stripe = paint(tint);
+    stripe.set_alpha_f(BROADCAST_ALPHA);
+    stripe.set_stroke_width(BROADCAST_STRIPE);
+    stripe.set_style(PaintStyle::Stroke);
+    let step = BROADCAST_STRIPE * 3.0;
+    let mut x = -ctx.height;
+    while x < ctx.width {
+        ctx.canvas
+            .draw_line((x, ctx.height), (x + ctx.height, 0.0), &stripe);
+        x += step;
+    }
 }
 
 struct Frame<'a> {

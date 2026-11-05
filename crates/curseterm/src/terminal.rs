@@ -6,8 +6,10 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 
 use alacritty_terminal::event::{Event as TermEvent, WindowSize};
 use alacritty_terminal::grid::Scroll;
+use alacritty_terminal::index::Direction as SearchDirection;
 use barrier_kit::app::use_menu_action;
 use barrier_kit::app_menu::MenuHandle;
+use barrier_kit::controls::{Button, SearchField};
 use barrier_kit::platform::{Timers, WakeHandle, WindowControls};
 use barrier_kit::style::Palette;
 use barrier_kit::theme::color;
@@ -19,6 +21,8 @@ use freya_clipboard::copypasta::ClipboardProvider;
 use freya_core::prelude::*;
 use torin::prelude::{Content, Direction, Size};
 
+use vow_design::SPACE_1;
+
 use crate::config::{APP_ID, Defaults, Profile, WorkingDirectory, change_defaults};
 use crate::grid::Fonts;
 use crate::keys::{KeyAction, encode};
@@ -26,9 +30,9 @@ use crate::localize::tr;
 use crate::menu;
 use crate::pane_view::TerminalPane;
 use crate::panes::{Axis, Pane, Toward};
-use crate::session::{GridSize, Launch, Listener, Session, SessionId};
+use crate::session::{GridSize, Launch, Listener, MarkJump, Session, SessionId};
 use crate::windows;
-use crate::workspace::{Closed, Workspace};
+use crate::workspace::{Broadcast, Closed, Workspace};
 
 const INITIAL_GRID: (u16, u16) = (80, 24);
 const DIVIDER_STEP: f32 = 0.05;
@@ -50,12 +54,44 @@ struct Handles {
     fonts: FontCache,
     controls: WindowControls,
     clipboard: ClipboardState,
+    broadcast: State<Broadcast>,
+    find: Find,
+}
+
+#[derive(Clone, Copy)]
+struct Find {
+    open: State<bool>,
+    query: State<String>,
+    focused: State<bool>,
+}
+
+impl Find {
+    fn close(self) {
+        let (mut open, mut focused) = (self.open, self.focused);
+        open.set(false);
+        focused.set(false);
+    }
 }
 
 impl Handles {
     fn active(&self) -> Option<Rc<Session>> {
         let id = self.workspace.peek().active_session()?;
         self.sessions.peek().get(&id).cloned()
+    }
+
+    fn receivers(&self) -> Vec<Rc<Session>> {
+        let ids = self.workspace.peek().receivers(*self.broadcast.peek());
+        let sessions = self.sessions.peek();
+        ids.iter()
+            .filter_map(|id| sessions.get(id).cloned())
+            .collect()
+    }
+
+    fn find(&self, direction: SearchDirection) {
+        let query = self.find.query.peek().clone();
+        if let Some(session) = self.active().filter(|_| !query.is_empty()) {
+            session.find(&query, direction);
+        }
     }
 
     fn fonts_for(&self, profile: &Profile) -> Rc<Fonts> {
@@ -104,6 +140,12 @@ impl App for Terminal {
         let next_id = use_state(|| 0);
         let text_zoom = use_state(|| 0i32);
         let mut revision = use_state(|| 0u64);
+        let broadcast = use_state(Broadcast::default);
+        let find = Find {
+            open: use_state(|| false),
+            query: use_state(String::new),
+            focused: use_state(|| false),
+        };
         let handles = use_hook(move || Handles {
             workspace,
             sessions,
@@ -113,6 +155,8 @@ impl App for Terminal {
             fonts: FontCache::default(),
             controls: WindowControls::get(),
             clipboard: consume_root_context(),
+            broadcast,
+            find,
         });
         use_side_effect({
             let handles = handles.clone();
@@ -124,6 +168,17 @@ impl App for Terminal {
                     session.refit(fonts.cell_width, fonts.cell_height);
                 }
                 *revision.write() += 1;
+            }
+        });
+        use_side_effect({
+            let handles = handles.clone();
+            move || {
+                let query = find.query.read().clone();
+                if let Some(session) = handles.active().filter(|_| !query.is_empty()) {
+                    session.clear_selection();
+                    session.find(&query, SearchDirection::Left);
+                    *revision.write() += 1;
+                }
             }
         });
         let events = use_hook({
@@ -191,6 +246,10 @@ impl App for Terminal {
                 revision: *revision.read(),
                 workspace,
                 tab: state.active,
+                receivers: match *broadcast.read() {
+                    Broadcast::Off => Vec::new(),
+                    mode => state.receivers(mode),
+                },
             };
             pane_tree(&root, Vec::new(), &painting)
         });
@@ -198,8 +257,8 @@ impl App for Terminal {
         #[cfg(feature = "kit-parcheado")]
         use_window_title(&title);
 
-        let clipboard = handles.clipboard;
         let keyboard = handles.clone();
+        let find_bar = (*find.open.read()).then(|| find_bar(&handles, revision));
         rect()
             .width(Size::fill())
             .height(Size::fill())
@@ -207,17 +266,25 @@ impl App for Terminal {
             .content(Content::flex())
             .background(color(palette.window_background))
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
+                let data = event.data();
+                if *find.open.peek() && *find.focused.peek() {
+                    if data.key == Key::Named(NamedKey::Escape) {
+                        find.close();
+                    }
+                    return;
+                }
                 let Some(session) = &keyboard.active() else {
                     return;
                 };
-                let data = event.data();
                 match encode(&data.key, data.modifiers, session.mode()) {
                     KeyAction::Write(bytes) => {
-                        session.clear_selection();
-                        session.write(bytes);
+                        for receiver in keyboard.receivers() {
+                            receiver.clear_selection();
+                            receiver.write(bytes.clone());
+                        }
                     }
-                    KeyAction::Copy => copy(session, clipboard),
-                    KeyAction::Paste => paste(session, clipboard),
+                    KeyAction::Copy => copy(session, keyboard.clipboard),
+                    KeyAction::Paste => paste(&keyboard),
                     KeyAction::PageUp => session.scroll(Scroll::PageUp),
                     KeyAction::PageDown => session.scroll(Scroll::PageDown),
                     KeyAction::Ignore => return,
@@ -226,6 +293,7 @@ impl App for Terminal {
             })
             .child(Titlebar::new().title(title))
             .maybe_child(tab_bar)
+            .maybe_child(find_bar)
             .child(
                 rect()
                     .width(Size::fill())
@@ -245,6 +313,7 @@ struct Painting {
     revision: u64,
     workspace: State<Workspace>,
     tab: usize,
+    receivers: Vec<SessionId>,
 }
 
 fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
@@ -259,6 +328,7 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                     scheme: Rc::new(painting.defaults.scheme(&profile, painting.dark)),
                     focused: painting.window_focused && *id == painting.active,
                     revision: painting.revision,
+                    broadcast: painting.receivers.contains(id),
                     on_focus: Callback::new(move |id| workspace.write().focus(id)),
                 }
                 .into_element()
@@ -312,6 +382,15 @@ fn use_live_menu(handles: &Handles) {
         .active()
         .is_some_and(|session| session.selected_text().is_some());
     use_menu_enabled(menu::COPY.id, selection);
+    use_menu_enabled(menu::USE_SELECTION_FOR_FIND.id, selection);
+    let marks = handles.active().is_some_and(|session| session.has_marks());
+    use_menu_enabled(menu::JUMP_TO_MARK.id, marks);
+    use_menu_enabled(menu::NEXT_MARK, marks);
+    use_menu_enabled(menu::PREVIOUS_MARK, marks);
+    use_submenu_items(
+        menu::BROADCAST_MENU,
+        menu::broadcast_items(*handles.broadcast.read()),
+    );
     let scrollback = handles
         .active()
         .is_some_and(|session| session.has_scrollback());
@@ -373,11 +452,44 @@ fn clipboard_text(mut clipboard: ClipboardState) -> Option<String> {
     clipboard.write().as_mut()?.get_contents().ok()
 }
 
-fn paste(session: &Session, clipboard: ClipboardState) {
-    match clipboard_text(clipboard) {
-        Some(text) => session.paste(&text),
+fn paste(handles: &Handles) {
+    match clipboard_text(handles.clipboard) {
+        Some(text) => handles
+            .receivers()
+            .iter()
+            .for_each(|session| session.paste(&text)),
         None => tracing::warn!("could not read the clipboard"),
     }
+}
+
+fn find_bar(handles: &Handles, mut revision: State<u64>) -> Element {
+    let find = handles.find;
+    let navigate = handles.clone();
+    rect()
+        .width(Size::fill())
+        .direction(Direction::Horizontal)
+        .content(Content::flex())
+        .padding(SPACE_1)
+        .spacing(SPACE_1)
+        .child(
+            SearchField::new(find.query, tr!("find-placeholder"))
+                .width(Size::flex(1.0))
+                .auto_focus(true)
+                .on_focus_change(move |focused| {
+                    let mut state = find.focused;
+                    state.set(focused);
+                })
+                .on_navigate(move |key| {
+                    let direction = match key {
+                        NamedKey::ArrowDown => SearchDirection::Right,
+                        _ => SearchDirection::Left,
+                    };
+                    navigate.find(direction);
+                    *revision.write() += 1;
+                }),
+        )
+        .child(Button::new(tr!("find-close")).on_press(move |_| find.close()))
+        .into_element()
 }
 
 fn listen(handles: Handles, revision: State<u64>) -> Events {
@@ -575,11 +687,31 @@ fn on_action(id: &str, handles: &Handles, events: &Events) {
                 copy(session, handles.clipboard);
             }
         }
-        _ if id == menu::PASTE.id => {
-            if let Some(session) = &active {
-                paste(session, handles.clipboard);
+        _ if id == menu::PASTE.id => paste(handles),
+        _ if id == menu::FIND.id => {
+            let mut open = handles.find.open;
+            open.set(true);
+        }
+        _ if id == menu::FIND_NEXT.id => handles.find(SearchDirection::Right),
+        _ if id == menu::FIND_PREVIOUS.id => handles.find(SearchDirection::Left),
+        _ if id == menu::USE_SELECTION_FOR_FIND.id => {
+            if let Some(text) = active.as_ref().and_then(|session| session.selected_text()) {
+                let (mut query, mut open) = (handles.find.query, handles.find.open);
+                query.set(text);
+                open.set(true);
             }
         }
+        _ if id == menu::SET_MARK.id => {
+            if let Some(session) = &active {
+                session.set_mark();
+            }
+        }
+        _ if id == menu::JUMP_TO_MARK.id => jump(active, MarkJump::Latest),
+        menu::NEXT_MARK => jump(active, MarkJump::Next),
+        menu::PREVIOUS_MARK => jump(active, MarkJump::Previous),
+        menu::BROADCAST_OFF => handles.broadcast.clone().set(Broadcast::Off),
+        menu::BROADCAST_ALL_TABS => handles.broadcast.clone().set(Broadcast::AllTabs),
+        menu::BROADCAST_CURRENT_TAB => handles.broadcast.clone().set(Broadcast::CurrentTab),
         _ if id == menu::SELECT_ALL.id => {
             if let Some(session) = &active {
                 session.select_all();
@@ -638,6 +770,12 @@ fn on_action(id: &str, handles: &Handles, events: &Events) {
             }
         }
         _ => {}
+    }
+}
+
+fn jump(session: Option<Rc<Session>>, jump: MarkJump) {
+    if let Some(session) = session {
+        session.jump_to_mark(jump);
     }
 }
 

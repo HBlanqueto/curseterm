@@ -19,6 +19,14 @@ pub struct Workspace {
     titles: HashMap<SessionId, String>,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Broadcast {
+    #[default]
+    Off,
+    CurrentTab,
+    AllTabs,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Closed {
     Pane,
@@ -37,6 +45,17 @@ impl Workspace {
 
     pub fn active_session(&self) -> Option<SessionId> {
         self.active_tab().map(|tab| tab.active)
+    }
+
+    pub fn receivers(&self, broadcast: Broadcast) -> Vec<SessionId> {
+        match broadcast {
+            Broadcast::Off => self.active_session().into_iter().collect(),
+            Broadcast::CurrentTab => self
+                .active_tab()
+                .map(|tab| tab.root.leaves())
+                .unwrap_or_default(),
+            Broadcast::AllTabs => self.tabs.iter().flat_map(|tab| tab.root.leaves()).collect(),
+        }
     }
 
     pub fn title(&self, id: SessionId) -> &str {

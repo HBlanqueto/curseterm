@@ -8,8 +8,8 @@ use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::TermMode;
 use barrier_kit_next::canvas::canvas;
 use freya_core::prelude::*;
-use torin::prelude::{Gaps, Size};
-use vow_design::SPACE_1;
+use torin::prelude::Size;
+use vow_design::SPACE_2;
 
 use crate::config::Scheme;
 use crate::grid::{self, Fonts};
@@ -23,6 +23,7 @@ pub struct TerminalPane {
     pub scheme: Rc<Scheme>,
     pub focused: bool,
     pub revision: u64,
+    pub broadcast: bool,
     pub on_focus: Callback<SessionId, ()>,
 }
 
@@ -33,6 +34,7 @@ impl PartialEq for TerminalPane {
             && *self.scheme == *other.scheme
             && self.focused == other.focused
             && self.revision == other.revision
+            && self.broadcast == other.broadcast
     }
 }
 
@@ -52,6 +54,7 @@ impl Component for TerminalPane {
         let fonts = self.fonts.clone();
         let scheme = self.scheme.clone();
         let focused = self.focused;
+        let broadcast = self.broadcast;
         let on_focus = self.on_focus.clone();
 
         let mut look = DefaultHasher::new();
@@ -59,6 +62,7 @@ impl Component for TerminalPane {
             self.revision,
             *repaint.read(),
             focused,
+            broadcast,
             &scheme.name,
             fonts.cell_width.to_bits(),
         )
@@ -68,19 +72,27 @@ impl Component for TerminalPane {
             let fonts = fonts.clone();
             let scheme = scheme.clone();
             canvas(look.finish(), move |ctx| {
-                grid::draw(ctx, &session.term.lock(), &fonts, &scheme, focused);
+                let term = session.term.lock();
+                let extras = session.extras();
+                let overlay = grid::Overlay {
+                    extras: &extras,
+                    inset: SPACE_2,
+                    broadcast: broadcast.then_some(scheme.ansi[1]),
+                };
+                grid::draw(ctx, &term, &fonts, &scheme, focused, &overlay);
             })
         };
         let point_at = {
             let session = session.clone();
             let fonts = fonts.clone();
-            move |(x, y): (f64, f64)| point_at(&session, &fonts, x as f32, y as f32)
+            move |(x, y): (f64, f64)| {
+                point_at(&session, &fonts, x as f32 - SPACE_2, y as f32 - SPACE_2)
+            }
         };
 
         rect()
             .width(Size::fill())
             .height(Size::fill())
-            .padding(Gaps::new_all(SPACE_1))
             .background(Color::from_rgb(
                 scheme.background.r,
                 scheme.background.g,
@@ -96,8 +108,8 @@ impl Component for TerminalPane {
                         move |event: Event<SizedEventData>| {
                             let area = event.data().area;
                             session.fit(
-                                area.width(),
-                                area.height(),
+                                area.width() - 2.0 * SPACE_2,
+                                area.height() - 2.0 * SPACE_2,
                                 fonts.cell_width,
                                 fonts.cell_height,
                             );
