@@ -1378,3 +1378,33 @@ Probado en sway sin pantalla con el kit tal cual: no necesita parche.
 
 **Difiere de iTerm2:** el color es el del cursor del esquema, no uno propio
 del perfil; cambiar la opción del perfil no afecta a las sesiones abiertas.
+
+## Fase 31 — Directorios recientes
+
+### Plan
+
+1. **Session › Open Recent Directories… (⌥⌘/):** el selector de Paste History
+   con los directorios recientes de la ventana, el más reciente primero.
+2. **Al elegir uno** se escribe su ruta escapada para la shell en la línea de
+   órdenes, sin `cd` ni Intro. Es lo que hace iTerm2:
+   `DirectoriesPopup.m` devuelve `shouldEscapeShellCharacters = YES` y
+   `PTYSession.m` (`popupInsertText:`) inserta el texto.
+3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit tal cual: no necesita parche.
+`./dev.sh check` limpio en los dos modos del kit.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `cd '/tmp/dir con espacio'`, `cd /var`, `cd` y ⌥⌘/: la lista muestra `/root`, `/var` y `/tmp/dir con espacio` | ✓ | `fase31-directorios-recientes.png` |
+| Escribir `ls `, filtrar «espacio» e Intro: la línea queda `ls /tmp/dir\ con\ espacio` y se ejecuta sin error | ✓ | — |
+
+**No probado:** el ítem del menú global en D-Bus.
+
+**Difiere de iTerm2:** la ruta se escapa siempre; iTerm2 solo lo hace cuando
+el cursor está en el prompt. La lista es de la ventana y no se guarda al
+cerrarla, ni se ordena por frecuencia de uso.

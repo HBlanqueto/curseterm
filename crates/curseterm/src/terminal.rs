@@ -124,11 +124,13 @@ enum Picker {
     PasteHistory,
     OpenQuickly,
     Profiles,
+    RecentDirectories,
 }
 
 #[derive(Clone)]
 enum Choice {
     Paste(String),
+    Type(String),
     Focus(SessionId),
     Profile(String),
 }
@@ -745,6 +747,10 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::CLOSE_PANES.id, split);
     use_menu_enabled(menu::UNDO_CLOSE.id, handles.buried.read().is_some());
     use_menu_enabled(menu::PASTE_HISTORY.id, !handles.pastes.read().is_empty());
+    use_menu_enabled(
+        menu::RECENT_DIRECTORIES.id,
+        !handles.toolbelt.directories.read().is_empty(),
+    );
     use_menu_enabled(menu::MAXIMIZE_PANE, split);
     use_menu_checked(menu::MAXIMIZE_PANE, zoomed);
     use_menu_checked(menu::SHOW_TAB_BAR.id, handles.defaults.read().show_tab_bar);
@@ -877,6 +883,13 @@ fn pick_entries(handles: &Handles, picker: Picker) -> Vec<(String, Choice)> {
             .into_iter()
             .map(|profile| (profile.name.clone(), Choice::Profile(profile.name)))
             .collect(),
+        Picker::RecentDirectories => handles
+            .toolbelt
+            .directories
+            .read()
+            .iter()
+            .map(|path| (path.clone(), Choice::Type(session::shell_escaped(path))))
+            .collect(),
     }
 }
 
@@ -885,6 +898,7 @@ fn pick_sheet(handles: &Handles, picker: Picker, mut revision: State<u64>) -> El
         Picker::PasteHistory => (tr!("paste-history"), tr!("paste-history-text")),
         Picker::OpenQuickly => (tr!("open-quickly"), tr!("open-quickly-session")),
         Picker::Profiles => (tr!("open-profiles"), tr!("open-profiles-name")),
+        Picker::RecentDirectories => (tr!("recent-directories-title"), tr!("toolbelt-path")),
     };
     let history = handles.picker;
     let entries = pick::matching(pick_entries(handles, picker), &history.query.read());
@@ -945,6 +959,11 @@ fn choose_later(handles: &Handles, choice: Choice) {
         sheet.set(None);
         match &choice {
             Choice::Paste(text) => paste_text(&later, text.clone()),
+            Choice::Type(text) => {
+                if let Some(session) = later.active() {
+                    session.write(text.clone().into_bytes());
+                }
+            }
             Choice::Focus(id) => later.workspace.clone().write().focus(*id),
             Choice::Profile(name) => {
                 if let Some(events) = later.events.get() {
@@ -1770,6 +1789,7 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             open_picker(handles, Picker::PasteHistory);
         }
         _ if id == menu::OPEN_QUICKLY.id => open_picker(handles, Picker::OpenQuickly),
+        _ if id == menu::RECENT_DIRECTORIES.id => open_picker(handles, Picker::RecentDirectories),
         _ if id == menu::OPEN_PROFILES.id => open_picker(handles, Picker::Profiles),
         _ if id == menu::EDIT_TAB_TITLE.id => {
             if let Some(session) = active {

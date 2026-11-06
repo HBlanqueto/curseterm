@@ -1374,3 +1374,33 @@ from the `.domain`).
 **Differs from iTerm2:** the color is the scheme's cursor color, not a
 profile color of its own; changing the profile option does not affect open
 sessions.
+
+## Phase 31 — Recent directories
+
+### Plan
+
+1. **Session › Open Recent Directories… (⌥⌘/):** the Paste History picker
+   with the window's recent directories, the most recent first.
+2. **Choosing one** types its shell-escaped path on the command line, without
+   `cd` or Return. That is what iTerm2 does: `DirectoriesPopup.m` returns
+   `shouldEscapeShellCharacters = YES` and `PTYSession.m`
+   (`popupInsertText:`) inserts the text.
+3. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the kit as is: it needs no patch. `./dev.sh
+check` clean in both kit modes.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `cd '/tmp/dir con espacio'`, `cd /var`, `cd` and ⌥⌘/: the list shows `/root`, `/var` and `/tmp/dir con espacio` | ✓ | `fase31-directorios-recientes.png` |
+| Typing `ls `, filtering «espacio» and Return: the line becomes `ls /tmp/dir\ con\ espacio` and runs without error | ✓ | — |
+
+**Not tested:** the global menu item over D-Bus.
+
+**Differs from iTerm2:** the path is always escaped; iTerm2 only does it when
+the cursor is at the prompt. The list belongs to the window and is not kept
+when it closes, nor sorted by how often it is used.

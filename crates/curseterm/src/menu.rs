@@ -45,6 +45,9 @@ pub const UNDO_CLOSE: Action =
     Action::new("undo-close", || tr!("undo-close")).shortcut(super_with(Modifiers::SHIFT, 't'));
 pub const PASTE_HISTORY: Action = Action::new("paste-history", || tr!("paste-history"))
     .shortcut(super_with(Modifiers::SHIFT, 'h'));
+pub const RECENT_DIRECTORIES: Action =
+    Action::new("recent-directories", || tr!("recent-directories"))
+        .shortcut(super_with(Modifiers::ALT, '/'));
 pub const CLOSE_PANES: Action =
     Action::new("close-panes", || tr!("close-panes")).shortcut(super_with(Modifiers::ALT, 'w'));
 
@@ -290,6 +293,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 MenuItem::Separator,
                 RESTART_SESSION.item(true),
                 MenuItem::Separator,
+                RECENT_DIRECTORIES.item(false),
                 PASTE_HISTORY.item(false),
                 MenuItem::Separator,
                 submenu(
