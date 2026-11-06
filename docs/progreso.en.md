@@ -1444,3 +1444,30 @@ check` clean in both kit modes.
 **Differs from iTerm2:** only visible lines are cleared. If the mark or the
 selection starts in the scrollback, clearing starts at the first screen line,
 because alacritty cannot remove single lines from the scrollback.
+
+## Phase 33 — Save contents
+
+### Plan
+
+1. **Shell › Save Contents…:** like Save Selected Text, but it saves the whole
+   buffer (scrollback and screen) without the trailing empty lines. No
+   shortcut, as in iTerm2's `MainMenu.xib`.
+2. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the patched kit, to click the item through the
+D-Bus menu. `./dev.sh check` clean in both kit modes.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `seq 80`, Save Contents… over D-Bus: the sheet with the path field shows | ✓ | `fase33-guardar-contenido.png` |
+| Typing the path and Return: the file has 84 lines, from `seq 80` to the last prompt, and ends in a newline | ✓ | — |
+
+**Not tested:** with the kit as is the item is only reachable from a global
+menu (no shortcut).
+
+**Differs from iTerm2:** the path is typed in a field; there is no file
+chooser (BK-023).

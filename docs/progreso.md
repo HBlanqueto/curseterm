@@ -1447,3 +1447,30 @@ Probado en sway sin pantalla con el kit tal cual: no necesita parche.
 **Difiere de iTerm2:** solo se borran líneas visibles. Si la marca o la
 selección empiezan en el historial, se borra desde la primera línea de la
 pantalla, porque alacritty no permite quitar líneas sueltas del historial.
+
+## Fase 33 — Guardar el contenido
+
+### Plan
+
+1. **Shell › Save Contents…:** como Save Selected Text, pero guarda el búfer
+   entero (historial y pantalla) sin las líneas vacías del final. Sin atajo,
+   como en `MainMenu.xib` de iTerm2.
+2. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado, para pulsar el ítem por el
+menú de D-Bus. `./dev.sh check` limpio en los dos modos del kit.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `seq 80`, Save Contents… por D-Bus: sale la hoja con el campo de ruta | ✓ | `fase33-guardar-contenido.png` |
+| Escribir la ruta e Intro: el archivo tiene 84 líneas, de `seq 80` al último prompt, y acaba en un salto de línea | ✓ | — |
+
+**No probado:** con el kit tal cual el ítem solo es alcanzable desde un menú
+global (sin atajo).
+
+**Difiere de iTerm2:** la ruta se escribe en un campo; no hay selector de
+archivos (BK-023).

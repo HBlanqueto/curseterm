@@ -335,6 +335,17 @@ impl Session {
         self.extras().log.is_some()
     }
 
+    pub fn contents(&self) -> String {
+        let term = self.term.lock();
+        let top = Point::new(Line(-(term.history_size() as i32)), Column(0));
+        let bottom = Point::new(
+            Line(term.screen_lines() as i32 - 1),
+            Column(term.columns().saturating_sub(1)),
+        );
+        let text = term.bounds_to_string(top, bottom);
+        format!("{}\n", text.trim_end())
+    }
+
     pub fn selected_text(&self) -> Option<String> {
         self.term.lock().selection_to_string()
     }

@@ -37,6 +37,7 @@ pub const SPLIT_HORIZONTALLY: Action =
         .shortcut(super_with(Modifiers::SHIFT, 'd'));
 pub const SAVE_SELECTION: Action =
     Action::new("save-selection", || tr!("save-selection")).shortcut(super_key('s'));
+pub const SAVE_CONTENTS: Action = Action::new("save-contents", || tr!("save-contents"));
 pub const OPEN_SELECTION: Action = Action::new("open-selection", || tr!("open-selection"));
 pub const CLOSE: Action = Action::new("close", || tr!("close")).shortcut(super_key('w'));
 pub const CLOSE_WINDOW: Action =
@@ -206,6 +207,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 SPLIT_HORIZONTALLY.item(true),
                 SPLIT_VERTICALLY.item(true),
                 MenuItem::Separator,
+                SAVE_CONTENTS.item(true),
                 SAVE_SELECTION.item(false),
                 MenuItem::Separator,
                 CLOSE.item(true),

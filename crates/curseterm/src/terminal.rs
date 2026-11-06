@@ -100,6 +100,7 @@ enum Sheet {
     RenameTab(SessionId),
     RenameWindow,
     SaveSelection(SessionId),
+    SaveContents(SessionId),
     Log(SessionId),
     Coprocess(SessionId),
     CopyModeKeys,
@@ -1006,6 +1007,7 @@ fn field_sheet(handles: &Handles, target: Sheet) -> Element {
             tr!("rename-confirm"),
         ),
         Sheet::SaveSelection(_) => (tr!("save-selection"), tr!("save-path"), tr!("save-confirm")),
+        Sheet::SaveContents(_) => (tr!("save-contents"), tr!("save-path"), tr!("save-confirm")),
         Sheet::Log(_) => (tr!("log-start"), tr!("save-path"), tr!("log-confirm")),
         Sheet::Coprocess(_) => (
             tr!("run-coprocess"),
@@ -1068,7 +1070,8 @@ fn confirm_later(handles: &Handles, target: Sheet) {
         let mut workspace = later.workspace;
         match target {
             Sheet::RenameTab(of) => workspace.write().rename_tab(of, &typed),
-            Sheet::SaveSelection(of) => save_selection(&later, of, &typed),
+            Sheet::SaveSelection(of) => save(&later, of, &typed, Session::selected_text),
+            Sheet::SaveContents(of) => save(&later, of, &typed, |session| Some(session.contents())),
             Sheet::Log(of) => start_log(&later, of, &typed),
             Sheet::Coprocess(of) => start_coprocess(&later, of, &typed),
             _ => workspace.write().rename_window(&typed),
@@ -1078,17 +1081,17 @@ fn confirm_later(handles: &Handles, target: Sheet) {
     });
 }
 
-fn save_selection(handles: &Handles, of: SessionId, path: &str) {
+fn save(handles: &Handles, of: SessionId, path: &str, text: fn(&Session) -> Option<String>) {
     let text = handles
         .sessions
         .peek()
         .get(&of)
-        .and_then(|session| session.selected_text());
+        .and_then(|session| text(session));
     let path = from_home(path);
     if let Some(text) = text
         && let Err(error) = std::fs::write(&path, text)
     {
-        tracing::warn!(%error, path = %path.display(), "could not save the selection");
+        tracing::warn!(%error, path = %path.display(), "could not save the text");
     }
 }
 
@@ -1824,6 +1827,12 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             if let Some(session) = active {
                 handles.draft.clone().set(String::new());
                 open_sheet(handles, Sheet::SaveSelection(session.id));
+            }
+        }
+        _ if id == menu::SAVE_CONTENTS.id => {
+            if let Some(session) = active {
+                handles.draft.clone().set(String::new());
+                open_sheet(handles, Sheet::SaveContents(session.id));
             }
         }
         _ if id == menu::LOG_START.id => {

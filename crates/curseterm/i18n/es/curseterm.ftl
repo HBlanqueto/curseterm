@@ -218,6 +218,7 @@ copy-select-characters = Seleccionar caracteres
 copy-select-lines = Seleccionar líneas
 copy-and-leave = Copiar y salir
 copy-leave = Salir del modo copia
+save-contents = Guardar el contenido…
 save-selection = Guardar el texto seleccionado…
 save-path = Nombre o ruta del archivo, desde tu carpeta personal
 save-confirm = Guardar
