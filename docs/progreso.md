@@ -1928,3 +1928,69 @@ tiene (filtro, salida suprimida, zoom, registro de depuración, entrada
 segura, ventana fijada, IA, canales, entrada en espera, capturas); pulsar un
 indicador no muestra su ayuda; los extremos de los trazos no son redondos;
 los símbolos son dibujos propios, no los SF Symbols.
+
+## Fase 43 — Temas de ventana
+
+### Plan
+
+Settings › Appearance › General › Theme de iTerm2 (`iTermTheme.m`,
+`PSMYosemiteTabStyle.m`, `PSMDarkTabStyle.m`, `PSMLightHighContrastTabStyle.m`,
+`PSMDarkHighContrastTabStyle.m`, `PSMMinimalTabStyle.m`,
+`iTermRootTerminalView.m` y `PseudoTerminal.m`), con la familia de pestañas
+clásica, la que iTerm2 usa antes de macOS 26 y siempre en Compact:
+
+1. **Ajuste Theme** con los siete temas en el orden del menú de iTerm2;
+   Regular por defecto.
+2. **Barra de pestañas** como `PSMTabBarControl`: 24 puntos, pestañas iguales
+   que llenan la barra (mínimo 75), cierre a la izquierda solo al pasar el
+   ratón, título centrado de 11 puntos (12 en alto contraste), separadores de
+   1 punto, línea de arriba en las pestañas no elegidas, sombra de 4 puntos y
+   «+» de 24 puntos. Colores de Light, Dark y los dos de alto contraste en
+   tokens (`TAB_STYLE_*`).
+3. **Regular y Compact** siguen la apariencia del sistema; **Light, Dark** y
+   los de alto contraste fuerzan la de la ventana entera, barra de título
+   incluida (`use_appearance`).
+4. **Compact y Minimal** (con CSD): sin barra de título; los botones de
+   ventana y las pestañas comparten una franja con 75 puntos a la izquierda
+   para los botones, y con una sola pestaña una barra falsa del mismo alto con
+   el título de 13 puntos centrado. Arrastrar la franja mueve la ventana.
+5. **Minimal:** la franja mide 38 puntos y toma el fondo de la terminal; las
+   pestañas no elegidas, 0,05 más oscuras (más claras sobre casi negro), sin
+   separadores, con la muesca de contorno al 20 % y texto 0,95 o 0,05 según
+   el fondo.
+6. **Prueba:** sway no acepta CSD (contesta SSD aunque la app pida CSD y con
+   `border csd`), así que Compact y Minimal se prueban en weston sin pantalla,
+   que no tiene `xdg-decoration`.
+
+### Resultado (2026-11-06)
+
+Probado con el kit parcheado en weston 16 sin pantalla (CSD) y en sway (SSD).
+`./dev.sh check` limpio en los dos modos; un test nuevo para los colores de
+Minimal.
+
+**Funciona** (capturas en [`capturas/`](capturas/); `fase43-temas.png`, de
+arriba abajo: Regular, Compact con dos pestañas y con una, Minimal con dos y
+con una, Light, Dark, Light HC y Dark HC):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Settings › Appearance: menú Theme con los siete temas, Regular marcado | ✓ | `fase43-menu-tema.png` |
+| Elegir Dark en sway cambia la barra de pestañas al momento, con el texto de la ventana activa (1,0 y 0,65) | ✓ | — |
+| Los nueve casos de `fase43-temas.png` en weston | ✓ | `fase43-temas.png` |
+| Minimal: franja de 38 puntos con el fondo de Solarized Dark, botones centrados, muesca alrededor de la pestaña elegida y «+» blanco | ✓ | `fase43-minimal.png` |
+| Dark y Dark HC fuerzan la barra de título oscura; Light y Light HC, la clara | ✓ | `fase43-temas.png` |
+| En sway (SSD), Compact y Minimal se quedan con la barra del compositor encima y sus colores de pestaña | ✓ | — |
+
+**No probado:** el paso del ratón (cierre y color de hover) y arrastrar o
+hacer doble clic en la franja, porque weston no tiene teclado ni ratón
+virtuales; los colores de ventana activa en weston (no da el foco a la
+ventana, así que salen los de inactiva); el kit tal cual; Malaysia.
+
+**Difiere de iTerm2:** no están los estilos de macOS 26 (Tahoe); el hover
+cambia de golpe, sin la animación de 0,2 s; Regular y Compact no pasan solos
+a alto contraste con «Aumentar contraste» del sistema; los divisores de
+paneles no toman los colores del tema; Minimal no tiene en cuenta la
+transparencia ni la atenuación de ventanas de fondo; no hay colores de
+pestaña, números de pestaña, subtítulos ni menú de desbordamiento; el
+«backing» de las pestañas es el color de ventana de Tengen, sin el material
+de barra de título de macOS.

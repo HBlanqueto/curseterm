@@ -30,6 +30,7 @@ mod status;
 #[cfg(feature = "kit-parcheado")]
 mod styled;
 mod terminal;
+mod theme;
 mod windows;
 mod workspace;
 

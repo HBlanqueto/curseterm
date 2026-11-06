@@ -11,34 +11,36 @@ use alacritty_terminal::index::Direction as SearchDirection;
 use barrier_kit::app::use_menu_action;
 use barrier_kit::app_menu::MenuHandle;
 use barrier_kit::controls::{Button, ButtonStyle, SearchField, Slider, TextField};
-use barrier_kit::platform::{Timers, WakeHandle, WindowControls};
+use barrier_kit::platform::{DecorationResponse, Timers, WakeHandle, WindowControls};
 use barrier_kit::style::{Palette, text};
 use barrier_kit::symbol::Symbol;
 use barrier_kit::theme::color;
-use barrier_kit::titlebar::Titlebar;
+use barrier_kit::titlebar::{Titlebar, window_drag_handler, window_traffic_lights};
 use barrier_kit::views::feedback::{Alert, sheet};
 use barrier_kit::views::table::Table;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
 use barrier_kit_next::notifications::{self, Notice};
 use barrier_kit_next::tokens::{
-    ANNOTATION, PASTE_HISTORY_SIZE, RENAME_WIDTH, SHORTCUT_LABEL, TERMINAL, TOOLBELT_WIDTH,
+    ANNOTATION, PASTE_HISTORY_SIZE, RENAME_WIDTH, SHORTCUT_LABEL, TAB_STRIP, TERMINAL,
+    TOOLBELT_WIDTH, TabStyle,
 };
 use barrier_kit_next::views::split_panes::SplitPanes;
 use barrier_kit_next::views::tab_bar::{Badge, TabBar};
 use freya_clipboard::copypasta::ClipboardProvider;
 use freya_core::prelude::*;
 use rustix::process::{Pid, Signal, kill_process};
-use torin::prelude::{Alignment, Content, Direction, Size};
+use torin::prelude::{Alignment, Content, Direction, Gaps, Position, Size};
 
 use vow_design::{
     CAPTION, DURATION_FAST_MS, DURATION_SLOW_MS, HEADLINE, Rgba, SPACE_1, SPACE_2, SPACE_3,
+    TITLEBAR,
 };
 
 use crate::arrangement::{self, Arrangement, TabLayout};
 use crate::clock::{local_date_time, local_time};
 use crate::composer_view::ComposerEvent;
 use crate::config::{
-    APP_ID, APP_NAME, AltKey, ClosePrompt, Defaults, MarkAlert, Profile, SessionEnd,
+    APP_ID, APP_NAME, AltKey, ClosePrompt, Defaults, MarkAlert, Profile, SessionEnd, Theme,
     WorkingDirectory, change_defaults,
 };
 use crate::grid::Fonts;
@@ -59,8 +61,10 @@ use crate::session::{
     self, GridSize, Launch, Listener, MarkJump, Session, SessionId, TerminalState,
 };
 use crate::status;
+use crate::theme;
 use crate::windows;
 use crate::workspace::{Broadcast, Closed, Tab, Workspace};
+use vow_appearance::ColorScheme;
 
 const INITIAL_GRID: (u16, u16) = (80, 24);
 const QUICK_EXIT: Duration = Duration::from_secs(1);
@@ -276,6 +280,14 @@ impl App for Terminal {
     fn render(&self) -> impl IntoElement {
         windows::use_registered_window();
         let defaults = barrier_kit::app::use_defaults::<Defaults>(APP_ID);
+        // PseudoTerminal.m -updateWindowAppearance: the fixed themes force Aqua or DarkAqua.
+        barrier_kit::theme::use_appearance(move |config| {
+            config.color_scheme = match defaults.read().theme {
+                Theme::Light | Theme::LightHighContrast => ColorScheme::Light,
+                Theme::Dark | Theme::DarkHighContrast => ColorScheme::Dark,
+                _ => config.color_scheme,
+            }
+        });
         let dark = barrier_kit::theme::resolved().scheme.is_dark();
         let workspace = use_state(Workspace::default);
         let sessions = use_state(Sessions::new);
@@ -423,6 +435,18 @@ impl App for Terminal {
 
         let window_focused = handles.controls.status.read().activated;
         use_focus_report(&handles, window_focused);
+        let drag = window_drag_handler(handles.controls.fixed);
+        let theme = defaults.read().theme;
+        let compact = theme::compact(theme)
+            && handles.controls.status.read().decoration == DecorationResponse::Client;
+        let terminal_background = handles
+            .active()
+            .map(|session| {
+                let profile = defaults.read().profile(&session.profile);
+                defaults.read().scheme(&profile, dark).background
+            })
+            .unwrap_or_default();
+        let tab_style = theme::tab_style(theme, dark, terminal_background, compact);
         let palette = Palette::current();
         let state = workspace.read();
         let title = state.window_title().to_string();
@@ -439,7 +463,17 @@ impl App for Terminal {
                 .into_iter()
                 .zip(state.rang_tabs())
                 .fold(
-                    TabBar::new(tr!("tabs"), tr!("close-tab")),
+                    TabBar::new(tr!("tabs"), tr!("close-tab"), tab_style)
+                        .active(window_focused)
+                        .leading(if compact {
+                            TAB_STRIP.compact_inset
+                        } else {
+                            0.0
+                        })
+                        .on_empty_mouse_down({
+                            let drag = drag.clone();
+                            move |event| drag(event)
+                        }),
                     |bar, (title, rang)| {
                         if rang {
                             bar.badged_tab(title, bell)
@@ -608,8 +642,15 @@ impl App for Terminal {
                 }
                 *revision.write() += 1;
             })
-            .child(Titlebar::new().title(title))
-            .maybe_child(tab_bar)
+            .children(window_chrome(
+                compact,
+                tab_style,
+                title,
+                tab_bar,
+                window_focused,
+                handles.controls.fixed,
+                drag,
+            ))
             .maybe_child(find_bar)
             .maybe_child(alert)
             .maybe_child(sheet_view)
@@ -632,6 +673,76 @@ impl App for Terminal {
             .maybe_child(status_bar(&handles, revision))
             .maybe_child(replay_bar)
     }
+}
+
+// iTermRootTerminalView.m: a compact window puts the stoplights and the tabs in one strip, or a
+// fake title bar as tall as the tabs when the tab bar is hidden.
+fn window_chrome(
+    compact: bool,
+    style: TabStyle,
+    title: String,
+    tab_bar: Option<TabBar>,
+    active: bool,
+    fixed: bool,
+    drag: impl Fn(Event<MouseEventData>) + 'static,
+) -> Vec<Element> {
+    if !compact {
+        return [
+            Some(Titlebar::new().title(title).into_element()),
+            tab_bar.map(Into::into),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+    }
+    let lights = rect()
+        .position(Position::new_absolute().left(0.0).top(0.0))
+        .layer(1)
+        .width(Size::px(TAB_STRIP.compact_inset))
+        .height(Size::px(style.height - 1.0))
+        .padding(Gaps::new(0.0, 0.0, 0.0, TAB_STRIP.compact_lights_x))
+        .main_align(Alignment::Center)
+        .child(window_traffic_lights(active, fixed));
+    let strip = match tab_bar {
+        Some(bar) => rect().width(Size::fill()).child(bar),
+        None => {
+            let mut ink = if active {
+                style.text_selected
+            } else {
+                style.text_selected_inactive
+            };
+            if active {
+                ink.a *= TAB_STRIP.title_alpha;
+            }
+            rect()
+                .width(Size::fill())
+                .height(Size::px(style.height))
+                .background(color(style.backing))
+                .on_mouse_down(drag)
+                .child(
+                    rect()
+                        .width(Size::fill())
+                        .height(Size::fill())
+                        .padding(Gaps::new(
+                            0.0,
+                            TAB_STRIP.compact_inset,
+                            0.0,
+                            TAB_STRIP.compact_inset,
+                        ))
+                        .main_align(Alignment::Center)
+                        .cross_align(Alignment::Center)
+                        .child(text(
+                            title,
+                            vow_design::Font {
+                                size: TAB_STRIP.title_font_size as u32,
+                                ..TITLEBAR.font
+                            },
+                            ink,
+                        )),
+                )
+        }
+    };
+    vec![strip.child(lights).into_element()]
 }
 
 struct Painting {

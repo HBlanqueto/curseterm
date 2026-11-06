@@ -6,15 +6,14 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use barrier_kit::platform::{WindowControls, WindowOptions};
-use barrier_kit_next::tokens::TAB_BAR;
 use freya_core::integration::AppComponent;
 use freya_core::prelude::{use_drop, use_hook};
 use rustix::process::{Pid, Signal, kill_process};
-use vow_design::{HAIRLINE, SPACE_2, TITLEBAR_CLIENT_HEIGHT, WINDOW_MIN_SIZE};
+use vow_design::{SPACE_2, WINDOW_MIN_SIZE};
 
 use crate::config::{APP_ID, APP_NAME, Defaults};
 use crate::grid::Fonts;
-use crate::{auxiliary, menu, preferences, terminal};
+use crate::{auxiliary, menu, preferences, terminal, theme};
 
 thread_local! {
     static OPEN: RefCell<Vec<(u64, WindowControls)>> = const { RefCell::new(Vec::new()) };
@@ -122,17 +121,11 @@ fn terminal_size(profile: Option<&str>) -> (u32, u32) {
     let name = profile.map_or_else(|| defaults.default_profile_name(), str::to_string);
     let profile = defaults.profile(&name);
     let fonts = Fonts::new(&profile.font_family, profile.text_size(0));
-    let tab_bar = if defaults.show_tab_bar {
-        TAB_BAR.height + HAIRLINE
-    } else {
-        0.0
-    };
     let inset = 2.0 * SPACE_2;
     let width = f32::from(profile.columns) * fonts.cell_width + inset;
     let height = f32::from(profile.rows) * fonts.cell_height
         + inset
-        + TITLEBAR_CLIENT_HEIGHT as f32
-        + tab_bar;
+        + theme::chrome_height(defaults.theme, defaults.show_tab_bar);
     (width.ceil() as u32, height.ceil() as u32)
 }
 

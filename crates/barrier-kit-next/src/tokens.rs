@@ -1,6 +1,6 @@
 //! Tengen values that move to `tengen/components.json` under the same name.
 
-use vow_design::{Font, Rgba};
+use vow_design::{BG_WINDOW_DARK, BG_WINDOW_LIGHT, Font, Rgba};
 
 pub const MONO: Font = Font {
     family: "Geist Mono",
@@ -11,17 +11,11 @@ pub const MONO: Font = Font {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TabBarMetrics {
-    pub height: f32,
-    pub tab_max_width: f32,
-    pub padding: f32,
     pub badge: f32,
     pub badge_gap: f32,
 }
 
 pub const TAB_BAR: TabBarMetrics = TabBarMetrics {
-    height: 28.0,
-    tab_max_width: 240.0,
-    padding: 8.0,
     badge: 12.0,
     badge_gap: 4.0,
 };
@@ -284,4 +278,157 @@ pub struct IndicatorColors {
     pub fill: Rgba,
     pub stroke: Rgba,
     pub ink: Rgba,
+}
+
+// PSMTabBarControl's classic styles and iTerm2's compact window (PSMYosemiteTabStyle.m,
+// PSMTabBarControl.m, iTermRootTerminalView.m, iTermAdvancedSettingsModel.m).
+pub const TAB_STRIP: TabStripMetrics = TabStripMetrics {
+    min_tab_width: 75.0,
+    add_width: 24.0,
+    close: 16.0,
+    close_x: 6.0,
+    label_inset: 26.0,
+    compact_inset: 75.0,
+    compact_lights_x: 6.0,
+    minimal_height: 38.0,
+    title_font_size: 13.0,
+    title_alpha: 0.65,
+    inactive_close_alpha: 0.5,
+    shadow: [
+        Rgba::rgba8(0, 0, 0, 70.0 / 255.0),
+        Rgba::rgba8(0, 0, 0, 47.0 / 255.0),
+        Rgba::rgba8(0, 0, 0, 32.0 / 255.0),
+        Rgba::rgba8(0, 0, 0, 16.0 / 255.0),
+    ],
+};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TabStripMetrics {
+    pub min_tab_width: f32,
+    pub add_width: f32,
+    pub close: f32,
+    pub close_x: f32,
+    pub label_inset: f32,
+    pub compact_inset: f32,
+    pub compact_lights_x: f32,
+    pub minimal_height: f32,
+    pub title_font_size: f32,
+    pub title_alpha: f32,
+    pub inactive_close_alpha: f32,
+    pub shadow: [Rgba; 4],
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TabStyle {
+    pub height: f32,
+    pub font_size: f32,
+    pub backing: Rgba,
+    pub selected: Rgba,
+    pub selected_hover: Rgba,
+    pub unselected: Rgba,
+    pub unselected_hover: Rgba,
+    pub text_selected: Rgba,
+    pub text_unselected: Rgba,
+    pub text_selected_inactive: Rgba,
+    pub text_unselected_inactive: Rgba,
+    pub separator: Rgba,
+    pub separator_inactive: Rgba,
+    pub top_line: Rgba,
+    pub bottom_line: Rgba,
+    pub shadow: bool,
+    pub outline: Rgba,
+}
+
+const fn white(level: f32, alpha: f32) -> Rgba {
+    Rgba::rgba8(
+        (level * 255.0) as u8,
+        (level * 255.0) as u8,
+        (level * 255.0) as u8,
+        alpha,
+    )
+}
+
+// PSMYosemiteTabStyle.m: the selected tab is clear over the window background.
+pub const TAB_STYLE_LIGHT: TabStyle = TabStyle {
+    height: 24.0,
+    font_size: 11.0,
+    backing: BG_WINDOW_LIGHT,
+    selected: Rgba::TRANSPARENT,
+    selected_hover: Rgba::TRANSPARENT,
+    unselected: white(0.0, 0.07),
+    unselected_hover: white(0.0, 0.1165),
+    text_selected: white(0.0, 1.0),
+    text_unselected: white(0.0, 1.0),
+    text_selected_inactive: white(189.0 / 255.0, 1.0),
+    text_unselected_inactive: white(164.0 / 255.0, 1.0),
+    separator: white(0.0, 0.07),
+    separator_inactive: white(0.0, 0.07),
+    top_line: Rgba::TRANSPARENT,
+    bottom_line: white(230.0 / 255.0, 1.0),
+    shadow: true,
+    outline: Rgba::TRANSPARENT,
+};
+
+// PSMDarkTabStyle.m; the bottom row blends its black-to-0.75 gradient over the 0.1 line.
+pub const TAB_STYLE_DARK: TabStyle = TabStyle {
+    backing: BG_WINDOW_DARK,
+    unselected: white(0.0, 0.5),
+    unselected_hover: white(0.0, 0.2),
+    text_selected: white(1.0, 1.0),
+    text_unselected: white(0.65, 1.0),
+    text_selected_inactive: white(0.45, 1.0),
+    text_unselected_inactive: white(0.37, 1.0),
+    separator: white(1.0, 0.18),
+    separator_inactive: white(1.0, 0.15),
+    top_line: white(0.0, 1.0),
+    bottom_line: white(0.0, 0.875),
+    ..TAB_STYLE_LIGHT
+};
+
+// PSMLightHighContrastTabStyle.m
+pub const TAB_STYLE_LIGHT_HIGH_CONTRAST: TabStyle = TabStyle {
+    font_size: 12.0,
+    selected: BG_WINDOW_LIGHT,
+    selected_hover: BG_WINDOW_LIGHT,
+    unselected: white(180.0 / 255.0, 1.0),
+    unselected_hover: white(180.0 / 255.0 - 0.1, 1.0),
+    text_selected_inactive: white(0.0, 1.0),
+    text_unselected_inactive: white(0.0, 1.0),
+    top_line: white(140.0 / 255.0, 1.0),
+    bottom_line: white(140.0 / 255.0, 1.0),
+    ..TAB_STYLE_LIGHT
+};
+
+// PSMDarkHighContrastTabStyle.m with highVisibility on, its default.
+pub const TAB_STYLE_DARK_HIGH_CONTRAST: TabStyle = TabStyle {
+    font_size: 12.0,
+    selected: white(0.80, 1.0),
+    selected_hover: white(0.85, 1.0),
+    unselected: white(0.03, 1.0),
+    unselected_hover: white(0.03, 1.0),
+    text_selected: white(0.0, 1.0),
+    text_unselected: white(1.0, 1.0),
+    text_selected_inactive: white(0.0, 1.0),
+    text_unselected_inactive: white(1.0, 1.0),
+    ..TAB_STYLE_DARK
+};
+
+// PSMMinimalTabStyle.m and iTermAdvancedSettingsModel.m minimalTabStyle* defaults.
+pub const MINIMAL_TABS: MinimalTabMetrics = MinimalTabMetrics {
+    background_difference: 0.05,
+    hover_difference: 0.1,
+    outline_alpha: 0.2,
+    text_dark: 0.95,
+    text_light: 0.05,
+    unselected_text_alpha: 0.5,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MinimalTabMetrics {
+    pub background_difference: f32,
+    pub hover_difference: f32,
+    pub outline_alpha: f32,
+    pub text_dark: f32,
+    pub text_light: f32,
+    pub unselected_text_alpha: f32,
 }

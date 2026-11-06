@@ -1918,3 +1918,65 @@ modes.
 window, AI, channels, buffered input, screenshots); clicking an indicator
 shows no help; stroke ends are not round; the symbols are our own drawings,
 not SF Symbols.
+
+## Phase 43 — Window themes
+
+### Plan
+
+iTerm2's Settings › Appearance › General › Theme (`iTermTheme.m`,
+`PSMYosemiteTabStyle.m`, `PSMDarkTabStyle.m`, `PSMLightHighContrastTabStyle.m`,
+`PSMDarkHighContrastTabStyle.m`, `PSMMinimalTabStyle.m`,
+`iTermRootTerminalView.m` and `PseudoTerminal.m`), with the classic tab family,
+the one iTerm2 uses before macOS 26 and always for Compact:
+
+1. **Theme setting** with the seven themes in the order of iTerm2's menu;
+   Regular by default.
+2. **Tab bar** like `PSMTabBarControl`: 24 points, equal tabs that fill the
+   bar (minimum 75), close button on the left on hover only, a centered
+   11-point title (12 in high contrast), 1-point separators, a top line over
+   unselected tabs, a 4-point shadow and a 24-point «+». Colors of Light,
+   Dark and both high-contrast styles in tokens (`TAB_STYLE_*`).
+3. **Regular and Compact** follow the system appearance; **Light, Dark** and
+   the high-contrast ones force it on the whole window, title bar included
+   (`use_appearance`).
+4. **Compact and Minimal** (with CSD): no title bar; the window buttons and
+   the tabs share one strip with 75 points on the left for the buttons, and
+   with a single tab a fake title bar as tall, with the centered 13-point
+   title. Dragging the strip moves the window.
+5. **Minimal:** the strip is 38 points and takes the terminal background;
+   unselected tabs are 0.05 darker (lighter on near black), with no
+   separators, a 20 % outline notch and 0.95 or 0.05 text by the background.
+6. **Test:** sway does not accept CSD (it answers SSD even when the app asks
+   for CSD and with `border csd`), so Compact and Minimal are tested on
+   headless weston, which has no `xdg-decoration`.
+
+### Result (2026-11-06)
+
+Tested with the patched kit on headless weston 16 (CSD) and on sway (SSD).
+`./dev.sh check` clean in both modes; a new test for Minimal's colors.
+
+**Works** (screenshots in [`capturas/`](capturas/); `fase43-temas.png`, top to
+bottom: Regular, Compact with two tabs and with one, Minimal with two and with
+one, Light, Dark, Light HC and Dark HC):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Settings › Appearance: Theme menu with the seven themes, Regular checked | ✓ | `fase43-menu-tema.png` |
+| Choosing Dark on sway changes the tab bar at once, with the active window text (1.0 and 0.65) | ✓ | — |
+| The nine cases of `fase43-temas.png` on weston | ✓ | `fase43-temas.png` |
+| Minimal: a 38-point strip with the Solarized Dark background, centered buttons, a notch around the selected tab and a white «+» | ✓ | `fase43-minimal.png` |
+| Dark and Dark HC force the dark title bar; Light and Light HC, the light one | ✓ | `fase43-temas.png` |
+| On sway (SSD), Compact and Minimal keep the compositor's bar on top, with their tab colors | ✓ | — |
+
+**Not tested:** hover (close button and hover color) and dragging or
+double-clicking the strip, because weston has no virtual keyboard or pointer;
+active-window colors on weston (it does not focus the window, so the inactive
+ones show); the kit as is; Malaysia.
+
+**Differs from iTerm2:** the macOS 26 (Tahoe) styles are not there; hover
+changes at once, without the 0.2 s animation; Regular and Compact do not
+switch to high contrast by themselves with the system's «Increase contrast»;
+pane dividers do not take the theme's colors; Minimal ignores transparency
+and the dimming of background windows; there are no tab colors, tab numbers,
+subtitles or overflow menu; the tabs' backing is Tengen's window color,
+without macOS's title bar material.
