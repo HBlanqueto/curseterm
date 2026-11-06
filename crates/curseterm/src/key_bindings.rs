@@ -46,6 +46,26 @@ pub enum BindingAction {
     CopyMode,
     ToggleFullscreen,
     ToggleMouseReporting,
+    Undo,
+    ChangeProfile,
+    DecreaseHeight,
+    IncreaseHeight,
+    DecreaseWidth,
+    IncreaseWidth,
+    SwapPaneAbove,
+    SwapPaneBelow,
+    SwapPaneLeft,
+    SwapPaneRight,
+    SwapWithNextPane,
+    SwapWithPreviousPane,
+    MoveSessionToSplitPane,
+    SendVimText,
+    SendTextWithoutBroadcasting,
+    Compose,
+    FindRegex,
+    Paste,
+    CopyOrSend,
+    PasteOrSend,
 }
 
 // What the edit sheet asks for under the action.
@@ -60,7 +80,7 @@ pub enum Parameter {
 
 impl BindingAction {
     // The pop-up's groups; a long kit pop-up does not scroll (BK-040).
-    pub const GROUPS: [&'static [Self]; 12] = [
+    pub const GROUPS: [&'static [Self]; 16] = [
         &[Self::Ignore, Self::SelectMenuItem],
         &[
             Self::NewWindowWithProfile,
@@ -95,16 +115,37 @@ impl BindingAction {
             Self::SendEscapeSequence,
             Self::SendHexCode,
             Self::SendText,
+            Self::SendVimText,
+            Self::SendTextWithoutBroadcasting,
             Self::SendSnippet,
+            Self::Compose,
         ],
         &[
             Self::RunCoprocess,
             Self::InstantReplay,
+            Self::Undo,
             Self::AlertOnNextMark,
         ],
-        &[Self::FindAgainDown, Self::FindAgainUp],
+        &[Self::FindRegex, Self::FindAgainDown, Self::FindAgainUp],
         &[Self::CopyMode],
         &[Self::ToggleFullscreen, Self::ToggleMouseReporting],
+        &[Self::ChangeProfile],
+        &[
+            Self::DecreaseHeight,
+            Self::IncreaseHeight,
+            Self::DecreaseWidth,
+            Self::IncreaseWidth,
+        ],
+        &[
+            Self::SwapPaneAbove,
+            Self::SwapPaneBelow,
+            Self::SwapPaneLeft,
+            Self::SwapPaneRight,
+            Self::SwapWithNextPane,
+            Self::SwapWithPreviousPane,
+            Self::MoveSessionToSplitPane,
+        ],
+        &[Self::Paste, Self::CopyOrSend, Self::PasteOrSend],
     ];
 
     pub fn group(self) -> usize {
@@ -120,10 +161,15 @@ impl BindingAction {
             Self::NewWindowWithProfile
             | Self::NewTabWithProfile
             | Self::SplitHorizontallyWithProfile
-            | Self::SplitVerticallyWithProfile => Parameter::Profile,
-            Self::SendEscapeSequence | Self::SendHexCode | Self::SendText | Self::RunCoprocess => {
-                Parameter::Text
-            }
+            | Self::SplitVerticallyWithProfile
+            | Self::ChangeProfile => Parameter::Profile,
+            Self::SendEscapeSequence
+            | Self::SendHexCode
+            | Self::SendText
+            | Self::SendVimText
+            | Self::SendTextWithoutBroadcasting
+            | Self::RunCoprocess
+            | Self::FindRegex => Parameter::Text,
             Self::SendSnippet => Parameter::Snippet,
             _ => Parameter::None,
         }
@@ -143,6 +189,10 @@ impl BindingAction {
             tr!("binding-group-search"),
             tr!("binding-group-copy-mode"),
             tr!("binding-group-toggles"),
+            tr!("binding-group-profile"),
+            tr!("binding-group-resize-pane"),
+            tr!("binding-group-split-panes"),
+            tr!("binding-group-pasteboard"),
         ][group]
     }
 
@@ -185,6 +235,26 @@ impl BindingAction {
             Self::CopyMode => tr!("binding-copy-mode"),
             Self::ToggleFullscreen => tr!("binding-toggle-fullscreen"),
             Self::ToggleMouseReporting => tr!("binding-toggle-mouse-reporting"),
+            Self::Undo => tr!("binding-undo"),
+            Self::ChangeProfile => tr!("binding-change-profile"),
+            Self::DecreaseHeight => tr!("binding-decrease-height"),
+            Self::IncreaseHeight => tr!("binding-increase-height"),
+            Self::DecreaseWidth => tr!("binding-decrease-width"),
+            Self::IncreaseWidth => tr!("binding-increase-width"),
+            Self::SwapPaneAbove => tr!("binding-swap-pane-above"),
+            Self::SwapPaneBelow => tr!("binding-swap-pane-below"),
+            Self::SwapPaneLeft => tr!("binding-swap-pane-left"),
+            Self::SwapPaneRight => tr!("binding-swap-pane-right"),
+            Self::SwapWithNextPane => tr!("binding-swap-with-next-pane"),
+            Self::SwapWithPreviousPane => tr!("binding-swap-with-previous-pane"),
+            Self::MoveSessionToSplitPane => tr!("binding-move-session-to-split-pane"),
+            Self::SendVimText => tr!("binding-send-vim-text"),
+            Self::SendTextWithoutBroadcasting => tr!("binding-send-text-without-broadcasting"),
+            Self::Compose => tr!("binding-compose"),
+            Self::FindRegex => tr!("binding-find-regex"),
+            Self::Paste => tr!("binding-paste"),
+            Self::CopyOrSend => tr!("binding-copy-or-send"),
+            Self::PasteOrSend => tr!("binding-paste-or-send"),
         }
     }
 }
@@ -328,6 +398,72 @@ pub fn shown(combo: &str) -> String {
 }
 
 // iTermKeyBindingAction.m KEY_ACTION_HEX_CODE: whitespace-separated hexadecimal bytes.
+// NSString+iTerm -stringByExpandingVimSpecialCharacters: octal, \x and \u codes, \b (DEL), \e,
+// \f, \n, \r, \t, \\, \", \<C-x> and \<M-x>; a backslash before anything else is dropped.
+pub fn vim_special(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::new();
+    let mut at = 0;
+    let digits = |from: usize, max: usize, radix: u32| {
+        chars[from..]
+            .iter()
+            .take(max)
+            .take_while(|c| c.is_digit(radix))
+            .count()
+    };
+    let value = |from: usize, count: usize, radix: u32| {
+        let code: String = chars[from..from + count].iter().collect();
+        u32::from_str_radix(&code, radix)
+            .ok()
+            .and_then(char::from_u32)
+    };
+    while at < chars.len() {
+        if chars[at] != '\\' {
+            out.push(chars[at]);
+            at += 1;
+            continue;
+        }
+        at += 1;
+        let Some(&next) = chars.get(at) else {
+            break;
+        };
+        let octal = digits(at, 3, 8);
+        let (consumed, expanded) = match next {
+            '0'..='7' => (octal, value(at, octal, 8).map(String::from)),
+            'x' if digits(at + 1, 2, 16) > 0 => {
+                let count = digits(at + 1, 2, 16);
+                (count + 1, value(at + 1, count, 16).map(String::from))
+            }
+            'u' if digits(at + 1, 4, 16) == 4 => (5, value(at + 1, 4, 16).map(String::from)),
+            'b' => (1, Some("\x7f".into())),
+            'e' => (1, Some("\x1b".into())),
+            'f' => (1, Some("\x0c".into())),
+            'n' => (1, Some("\n".into())),
+            'r' => (1, Some("\r".into())),
+            't' => (1, Some("\t".into())),
+            '\\' | '"' => (1, Some(next.to_string())),
+            '<' => match chars.get(at + 1..at + 5) {
+                Some([kind @ ('C' | 'M'), '-', letter, '>']) if letter.is_ascii_alphabetic() => {
+                    let control = char::from(letter.to_ascii_uppercase() as u8 & 0x1f);
+                    let sent = if *kind == 'C' {
+                        control.to_string()
+                    } else {
+                        format!("\x1b{letter}")
+                    };
+                    (5, Some(sent))
+                }
+                _ => (0, None),
+            },
+            _ => (0, None),
+        };
+        if let Some(expanded) = expanded {
+            out.push_str(&expanded);
+        }
+        at += consumed;
+    }
+    out
+}
+
 pub fn hex_bytes(text: &str) -> Vec<u8> {
     text.split_whitespace()
         .filter_map(|token| {
@@ -343,6 +479,14 @@ pub fn hex_bytes(text: &str) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn vim_special_characters_expand_as_iterm2_does() {
+        assert_eq!(
+            vim_special(r"a\e[1m\<C-w>\<M-x>\b\101\x41\u00e9\q"),
+            "a\x1b[1m\x17\x1bx\x7fAAéq"
+        );
+    }
 
     #[test]
     fn combos_name_the_modifiers_in_order_and_profile_bindings_win() {

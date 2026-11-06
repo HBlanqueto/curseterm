@@ -77,6 +77,12 @@ impl Pane {
         }
     }
 
+    pub fn swap(&mut self, a: SessionId, b: SessionId) {
+        self.replace(a, SessionId::MAX);
+        self.replace(b, a);
+        self.replace(SessionId::MAX, b);
+    }
+
     pub fn is_split(&self) -> bool {
         matches!(self, Self::Split { .. })
     }

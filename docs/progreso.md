@@ -2579,10 +2579,8 @@ ahora guarda la primera que se ve.
 desplazamiento, paneles y Run Coprocess desde una combinación.
 
 **Difiere de iTerm2:** sin Bypass Terminal, remapeo de modificadores,
-pestañas recientes, ventanas siguiente y anterior, cambiar el tamaño o
-intercambiar paneles, cambiar de perfil o de colores, Paste…, Copy or Send,
-la selección, scripts, Sequence ni Send Text with “vim” Special Chars; sin
-presets; una combinación con Super que ya es un atajo del menú hace las dos
+pestañas recientes, ventanas siguiente y anterior, cambiar de colores, la
+selección, scripts ni Sequence (la fase 74 añade el resto); sin presets; una combinación con Super que ya es un atajo del menú hace las dos
 cosas; el icono de Keys repite el de General porque el kit no tiene teclado
 (BK-024).
 
@@ -3264,3 +3262,47 @@ los dos modos.
 (`PSMTabBarCell.m -highlightAmount`). Con `use_animation_transition` el valor
 se queda en 0 aunque el hover llega, y se deja el cambio de color
 instantáneo.
+
+## Fase 74 — Más acciones de combinación
+
+### Plan
+
+`iTermEditKeyActionWindowController.m` agrupa las acciones del desplegable y
+`PTYSession.m -performKeyBindingAction:` las ejecuta. Se añaden las que
+tienen equivalente en Linux:
+
+1. **Miscellaneous:** Undo, que deshace el último cierre.
+2. **Profile:** Change Profile cambia el perfil de la sesión activa.
+3. **Resize Pane:** Decrease/Increase Height/Width mueven el divisor, como
+   los atajos del menú.
+4. **Split Panes:** Swap With Split Pane Above/Below/Left/Right y Swap With
+   Next/Previous Pane (`PTYTab.m -swapSession:withSession:`): la sesión
+   activa cambia de sitio y conserva el foco. Move Session to Split Pane abre
+   el modo de mover.
+5. **Send Keystrokes:** Send Text with “vim” Special Chars expande como
+   `NSString+iTerm -stringByExpandingVimSpecialCharacters` (octal, `\x`,
+   `\u`, `\b` = DEL, `\e`, `\f`, `\n`, `\r`, `\t`, `\\`, `\"`,
+   `\<C-x>` y `\<M-x>`); Send Text without Broadcasting expande igual y
+   escribe solo en la sesión activa; Open Composer.
+6. **Search:** Find Regular Expression hace una búsqueda temporal con regex
+   sensible a mayúsculas y cierra la barra de búsqueda.
+7. **Pasteboard:** Paste… abre Advanced Paste; Copy Selection or Send ^C y
+   Paste or Send ^V copian o pegan si pueden y, si no, envían el control.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado |
+|---|---|
+| F5 con `echo X\x41\101\e[0m\<C-w>Y\n` envía `echo XAA\E[0m\027Y\n` | ✓ |
+| F7 (Copy or Send) sin selección envía `\003` | ✓ |
+| F6 (Swap Left) en el panel derecho lo pasa a la izquierda y el foco lo sigue | ✓ |
+
+Además, `arrangement-name` estaba dos veces en los `.ftl` y la hoja de
+guardar disposición decía «Nombre»; ahora usa `save-arrangement-name`.
+
+**No probado:** con el kit tal cual; Undo, Change Profile, Resize Pane, Swap
+Next/Previous, Move Session, Send Text without Broadcasting con difusión
+activa, Compose, Find Regex, Paste… y Paste or Send.

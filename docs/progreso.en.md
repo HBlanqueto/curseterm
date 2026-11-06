@@ -2560,9 +2560,8 @@ shown.
 Coprocess actions from a binding.
 
 **Differs from iTerm2:** no Bypass Terminal, modifier remapping, recent
-tabs, next and previous window, pane resizing or swapping, changing profile
-or colors, Paste…, Copy or Send, selection moves, scripts, Sequence nor Send
-Text with “vim” Special Chars; no presets; a Super binding that is already a
+tabs, next and previous window, changing colors, selection moves, scripts nor
+Sequence (phase 74 adds the rest); no presets; a Super binding that is already a
 menu shortcut does both; the Keys icon repeats General's because the kit has
 no keyboard symbol (BK-024).
 
@@ -3241,3 +3240,48 @@ modes.
 **Not done:** the tabs' 0.2 s hover animation (`PSMTabBarCell.m
 -highlightAmount`). With `use_animation_transition` the value stays at 0
 although the hover arrives, so the instant colour change stays.
+
+## Phase 74 — More binding actions
+
+### Plan
+
+`iTermEditKeyActionWindowController.m` groups the pop-up's actions and
+`PTYSession.m -performKeyBindingAction:` runs them. The ones with a Linux
+counterpart are added:
+
+1. **Miscellaneous:** Undo, which undoes the last close.
+2. **Profile:** Change Profile changes the active session's profile.
+3. **Resize Pane:** Decrease/Increase Height/Width move the divider, like the
+   menu shortcuts.
+4. **Split Panes:** Swap With Split Pane Above/Below/Left/Right and Swap With
+   Next/Previous Pane (`PTYTab.m -swapSession:withSession:`): the active
+   session changes place and keeps the focus. Move Session to Split Pane
+   starts the move mode.
+5. **Send Keystrokes:** Send Text with “vim” Special Chars expands like
+   `NSString+iTerm -stringByExpandingVimSpecialCharacters` (octal, `\x`,
+   `\u`, `\b` = DEL, `\e`, `\f`, `\n`, `\r`, `\t`, `\\`, `\"`,
+   `\<C-x>` and `\<M-x>`); Send Text without Broadcasting expands the same
+   way and writes only to the active session; Open Composer.
+6. **Search:** Find Regular Expression runs a temporary case-sensitive regex
+   search and closes the find bar.
+7. **Pasteboard:** Paste… opens Advanced Paste; Copy Selection or Send ^C and
+   Paste or Send ^V copy or paste when they can and otherwise send the control
+   character.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+| Test | Result |
+|---|---|
+| F5 with `echo X\x41\101\e[0m\<C-w>Y\n` sends `echo XAA\E[0m\027Y\n` | ✓ |
+| F7 (Copy or Send) without a selection sends `\003` | ✓ |
+| F6 (Swap Left) in the right pane moves it to the left and the focus follows | ✓ |
+
+Also, `arrangement-name` was twice in the `.ftl` files and the save
+arrangement sheet said “Name”; it now uses `save-arrangement-name`.
+
+**Not tested:** the kit as is; Undo, Change Profile, Resize Pane, Swap
+Next/Previous, Move Session, Send Text without Broadcasting with broadcast on,
+Compose, Find Regex, Paste… and Paste or Send.

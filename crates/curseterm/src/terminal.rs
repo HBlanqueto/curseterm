@@ -1949,7 +1949,7 @@ fn field_sheet(handles: &Handles, target: Sheet) -> Element {
         Sheet::Log(_) => (tr!("log-start"), tr!("save-path"), tr!("log-confirm")),
         Sheet::SaveArrangement => (
             tr!("save-arrangement"),
-            tr!("arrangement-name"),
+            tr!("save-arrangement-name"),
             tr!("save-confirm"),
         ),
         Sheet::NamedMark(_) => (
@@ -2576,7 +2576,59 @@ fn perform_binding(
         BindingAction::CopyMode => menu(menu::COPY_MODE.id),
         BindingAction::ToggleFullscreen => menu(menu::FULL_SCREEN.id),
         BindingAction::ToggleMouseReporting => session.toggle_state(TerminalState::MouseReporting),
+        BindingAction::Undo => menu(menu::UNDO_CLOSE.id),
+        BindingAction::ChangeProfile => {
+            session.change_profile(&handles.defaults.peek().profile(parameter))
+        }
+        BindingAction::DecreaseHeight => menu(menu::DIVIDER_UP),
+        BindingAction::IncreaseHeight => menu(menu::DIVIDER_DOWN),
+        BindingAction::DecreaseWidth => menu(menu::DIVIDER_LEFT),
+        BindingAction::IncreaseWidth => menu(menu::DIVIDER_RIGHT),
+        BindingAction::SwapPaneAbove => swap_pane(handles, Toward::Up),
+        BindingAction::SwapPaneBelow => swap_pane(handles, Toward::Down),
+        BindingAction::SwapPaneLeft => swap_pane(handles, Toward::Left),
+        BindingAction::SwapPaneRight => swap_pane(handles, Toward::Right),
+        BindingAction::SwapWithNextPane | BindingAction::SwapWithPreviousPane => {
+            let step = if binding.action == BindingAction::SwapWithNextPane {
+                1
+            } else {
+                -1
+            };
+            let mut workspace = handles.workspace;
+            workspace.write().swap_active(|root, active| {
+                Some(root.cycle(active, step)).filter(|other| *other != active)
+            });
+        }
+        BindingAction::MoveSessionToSplitPane => menu(menu::MOVE_SESSION_TO_PANE.id),
+        BindingAction::SendVimText => send(key_bindings::vim_special(parameter).into_bytes()),
+        BindingAction::SendTextWithoutBroadcasting => {
+            session.write(key_bindings::vim_special(parameter).into_bytes())
+        }
+        BindingAction::Compose => menu(menu::SHOW_COMPOSER),
+        BindingAction::FindRegex => {
+            handles.find.close();
+            session.find(
+                &FindMode::RegexCaseSensitive.pattern(parameter),
+                SearchDirection::Left,
+            );
+        }
+        BindingAction::Paste => menu(menu::ADVANCED_PASTE.id),
+        BindingAction::CopyOrSend => match session.selected_text() {
+            Some(_) => copy(handles, session),
+            None => send(vec![0x03]),
+        },
+        BindingAction::PasteOrSend => match clipboard_text(handles.clipboard) {
+            Some(text) => paste_text(handles, text),
+            None => send(vec![0x16]),
+        },
     }
+}
+
+fn swap_pane(handles: &Handles, toward: Toward) {
+    let mut workspace = handles.workspace;
+    workspace
+        .write()
+        .swap_active(|root, active| root.neighbor(active, toward));
 }
 
 // PTYTextView+ARC.m -sendSnippet: with Option held the snippet opens in Advanced Paste;

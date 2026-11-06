@@ -281,6 +281,15 @@ impl Workspace {
         }
     }
 
+    // PTYTab.m -swapSession:withSession:: the active session moves and keeps the focus.
+    pub fn swap_active(&mut self, other: impl FnOnce(&Pane, SessionId) -> Option<SessionId>) {
+        if let Some(tab) = self.active_tab_mut()
+            && let Some(other) = other(&tab.root, tab.active)
+        {
+            tab.root.swap(tab.active, other);
+        }
+    }
+
     pub fn cycle_pane(&mut self, step: isize) {
         if let Some(tab) = self.active_tab_mut() {
             tab.active = tab.root.cycle(tab.active, step);
