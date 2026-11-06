@@ -68,6 +68,7 @@ use crate::pick;
 use crate::session::{
     self, GridSize, Launch, Listener, MarkJump, Session, SessionId, TerminalState,
 };
+use crate::snippets::{self, Snippet};
 use crate::status;
 use crate::theme;
 use crate::windows;
@@ -1147,6 +1148,10 @@ fn use_live_menu(handles: &Handles) {
         menu::alert_items(next_mark, offscreen, action),
     );
     use_submenu_items(
+        menu::SNIPPETS_MENU,
+        snippets::menu_items(&handles.defaults.read().snippets),
+    );
+    use_submenu_items(
         menu::BROADCAST_MENU,
         menu::broadcast_items(*handles.broadcast.read()),
     );
@@ -2134,6 +2139,17 @@ fn replay_bar(handles: &Handles, id: SessionId, index: usize) -> Element {
         .into_element()
 }
 
+// PTYTextView+ARC.m -sendSnippet: with Option held the snippet opens in Advanced Paste.
+fn send_snippet(handles: &Handles, session: Option<&Session>, snippet: &Snippet) {
+    let text = snippet.escaped();
+    if handles.held.peek().contains(Modifiers::ALT) {
+        handles.advanced.open(text);
+        open_sheet(handles, Sheet::AdvancedPaste);
+    } else if let Some(session) = session {
+        session.write(text.into_bytes());
+    }
+}
+
 // iTermGlobalSearchWindowController.m -search: every session of the window, tab by tab.
 fn search_globally(handles: &Handles, defaults: &Defaults) {
     let global = handles.global;
@@ -2956,6 +2972,14 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
     }
     if let Some(name) = tabs {
         restore_arrangement(handles, events, &name);
+        return;
+    }
+    if let Some(snippet) = id
+        .strip_prefix(snippets::SNIPPET_PREFIX)
+        .and_then(|index| index.parse::<usize>().ok())
+        .and_then(|index| handles.defaults.peek().snippets.get(index).cloned())
+    {
+        send_snippet(handles, active.as_deref(), &snippet);
         return;
     }
     if let Some(profile) = id

@@ -813,8 +813,10 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
   (`freya-components` sin features por defecto y `freya-edit`, ya en el
   árbol por el kit) y sin barra de desplazamiento: crece con el texto.
 - **API propuesta para el kit**: `TextView::new(value, family, size,
-  line_height, ink)` con `cursor`, `width`, `auto_focus`, `on_change`,
-  `on_focus_change` y `on_key`, como el bloque.
+  line_height, ink)` con `cursor`, `width`, `height`, `auto_focus`,
+  `on_change`, `on_focus_change` y `on_key`, como el bloque. `height` deja
+  que el campo ocupe su caja, para que un clic en cualquier punto de ella
+  (Value de Edit Snippet) le dé el foco.
 - **Gravedad**: media
 - **Cómo reproducirlo**: buscar en `crates/barrier-kit/src/controls.rs` un
   control que acepte Enter como salto de línea.

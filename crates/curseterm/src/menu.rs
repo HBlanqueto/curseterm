@@ -118,6 +118,7 @@ pub const CLEAR_FIND: Action =
 pub const FIND_GLOBALLY: Action = Action::new("find-globally", || tr!("find-globally"))
     .shortcut(super_with(Modifiers::SHIFT, 'f'));
 pub const SELECT_MATCHES: Action = Action::new("select-matches", || tr!("select-matches"));
+pub const SNIPPETS_MENU: &str = "snippets-menu";
 pub const MARKS_MENU: &str = "marks-menu";
 pub const SET_MARK: Action =
     Action::new("set-mark", || tr!("set-mark")).shortcut(super_with(Modifiers::SHIFT, 'm'));
@@ -297,6 +298,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                     ],
                 ),
                 MenuItem::Separator,
+                submenu(SNIPPETS_MENU, tr!("snippets-menu"), Vec::new()),
                 OPEN_SELECTION.item(false),
                 MenuItem::Separator,
                 SELECT_ALL.item(true),

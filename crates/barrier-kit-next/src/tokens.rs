@@ -494,6 +494,18 @@ pub struct AdvancedPasteMetrics {
 
 pub const PASTE_QUESTION_WIDTH: f32 = 480.0;
 
+// iTermEditSnippetWindowController.xib: the Edit Snippet window and its Value box.
+pub const SNIPPET_EDITOR: SnippetEditorMetrics = SnippetEditorMetrics {
+    width: 637.0,
+    value_height: 131.0,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SnippetEditorMetrics {
+    pub width: f32,
+    pub value_height: f32,
+}
+
 // iTermGlobalSearch.xib and iTermGlobalSearchEngineCursor.m: the panel, the snippet's 20
 // characters before the match and 256 after it, and the match's yellow at 0.35.
 pub const GLOBAL_SEARCH: GlobalSearchMetrics = GlobalSearchMetrics {

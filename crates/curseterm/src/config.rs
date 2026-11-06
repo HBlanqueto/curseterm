@@ -8,6 +8,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::arrangement::Arrangement;
 use crate::find_mode::FindMode;
 use crate::paste_warning::PasteWarnings;
+use crate::snippets::Snippet;
 
 pub const APP_ID: &str = "org.curseterm.CurseTerm";
 pub const APP_NAME: &str = "CurseTerm";
@@ -33,6 +34,7 @@ pub struct Defaults {
     pub find_mode: FindMode,
     pub filter_mode: FindMode,
     pub global_search_mode: FindMode,
+    pub snippets: Vec<Snippet>,
 }
 
 impl Default for Defaults {
@@ -54,6 +56,7 @@ impl Default for Defaults {
             find_mode: FindMode::default(),
             filter_mode: FindMode::default(),
             global_search_mode: FindMode::default(),
+            snippets: Vec::new(),
         }
     }
 }

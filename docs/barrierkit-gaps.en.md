@@ -810,8 +810,9 @@ Each gap says how it is solved (CurseTerm ADR 0001):
   (`freya-components` without default features and `freya-edit`, already in
   the tree through the kit) and no scroll bar: it grows with the text.
 - **Proposed kit API**: `TextView::new(value, family, size, line_height,
-  ink)` with `cursor`, `width`, `auto_focus`, `on_change`, `on_focus_change`
-  and `on_key`, like the block.
+  ink)` with `cursor`, `width`, `height`, `auto_focus`, `on_change`,
+  `on_focus_change` and `on_key`, like the block. `height` lets the field
+  fill its box, so a click anywhere in it (Edit Snippet's Value) focuses it.
 - **Severity**: medium
 - **How to reproduce**: look in `crates/barrier-kit/src/controls.rs` for a
   control that takes Enter as a line break.

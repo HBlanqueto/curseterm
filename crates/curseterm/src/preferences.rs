@@ -31,6 +31,7 @@ use crate::config::{
 use crate::itermcolors;
 use crate::localize::tr;
 use crate::menu;
+use crate::snippets_pane::SnippetsPane;
 
 thread_local! {
     static INTERNED: RefCell<HashSet<&'static str>> = RefCell::new(HashSet::new());
@@ -114,6 +115,13 @@ impl App for Settings {
                                 defaults.focus_follows_mouse,
                                 |defaults, on| defaults.focus_follows_mouse = on,
                             ),
+                        )
+                        .tab(
+                            Symbol::Bookmark,
+                            tr!("pane-shortcuts"),
+                            SnippetsPane {
+                                defaults: defaults.clone(),
+                            },
                         )
                         .selected(*tab.read())
                         .on_change(move |index| tab.set(index)),

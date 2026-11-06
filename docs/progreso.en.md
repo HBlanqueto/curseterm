@@ -2338,3 +2338,52 @@ modes.
 **Differs from iTerm2:** Copy with Styles copies only the normal selection;
 the selections do not follow the text when the history drops lines, they are
 cleared.
+
+## Phase 53 — Snippets
+
+### Plan
+
+iTerm2's snippets (`iTermSnippetsModel.m`, `iTermSnippetsMenuController.m`,
+`PTYTextView+ARC.m -sendSnippet:`, `iTermKeyBindingAction.m
++escapedText:mode:`, `iTermSnippetsEditingViewController.xib` and
+`iTermEditSnippetWindowController.xib`):
+
+1. **Data:** title, value, escaping and tags, saved in the `.domain`.
+   Escaping: Unescaped Literal Text; Backward Compatibility Escaping (`\n`,
+   `\e`, `\a` and `\t`); and C-Style Backslash Escaping, the one new
+   snippets use, which adds `\b`, `\r`, `\\` and `\x` with two digits.
+2. **Edit › Snippets:** a disabled «Press Alt to Edit Before Sending», the
+   untagged snippets and one folder per tag, split at `/` and sorted by name.
+   Without a title the value shows, cut to 30 characters.
+3. **Send:** the value with its escapes goes to the active session. With Alt
+   held it opens in Advanced Paste.
+4. **Settings › Shortcuts › Snippets:** the Title and Text table, +, − and
+   Edit, and the Edit Snippet sheet with Title, a multi-line Value, Escaping
+   and Tags.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes; two new tests check the escapes and the cut title.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| D-Bus menu: the disabled hint, `Hola` and `git › log` with the cut untitled snippet | ✓ | — |
+| `Hola` (`echo hola\tmundo\n`): arrives with a tab and runs | ✓ | `fase53-enviar.png` |
+| The snippet without `\n` stays typed without running | ✓ | `fase53-enviar.png` |
+| With Alt held, `Hola` opens Advanced Paste with the text already expanded | ✓ | `fase53-alt.png` |
+| The Shortcuts tab lists the snippets | ✓ | `fase53-ajustes.png` |
+| +, Title, a two-line Value, Tags and OK: saved in the `.domain`; Edit loads it again | ✓ | `fase53-editar.png` |
+| − removes the chosen snippet | ✓ | — |
+
+**Bug found and fixed while testing:** a click in the empty part of Value did
+not focus it, because the text view measured only its text. The `text_view`
+block now takes `height` (BK-036).
+
+**Not tested:** the kit as is; that an open window's menu changes when the
+snippets are edited in Settings.
+
+**Differs from iTerm2:** Edit Snippet is a sheet, not a window; tags are
+typed separated by commas, not in a token field; no Snippets toolbelt tool,
+no per-profile tag filter, no Open Quickly, no drag to reorder and no Actions
+tab.

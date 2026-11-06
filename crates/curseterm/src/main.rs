@@ -31,6 +31,8 @@ mod paste_warning;
 mod pick;
 mod preferences;
 mod session;
+mod snippets;
+mod snippets_pane;
 mod status;
 #[cfg(feature = "kit-parcheado")]
 mod styled;

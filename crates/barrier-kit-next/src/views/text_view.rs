@@ -26,6 +26,7 @@ pub struct TextView {
     ink: Color,
     cursor: Color,
     width: Size,
+    height: Size,
     auto_focus: bool,
     on_change: Option<Callback<String, ()>>,
     on_focus_change: Option<Callback<bool, ()>>,
@@ -49,6 +50,7 @@ impl TextView {
             ink,
             cursor: ink,
             width: Size::fill(),
+            height: Size::auto(),
             auto_focus: false,
             on_change: None,
             on_focus_change: None,
@@ -69,6 +71,11 @@ impl TextView {
 
     pub fn width(mut self, width: Size) -> Self {
         self.width = width;
+        self
+    }
+
+    pub fn height(mut self, height: Size) -> Self {
+        self.height = height;
         self
     }
 
@@ -214,6 +221,7 @@ impl Component for TextView {
             .on_sized(move |event: Event<SizedEventData>| area.set(event.visible_area))
             .on_focus_press(on_focus_press)
             .width(self.width.clone())
+            .height(self.height.clone())
             .font_family(self.family.clone())
             .font_size(self.size)
             .line_height(self.line_height / self.size)
@@ -249,6 +257,7 @@ impl Component for TextView {
             .on_pointer_enter(|_| Cursor::set(CursorIcon::Text))
             .on_pointer_leave(|_| Cursor::set(CursorIcon::default()))
             .width(self.width.clone())
+            .height(self.height.clone())
             .child(paragraph)
     }
 

@@ -2353,3 +2353,52 @@ selecciones.
 **Difiere de iTerm2:** Copy with Styles solo copia la selección normal; las
 selecciones no siguen al texto cuando el historial descarta líneas, se
 borran.
+
+## Fase 53 — Snippets
+
+### Plan
+
+Los snippets de iTerm2 (`iTermSnippetsModel.m`,
+`iTermSnippetsMenuController.m`, `PTYTextView+ARC.m -sendSnippet:`,
+`iTermKeyBindingAction.m +escapedText:mode:`,
+`iTermSnippetsEditingViewController.xib` e
+`iTermEditSnippetWindowController.xib`):
+
+1. **Datos:** título, valor, escapes y etiquetas, guardados en el `.domain`.
+   Escapes: Unescaped Literal Text; Backward Compatibility Escaping (`\n`,
+   `\e`, `\a` y `\t`); y C-Style Backslash Escaping, el de los nuevos, que
+   añade `\b`, `\r`, `\\` y `\x` con dos cifras.
+2. **Edit › Snippets:** «Press Alt to Edit Before Sending» desactivado, los
+   snippets sin etiqueta y una carpeta por etiqueta, partida por `/` y en
+   orden alfabético. Sin título se ve el valor recortado a 30 caracteres.
+3. **Enviar:** el valor con sus escapes va a la sesión activa. Con Alt
+   pulsado se abre en Advanced Paste.
+4. **Ajustes › Shortcuts › Snippets:** la tabla Title y Text, +, − y Edit,
+   y la hoja Edit Snippet con Title, Value de varias líneas, Escaping y Tags.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos; dos tests nuevos comprueban los escapes y el título recortado.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Menú D-Bus: el aviso desactivado, `Hola` y `git › log` con el snippet sin título recortado | ✓ | — |
+| `Hola` (`echo hola\tmundo\n`): llega con tabulador y se ejecuta | ✓ | `fase53-enviar.png` |
+| El snippet sin `\n` queda escrito sin ejecutarse | ✓ | `fase53-enviar.png` |
+| Con Alt pulsado, `Hola` abre Advanced Paste con el texto ya expandido | ✓ | `fase53-alt.png` |
+| La pestaña Shortcuts lista los snippets | ✓ | `fase53-ajustes.png` |
+| +, Title, Value de dos líneas, Tags y OK: se guarda en el `.domain`; Edit lo vuelve a cargar | ✓ | `fase53-editar.png` |
+| − quita el snippet elegido | ✓ | — |
+
+**Fallo encontrado y corregido en la prueba:** un clic en la parte vacía de
+Value no le daba el foco, porque la vista de texto medía solo su texto. El
+bloque `text_view` admite ahora `height` (BK-036).
+
+**No probado:** con el kit tal cual; que el menú de una ventana abierta cambie
+al editar los snippets en Ajustes.
+
+**Difiere de iTerm2:** Edit Snippet es una hoja y no una ventana; las
+etiquetas se escriben separadas por comas, no en un campo de fichas; sin la
+herramienta Snippets de la barra lateral, sin filtro de etiquetas por perfil,
+sin Open Quickly, sin reordenar arrastrando y sin la pestaña Actions.
