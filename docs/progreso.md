@@ -2585,3 +2585,51 @@ la selección, scripts, Sequence ni Send Text with “vim” Special Chars; sin
 presets; una combinación con Super que ya es un atajo del menú hace las dos
 cosas; el icono de Keys repite el de General porque el kit no tiene teclado
 (BK-024).
+
+## Fase 58 — Mover y enterrar sesiones
+
+### Plan
+
+Session › Move Session, Bury Session y Buried Sessions de iTerm2
+(`MovePaneController.m`, `SplitSelectionView.m`, `PTYSession.m -bury` e
+`iTermBuriedSessions.m`):
+
+1. **Move Session to Tab:** el panel sale de su pestaña y abre una nueva.
+2. **Move Session to Split Pane:** el panel de origen se tiñe de verde con
+   «Select a destination pane»; sobre los demás, la mitad más cercana al
+   puntero se tiñe de rojo oscuro con «Click to move source pane to this
+   split», con los colores y marcos blanco y negro de `splitPane*Color` y
+   opacidad 0,9. Un clic lo deja en esa mitad; un clic en el origen o Escape
+   cancela.
+3. **Bury Session (⌥⇧⌘B):** la sesión sale de la vista y sigue en marcha;
+   Buried Sessions la lista por su nombre y elegirla la devuelve en una
+   pestaña nueva. No se entierra la única sesión visible, porque la ventana
+   se cerraría.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos; tests nuevos para los movimientos del espacio de trabajo y la
+mitad más cercana.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Dos paneles y Move Session to Tab: dos pestañas | ✓ | — |
+| Move Session to Split Pane: origen verde y mitad izquierda del otro roja, con sus mensajes | ✓ | `fase58-origen.png` |
+| Clic en esa mitad: el panel movido queda a la izquierda y con el foco | ✓ | `fase58-movido.png` |
+| ⌥⇧⌘B: la sesión desaparece; Bury y Move quedan inactivos y Buried Sessions la lista | ✓ | `fase58-enterrada.png` |
+| Elegirla en Buried Sessions: vuelve en una pestaña nueva con su contenido | ✓ | `fase58-desenterrada.png` |
+
+**Fallos encontrados y corregidos en la prueba:** la capa tenía alto 0 con
+`Size::fill()` en posición absoluta y ahora usa `Size::percent(100.0)`; el
+mensaje del panel de origen no salía porque el lienzo del terminal con foco
+se repinta encima del texto, así que se dibuja en el propio lienzo.
+
+**No probado:** con el kit tal cual; cancelar con Escape o con un clic en el
+origen; una sesión enterrada que termina.
+
+**Difiere de iTerm2:** sin Move Session to Window, Move Tab to New Window ni
+Merge All Windows: sin el parche 0008 cada ventana es otro proceso (BK-001) y
+con él una sesión queda unida al canal de eventos de su ventana; las sesiones
+enterradas son de cada ventana y no se guardan al salir; no se puede mover
+arrastrando la pestaña.

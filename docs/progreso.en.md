@@ -2565,3 +2565,49 @@ or colors, Paste…, Copy or Send, selection moves, scripts, Sequence nor Send
 Text with “vim” Special Chars; no presets; a Super binding that is already a
 menu shortcut does both; the Keys icon repeats General's because the kit has
 no keyboard symbol (BK-024).
+
+## Phase 58 — Moving and burying sessions
+
+### Plan
+
+iTerm2's Session › Move Session, Bury Session and Buried Sessions
+(`MovePaneController.m`, `SplitSelectionView.m`, `PTYSession.m -bury` and
+`iTermBuriedSessions.m`):
+
+1. **Move Session to Tab:** the pane leaves its tab and opens a new one.
+2. **Move Session to Split Pane:** the source pane turns green with «Select a
+   destination pane»; over the others, the half nearest the pointer turns dark
+   red with «Click to move source pane to this split», with the
+   `splitPane*Color` colors, white and black frames and 0.9 opacity. A click
+   leaves it in that half; a click on the source or Escape cancels.
+3. **Bury Session (⌥⇧⌘B):** the session leaves the view and keeps running;
+   Buried Sessions lists it by name and choosing it brings it back in a new
+   tab. The only visible session is not buried, because the window would
+   close.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes; new tests for the workspace moves and the nearest half.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Two panes and Move Session to Tab: two tabs | ✓ | — |
+| Move Session to Split Pane: green source and red left half of the other, with their messages | ✓ | `fase58-origen.png` |
+| Click on that half: the moved pane ends up on the left and focused | ✓ | `fase58-movido.png` |
+| ⌥⇧⌘B: the session disappears; Bury and Move turn disabled and Buried Sessions lists it | ✓ | `fase58-enterrada.png` |
+| Choosing it in Buried Sessions: it comes back in a new tab with its content | ✓ | `fase58-desenterrada.png` |
+
+**Bugs found and fixed while testing:** the overlay was 0 high with
+`Size::fill()` in absolute position and now uses `Size::percent(100.0)`; the
+source pane's message did not show because the focused terminal's canvas
+repaints over the text, so it is drawn on the overlay's canvas.
+
+**Not tested:** the kit as is; cancelling with Escape or a click on the
+source; a buried session that ends.
+
+**Differs from iTerm2:** no Move Session to Window, Move Tab to New Window
+nor Merge All Windows: without patch 0008 each window is its own process
+(BK-001) and with it a session is tied to its window's event channel; buried
+sessions belong to each window and are not saved on quit; no moving by
+dragging the tab.

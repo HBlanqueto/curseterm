@@ -7,7 +7,7 @@ use freya_core::prelude::Modifiers;
 use crate::config::{APP_NAME, MarkAlert};
 use crate::key_report::KeyMode;
 use crate::localize::tr;
-use crate::session::TerminalState;
+use crate::session::{SessionId, TerminalState};
 use crate::workspace::Broadcast;
 
 const fn super_key(c: char) -> Shortcut {
@@ -120,6 +120,15 @@ pub const FIND_GLOBALLY: Action = Action::new("find-globally", || tr!("find-glob
     .shortcut(super_with(Modifiers::SHIFT, 'f'));
 pub const SELECT_MATCHES: Action = Action::new("select-matches", || tr!("select-matches"));
 pub const SNIPPETS_MENU: &str = "snippets-menu";
+pub const MOVE_SESSION_MENU: &str = "move-session-menu";
+pub const MOVE_SESSION_TO_TAB: Action =
+    Action::new("move-session-to-tab", || tr!("move-session-to-tab"));
+pub const MOVE_SESSION_TO_PANE: Action =
+    Action::new("move-session-to-pane", || tr!("move-session-to-pane"));
+pub const BURY_SESSION: Action = Action::new("bury-session", || tr!("bury-session"))
+    .shortcut(super_with(Modifiers::ALT.union(Modifiers::SHIFT), 'b'));
+pub const BURIED_MENU: &str = "buried-menu";
+pub const BURIED_PREFIX: &str = "buried:";
 pub const MARKS_MENU: &str = "marks-menu";
 pub const SET_MARK: Action =
     Action::new("set-mark", || tr!("set-mark")).shortcut(super_with(Modifiers::SHIFT, 'm'));
@@ -467,6 +476,14 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 RESET.item(true),
                 RESET_CHARSET.item(true),
                 submenu(
+                    MOVE_SESSION_MENU,
+                    tr!("move-session-menu"),
+                    vec![
+                        MOVE_SESSION_TO_TAB.item(false),
+                        MOVE_SESSION_TO_PANE.item(false),
+                    ],
+                ),
+                submenu(
                     TERMINAL_STATE_MENU,
                     tr!("terminal-state-menu"),
                     terminal_state_items([false; 6], KeyMode::Standard, [false; 5]),
@@ -480,6 +497,9 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                         EDIT_TRIGGERS.item(true),
                     ],
                 ),
+                MenuItem::Separator,
+                BURY_SESSION.item(false),
+                submenu(BURIED_MENU, tr!("buried-menu"), Vec::new()),
             ],
         ),
         Menu::new(tr!("menu-profiles"), profile_items(profiles)),
@@ -661,6 +681,14 @@ pub fn action_items(profiles: &[String]) -> Vec<(String, String)> {
         walk(&menu.items, &menu.title, &mut found);
     }
     found
+}
+
+// iTermBuriedSessions.m -menuItems: one entry per buried session, by its name.
+pub fn buried_items(buried: &[(SessionId, String)]) -> Vec<MenuItem> {
+    buried
+        .iter()
+        .map(|(id, name)| MenuItem::action(format!("{BURIED_PREFIX}{id}"), name.clone()))
+        .collect()
 }
 
 pub fn auxiliary_menu() -> AppMenu {

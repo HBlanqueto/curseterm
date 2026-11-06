@@ -82,11 +82,21 @@ impl Pane {
     }
 
     pub fn split(&mut self, target: SessionId, new: SessionId, axis: Axis) -> bool {
+        self.insert(target, new, axis, false)
+    }
+
+    // MovePaneController.m: a moved session lands before or after the pane it is dropped on.
+    pub fn insert(&mut self, target: SessionId, new: SessionId, axis: Axis, before: bool) -> bool {
         match self {
             Self::Leaf(id) if *id == target => {
+                let pair = if before {
+                    vec![Self::Leaf(new), Self::Leaf(target)]
+                } else {
+                    vec![Self::Leaf(target), Self::Leaf(new)]
+                };
                 *self = Self::Split {
                     axis,
-                    children: vec![Self::Leaf(target), Self::Leaf(new)],
+                    children: pair,
                     ratios: vec![0.5, 0.5],
                 };
                 true
@@ -102,14 +112,15 @@ impl Pane {
                     .position(|child| *child == Self::Leaf(target));
                 if let (true, Some(index)) = (*own == axis, sibling) {
                     let half = ratios[index] / 2.0;
+                    let at = if before { index } else { index + 1 };
                     ratios[index] = half;
-                    ratios.insert(index + 1, half);
-                    children.insert(index + 1, Self::Leaf(new));
+                    ratios.insert(at, half);
+                    children.insert(at, Self::Leaf(new));
                     return true;
                 }
                 children
                     .iter_mut()
-                    .any(|child| child.split(target, new, axis))
+                    .any(|child| child.insert(target, new, axis, before))
             }
         }
     }

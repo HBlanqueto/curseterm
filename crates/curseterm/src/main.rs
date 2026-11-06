@@ -6,6 +6,7 @@ mod clock;
 mod composer;
 mod composer_view;
 mod config;
+mod drop_target;
 mod find_mode;
 mod global_search;
 mod grid;

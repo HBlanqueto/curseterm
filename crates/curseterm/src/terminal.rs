@@ -47,6 +47,7 @@ use crate::config::{
     APP_ID, APP_NAME, AltKey, ClosePrompt, Defaults, MarkAlert, Profile, SessionEnd, Theme,
     WorkingDirectory, change_defaults,
 };
+use crate::drop_target::{DropTarget, Half};
 use crate::find_mode::FindMode;
 use crate::global_search::{GlobalSearch, SessionResults, global_search_panel};
 use crate::grid::Fonts;
@@ -123,6 +124,8 @@ struct Handles {
     pending_paste: State<Option<(String, bool)>>,
     advanced: AdvancedPaste,
     global: GlobalSearch,
+    interred: State<Vec<SessionId>>,
+    moving: State<Option<SessionId>>,
     picker: PickerState,
     sheet: State<Option<Sheet>>,
     draft: State<String>,
@@ -333,6 +336,8 @@ impl App for Terminal {
             substitution: use_state(String::new),
             bracketed: use_state(|| true),
         };
+        let interred = use_state(Vec::<SessionId>::new);
+        let moving = use_state(|| None::<SessionId>);
         let global = GlobalSearch {
             open: use_state(|| false),
             query: use_state(String::new),
@@ -405,6 +410,8 @@ impl App for Terminal {
             pending_paste,
             advanced,
             global,
+            interred,
+            moving,
             picker,
             sheet,
             draft,
@@ -738,6 +745,13 @@ impl App for Terminal {
                     }
                     return;
                 }
+                if keyboard.moving.peek().is_some() {
+                    if data.key == Key::Named(NamedKey::Escape) {
+                        let mut moving = keyboard.moving;
+                        moving.set(None);
+                    }
+                    return;
+                }
                 let global = keyboard.global;
                 if *global.open.peek() && *global.focused.peek() {
                     if data.key == Key::Named(NamedKey::Escape) {
@@ -988,7 +1002,7 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
             Some(session) => {
                 let mut workspace = painting.workspace;
                 let profile = painting.defaults.profile(&session.profile);
-                TerminalPane {
+                let pane = TerminalPane {
                     session: session.clone(),
                     fonts: painting.handles.fonts_for(&profile),
                     scheme: Rc::new(painting.defaults.scheme(&profile, painting.dark)),
@@ -1077,8 +1091,22 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                         let title = painting.workspace.peek().title(*id).to_string();
                         Rc::from(profile.badge.replace(r"\(session.name)", &title))
                     }),
-                }
-                .into_element()
+                };
+                let moving = *painting.handles.moving.read();
+                rect()
+                    .width(Size::fill())
+                    .height(Size::fill())
+                    .child(pane)
+                    .maybe_child(moving.map(|source| {
+                        let (handles, target) = (painting.handles.clone(), *id);
+                        DropTarget {
+                            source: source == target,
+                            on_drop: Callback::new(move |half: Option<Half>| {
+                                drop_session(&handles, source, target, half)
+                            }),
+                        }
+                    }))
+                    .into_element()
             }
             None => rect().into_element(),
         },
@@ -1232,6 +1260,19 @@ fn use_live_menu(handles: &Handles) {
         menu::ALERTS_MENU,
         menu::alert_items(next_mark, offscreen, action),
     );
+    let workspace = handles.workspace.read();
+    let several = workspace.receivers(Broadcast::AllTabs).len() > 1;
+    use_menu_enabled(menu::BURY_SESSION.id, several);
+    use_menu_enabled(menu::MOVE_SESSION_TO_TAB.id, several);
+    use_menu_enabled(menu::MOVE_SESSION_TO_PANE.id, several);
+    let buried: Vec<(SessionId, String)> = handles
+        .interred
+        .read()
+        .iter()
+        .map(|id| (*id, workspace.title(*id).to_string()))
+        .collect();
+    drop(workspace);
+    use_submenu_items(menu::BURIED_MENU, menu::buried_items(&buried));
     use_submenu_items(
         menu::SNIPPETS_MENU,
         snippets::menu_items(&handles.defaults.read().snippets),
@@ -3097,7 +3138,32 @@ fn confirm_alert(handles: &Handles, pending: Confirm) -> Alert {
         .cancel(dismiss, move |_| dismiss_later(&cancel, || {}))
 }
 
+// MovePaneController.m -dropInSession:half:atPoint:; a click on the moving pane cancels.
+fn drop_session(handles: &Handles, source: SessionId, target: SessionId, half: Option<Half>) {
+    let mut moving = handles.moving;
+    moving.set(None);
+    if let Some(half) = half {
+        let (axis, before) = half.placement();
+        let mut workspace = handles.workspace;
+        workspace.write().move_beside(source, target, axis, before);
+    }
+}
+
+// PTYSession.m -bury: the session keeps running out of sight until it is disinterred.
+fn bury_session(handles: &Handles, id: SessionId) {
+    let mut workspace = handles.workspace;
+    if workspace.peek().receivers(Broadcast::AllTabs).len() < 2 {
+        return;
+    }
+    if workspace.write().detach(id).is_some() {
+        let mut interred = handles.interred;
+        interred.write().push(id);
+    }
+}
+
 fn close_session(handles: &Handles, id: SessionId) {
+    let mut interred = handles.interred;
+    interred.write().retain(|buried| *buried != id);
     let mut workspace = handles.workspace;
     let closed = workspace.write().close(id);
     let mut sessions = handles.sessions;
@@ -3163,6 +3229,15 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
     }
     if let Some(name) = tabs {
         restore_arrangement(handles, events, &name);
+        return;
+    }
+    if let Some(buried) = id
+        .strip_prefix(menu::BURIED_PREFIX)
+        .and_then(|buried| buried.parse::<SessionId>().ok())
+    {
+        let mut interred = handles.interred;
+        interred.write().retain(|other| *other != buried);
+        workspace.write().open_tab(buried);
         return;
     }
     if let Some(snippet) = id
@@ -3381,6 +3456,20 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
                 let (mut query, mut open) = (handles.find.query, handles.find.open);
                 query.set(text);
                 open.set(true);
+            }
+        }
+        _ if id == menu::MOVE_SESSION_TO_TAB.id => {
+            if let Some(session) = &active {
+                workspace.write().move_to_tab(session.id);
+            }
+        }
+        _ if id == menu::MOVE_SESSION_TO_PANE.id => {
+            let mut moving = handles.moving;
+            moving.set(active.as_ref().map(|session| session.id));
+        }
+        _ if id == menu::BURY_SESSION.id => {
+            if let Some(session) = &active {
+                bury_session(handles, session.id);
             }
         }
         _ if id == menu::FIND_GLOBALLY.id => {

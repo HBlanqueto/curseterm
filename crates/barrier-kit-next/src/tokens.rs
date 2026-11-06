@@ -537,6 +537,26 @@ pub struct SessionNoteMetrics {
     pub chevron: f32,
 }
 
+// SplitSelectionView.m and iTermAdvancedSettingsModel.m splitPane*Color: moving a split pane.
+pub const MOVE_PANE: MovePaneMetrics = MovePaneMetrics {
+    opacity: 0.9,
+    source_fill: Rgba::rgba8(0, 128, 0, 1.0),
+    target_fill: Rgba::rgba8(128, 0, 0, 1.0),
+    border: Rgba::rgba8(255, 255, 255, 1.0),
+    inner_border: Rgba::rgba8(0, 0, 0, 1.0),
+    message: Rgba::rgba8(255, 255, 255, 1.0),
+};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MovePaneMetrics {
+    pub opacity: f32,
+    pub source_fill: Rgba,
+    pub target_fill: Rgba,
+    pub border: Rgba,
+    pub inner_border: Rgba,
+    pub message: Rgba,
+}
+
 // iTermEditKeyActionWindowController.xib: the Edit Key Action window is 442 points wide.
 pub const KEY_BINDING_EDITOR: KeyBindingEditorMetrics = KeyBindingEditorMetrics {
     width: 442.0,

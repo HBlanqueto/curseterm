@@ -135,8 +135,14 @@ impl Workspace {
     }
 
     pub fn close(&mut self, id: SessionId) -> Option<Closed> {
-        let index = self.tab_of(id)?;
+        let closed = self.detach(id)?;
         self.forget(id);
+        Some(closed)
+    }
+
+    // Takes the session out of its tab and keeps its title, for moving or burying it.
+    pub fn detach(&mut self, id: SessionId) -> Option<Closed> {
+        let index = self.tab_of(id)?;
         let tab = &mut self.tabs[index];
         if tab.root == Pane::Leaf(id) {
             self.remove_tab(index);
@@ -152,6 +158,27 @@ impl Workspace {
         }
         tab.zoomed &= tab.root.is_split();
         Some(Closed::Pane)
+    }
+
+    // MovePaneController.m -moveSessionToTab:
+    pub fn move_to_tab(&mut self, id: SessionId) {
+        if self.detach(id).is_some() {
+            self.open_tab(id);
+        }
+    }
+
+    // MovePaneController.m -dropInSession:half:atPoint:
+    pub fn move_beside(&mut self, id: SessionId, target: SessionId, axis: Axis, before: bool) {
+        if id == target || self.tab_of(target).is_none() || self.detach(id).is_none() {
+            return;
+        }
+        if let Some(index) = self.tab_of(target) {
+            let tab = &mut self.tabs[index];
+            tab.root.insert(target, id, axis, before);
+            tab.active = id;
+            tab.zoomed = false;
+            self.active = index;
+        }
     }
 
     pub fn replace(&mut self, old: SessionId, new: SessionId) {
@@ -312,6 +339,23 @@ mod tests {
         assert_eq!(workspace.close(3), Some(Closed::Tab));
         assert_eq!(workspace.active, 0);
         assert_eq!(workspace.close(1), Some(Closed::Window));
+    }
+
+    #[test]
+    fn a_moved_session_leaves_its_pane_and_lands_beside_the_target() {
+        let mut workspace = Workspace::default();
+        workspace.open_tab(1);
+        workspace.split(2, Axis::Row);
+        workspace.open_tab(3);
+        workspace.move_beside(3, 1, Axis::Column, true);
+        assert_eq!(workspace.tabs.len(), 1);
+        assert_eq!(workspace.tabs[0].root.leaves(), vec![3, 1, 2]);
+        assert_eq!(workspace.active_session(), Some(3));
+        workspace.move_to_tab(2);
+        assert_eq!(workspace.tabs.len(), 2);
+        assert_eq!(workspace.tabs[1].root, Pane::Leaf(2));
+        workspace.move_beside(1, 1, Axis::Row, false);
+        assert_eq!(workspace.tabs[0].root.leaves(), vec![3, 1]);
     }
 
     #[test]
