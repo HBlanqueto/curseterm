@@ -70,6 +70,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-038 | controls | `SearchField` has no options menu | low | Tested workaround: a `PopUpButton` beside it |
 | BK-039 | controls / windows | No outline view nor floating panel | medium | Tested workaround: a panel inside the window |
 | BK-040 | controls | `PopUpButton` neither scrolls nor searches | medium | Tested workaround: groups and a filter |
+| BK-041 | windows | An acked configure goes out with the old geometry | high | Patch 0012 tested |
 
 ## Gaps
 
@@ -904,6 +905,28 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Severity**: medium
 - **How to reproduce**: a `PopUpButton` with forty items in a 700-high
   window.
+
+### BK-041 — An acked configure goes out with the old geometry
+- **Area**: windows
+- **What CurseTerm needed**: the profile's Window Style Maximized, which asks
+  to maximize when the window opens.
+- **What BarrierKit offers today**: SCTK acks each configure when it arrives.
+  With the window already drawn, `WindowHandler::configure` leaves it pending
+  until the next frame (`platform/window.rs`), but `request_frame_callback`
+  commits straight away (`platform/surface.rs:96`).
+- **What is missing**: the commit after the ack must carry the configure's
+  geometry. xdg-shell requires it when maximized or full screen; weston
+  answers with the `invalid_surface_state` error and closes the connection.
+- **How CurseTerm solves it**: the patch
+  [`kit-parches/0012-configure-antes-del-commit.patch`](../kit-parches/0012-configure-antes-del-commit.patch)
+  applies the configure at once when no frame is pending.
+- **Workaround cost**: none with the patch. Without it, CurseTerm quits in
+  weston when it opens maximized.
+- **Proposed kit API**: none; it is an internal fix.
+- **Severity**: high
+- **How to reproduce**: weston 16 with `window_style = "maximized"` in the
+  profile: «xdg_surface geometry (656 x 470) does not match the configured
+  maximized state (1100 x 668)».
 
 ## Things that worked well
 

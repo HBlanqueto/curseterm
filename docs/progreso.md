@@ -2656,22 +2656,34 @@ de menús de macOS:
 
 ### Resultado (2026-11-06)
 
-Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
-los dos modos.
+Probado con el kit parcheado en sway sin pantalla (decoración del servidor)
+y en weston 16 sin pantalla (decoración del cliente; las órdenes van por el
+menú en D-Bus, porque weston no tiene teclado virtual). `./dev.sh check`
+limpio en los dos modos.
 
 | Prueba | Resultado | Captura |
 |---|---|---|
-| Dos pestañas y ⌃⌘F: sin barra de título, las pestañas arriba | ✓ | `fase59-pantalla-completa.png` |
+| sway, dos pestañas y ⌃⌘F: sin barra de título, las pestañas arriba | ✓ | `fase59-pantalla-completa.png` |
+| weston con kiosk-shell, dos pestañas en pantalla completa: sin barra de título ni semáforos, las pestañas arriba | ✓ | `fase59-csd.png` |
+| weston, Show Tabs in Fullscreen desmarcado: solo el terminal | ✓ | — |
+| weston, Window Style No Title Bar: ventana sin barra de título | ✓ | `fase59-sin-barra.png` |
+| weston, Window Style Maximized: abre maximizada con su barra | ✓ | `fase59-maximizada.png` |
 | ⇧⌘U en pantalla completa: las pestañas se ocultan; otra vez, vuelven | ✓ | — |
 | Window Style Full Screen: la ventana abre en pantalla completa | ✓ | — |
 | Una sola pestaña en pantalla completa: solo el terminal | ✓ | — |
 
+**Fallo encontrado y corregido en la prueba:** con Maximized, weston
+cerraba la conexión («xdg_surface geometry (656 x 470) does not match the
+configured maximized state»): el kit hacía commit tras confirmar el
+configure sin aplicarlo. Lo corrige el parche 0012 (BK-041).
+
 **No probado:** con el kit tal cual; la barra de título revelada por el modo
 foco y `fullscreen_push`: Malaysia no arranca en el laboratorio
-(llvmpipe no ofrece `EGL_ANDROID_native_fence_sync`) y sway no da el
-protocolo `infinity_focus_v1`; la pantalla completa con decoración del
-cliente (sway sin pantalla siempre decora la ventana); No Title Bar y
-Maximized.
+(llvmpipe no ofrece `EGL_ANDROID_native_fence_sync`), y ni sway ni weston dan
+el protocolo `infinity_focus_v1`; ⌃⌘F con desktop-shell de weston: sin
+asiento, weston no sube la ventana a la capa de pantalla completa
+(`desktop_surface_committed` la activa por cada asiento), así que se probó
+con kiosk-shell.
 
 **Difiere de iTerm2:** sin pantalla completa tradicional (anterior a Lion) ni
 los estilos Top, Bottom, Left, Right o Compact; con decoración del servidor

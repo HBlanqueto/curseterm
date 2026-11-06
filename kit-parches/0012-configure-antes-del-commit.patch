@@ -1,0 +1,32 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 6 Nov 2026 16:30:00 +0000
+Subject: [PATCH] fix(kit): aplicar el configure antes del commit que lo sigue
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+SCTK confirma cada configure al recibirlo. Con la ventana ya dibujada,
+el kit lo dejaba pendiente hasta el siguiente fotograma, pero
+request_frame_callback hacía commit enseguida con la geometría vieja.
+Con un configure de maximizada o pantalla completa es un error de
+protocolo de xdg-shell y weston corta la conexión. Ahora se aplica en
+el acto si no hay fotograma pendiente. Lo nota CurseTerm (BK-041).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F89v1xFeQ2WCVD25PBsobh
+---
+diff --git a/crates/barrier-kit/src/platform/window.rs b/crates/barrier-kit/src/platform/window.rs
+index eb3f3aa..8e1e53f 100644
+--- a/crates/barrier-kit/src/platform/window.rs
++++ b/crates/barrier-kit/src/platform/window.rs
+@@ -669,7 +669,8 @@ impl WindowHandler for Runtime {
+         );
+         self.surfaces[index].pending_configure = Some((configure, serial));
+         self.surfaces[index].needs_redraw = true;
+-        if self.surfaces[index].draw_count == 0 {
++        // xdg-shell: SCTK has acked, so the next commit must carry this configure's geometry.
++        if self.surfaces[index].draw_count == 0 || !self.surfaces[index].frame_pending {
+             self.apply_pending_window_configures(qh);
+         }
+         self.surfaces[index].draw_after_configure(&self.compositor, qh);

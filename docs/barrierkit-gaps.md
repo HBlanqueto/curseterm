@@ -70,6 +70,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-038 | controles | `SearchField` no tiene menú de opciones | baja | Workaround probado: `PopUpButton` al lado |
 | BK-039 | controles / ventanas | Sin vista de contorno ni panel flotante | media | Workaround probado: panel dentro de la ventana |
 | BK-040 | controles | `PopUpButton` no se desplaza ni busca | media | Workaround probado: grupos y filtro |
+| BK-041 | ventanas | Un configure confirmado sale con la geometría vieja | alta | Parche 0012 probado |
 
 ## Gaps
 
@@ -909,6 +910,29 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Gravedad**: media
 - **Cómo reproducirlo**: un `PopUpButton` con cuarenta elementos en una
   ventana de 700 de alto.
+
+### BK-041 — Un configure confirmado sale con la geometría vieja
+- **Área**: ventanas
+- **Qué necesitaba CurseTerm**: Window Style Maximized del perfil, que pide
+  maximizar al abrir la ventana.
+- **Qué ofrece hoy BarrierKit**: SCTK confirma cada configure al recibirlo.
+  Con la ventana ya dibujada, `WindowHandler::configure` lo deja pendiente
+  hasta el siguiente fotograma (`platform/window.rs`), pero
+  `request_frame_callback` hace `commit` enseguida
+  (`platform/surface.rs:96`).
+- **Qué falta**: que el commit que sigue a la confirmación lleve la geometría
+  del configure. xdg-shell lo exige en maximizada y pantalla completa; weston
+  responde con el error `invalid_surface_state` y cierra la conexión.
+- **Cómo lo resolví en CurseTerm**: el parche
+  [`kit-parches/0012-configure-antes-del-commit.patch`](../kit-parches/0012-configure-antes-del-commit.patch)
+  aplica el configure en el acto si no hay fotograma pendiente.
+- **Coste del workaround**: ninguno con el parche. Sin él, CurseTerm se
+  cierra en weston al abrir maximizada.
+- **API propuesta para el kit**: ninguna; es una corrección interna.
+- **Gravedad**: alta
+- **Cómo reproducirlo**: weston 16 con `window_style = "maximized"` en el
+  perfil: «xdg_surface geometry (656 x 470) does not match the configured
+  maximized state (1100 x 668)».
 
 ## Cosas que funcionaron bien
 

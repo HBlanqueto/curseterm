@@ -2634,21 +2634,34 @@ menu bar:
 
 ### Result (2026-11-06)
 
-Tested in headless sway with the patched kit. `./dev.sh check` clean in both
-modes.
+Tested with the patched kit in headless sway (server-side decoration) and
+in headless weston 16 (client-side decoration; commands go through the D-Bus
+menu, because weston has no virtual keyboard). `./dev.sh check` clean in
+both modes.
 
 | Test | Result | Screenshot |
 |---|---|---|
-| Two tabs and ⌃⌘F: no title bar, the tabs at the top | ✓ | `fase59-pantalla-completa.png` |
+| sway, two tabs and ⌃⌘F: no title bar, the tabs at the top | ✓ | `fase59-pantalla-completa.png` |
+| weston with kiosk-shell, two tabs in full screen: no title bar nor traffic lights, the tabs at the top | ✓ | `fase59-csd.png` |
+| weston, Show Tabs in Fullscreen unchecked: only the terminal | ✓ | — |
+| weston, Window Style No Title Bar: a window without a title bar | ✓ | `fase59-sin-barra.png` |
+| weston, Window Style Maximized: opens maximized with its bar | ✓ | `fase59-maximizada.png` |
 | ⇧⌘U in full screen: the tabs hide; again, they come back | ✓ | — |
 | Window Style Full Screen: the window opens in full screen | ✓ | — |
 | A single tab in full screen: only the terminal | ✓ | — |
 
+**Bug found and fixed while testing:** with Maximized, weston closed the
+connection («xdg_surface geometry (656 x 470) does not match the configured
+maximized state»): the kit committed after acking the configure without
+applying it. Patch 0012 fixes it (BK-041).
+
 **Not tested:** the kit as is; the title bar revealed by focus mode and
 `fullscreen_push`: Malaysia does not start in the lab (llvmpipe lacks
-`EGL_ANDROID_native_fence_sync`) and sway has no `infinity_focus_v1`
-protocol; full screen with client-side decoration (headless sway always
-decorates the window); No Title Bar and Maximized.
+`EGL_ANDROID_native_fence_sync`), and neither sway nor weston has the
+`infinity_focus_v1` protocol; ⌃⌘F with weston's desktop-shell: without a
+seat, weston does not raise the window to the full-screen layer
+(`desktop_surface_committed` activates it once per seat), so it was tested
+with kiosk-shell.
 
 **Differs from iTerm2:** no traditional (pre-Lion) full screen nor the Top,
 Bottom, Left, Right or Compact styles; with server-side decoration No Title
