@@ -33,6 +33,7 @@ use crate::config::{
     Theme, Trigger, TriggerAction, WindowStyle, WorkingDirectory, change_defaults,
 };
 use crate::itermcolors;
+use crate::key_bindings::NamedAction;
 use crate::key_bindings_pane::{KeyBindingsEditor, Owner};
 use crate::localize::tr;
 use crate::menu;
@@ -142,7 +143,7 @@ impl App for Settings {
                         .tab(
                             Symbol::Bookmark,
                             tr!("pane-shortcuts"),
-                            SnippetsPane {
+                            ShortcutsPane {
                                 defaults: defaults.clone(),
                             },
                         )
@@ -393,6 +394,54 @@ impl Component for ProfilesPane {
     }
 }
 
+#[derive(PartialEq)]
+struct ShortcutsPane {
+    defaults: Defaults,
+}
+
+// iTermShortcutsViewController: the Actions and Snippets tabs.
+impl Component for ShortcutsPane {
+    fn render(&self) -> impl IntoElement {
+        let mut shown = use_state(|| 0usize);
+        let content = if *shown.read() == 0 {
+            rect()
+                .width(Size::fill())
+                .padding(Gaps::new_all(SPACE_3))
+                .child(bindings_editor(&self.defaults, Owner::Actions))
+                .into_element()
+        } else {
+            SnippetsPane {
+                defaults: self.defaults.clone(),
+            }
+            .into_element()
+        };
+        rect()
+            .width(Size::fill())
+            .height(Size::fill())
+            .direction(Direction::Vertical)
+            .content(Content::flex())
+            .child(
+                rect()
+                    .width(Size::fill())
+                    .padding(Gaps::new(SPACE_3, SPACE_3, 0.0, SPACE_3))
+                    .main_align(Alignment::Center)
+                    .child(
+                        SegmentedControl::new(tr!("pane-shortcuts"))
+                            .segment(tr!("shortcuts-actions"))
+                            .segment(tr!("shortcuts-snippets"))
+                            .selected(*shown.read())
+                            .on_change(move |choice| shown.set(choice)),
+                    ),
+            )
+            .child(
+                rect()
+                    .width(Size::fill())
+                    .height(Size::flex(1.0))
+                    .child(content),
+            )
+    }
+}
+
 fn bindings_editor(defaults: &Defaults, owner: Owner) -> KeyBindingsEditor {
     let profiles: Vec<String> = defaults
         .profiles()
@@ -408,6 +457,7 @@ fn bindings_editor(defaults: &Defaults, owner: Owner) -> KeyBindingsEditor {
                 .get(index)
                 .map(|profile| profile.key_mappings.clone())
                 .unwrap_or_default(),
+            Owner::Actions => defaults.actions.iter().map(NamedAction::binding).collect(),
         },
         menu_items: menu::action_items(&profiles),
         profiles,

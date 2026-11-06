@@ -2871,3 +2871,37 @@ tabla, y un nombre ya usado se rechaza en vez de preguntar si se reemplaza;
 sin deshacer; la vista previa no conoce las pantallas reales ni la posición de
 la ventana (Wayland no las da); al restaurar queda activa la última pestaña,
 no la que lo estaba al guardar.
+
+## Fase 63 — Shortcuts › Actions y Edit › Actions
+
+### Plan
+
+Las acciones de iTerm2 (`iTermActionsModel.m`,
+`iTermActionsEditingViewController.m`, `iTermActionsMenuController.m` y
+`iTermShortcutsViewController.m`):
+
+1. **Una acción** es una acción de tecla con título en vez de atajo: las
+   mismas acciones y parámetros que Keys › Key Bindings.
+2. **Ajustes › Shortcuts** pasa a tener dos pestañas, Actions y Snippets. En
+   Actions, la tabla Title y Action con «+», «−» y Edit, y la hoja Edit Action
+   con el título, la acción y su parámetro (el mismo editor que las teclas).
+3. **Edit › Actions** lista las acciones por orden; elegir una la aplica a la
+   sesión activa.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Acción «Saludar», Send Text `echo hola desde accion\n`: Edit › Actions la lista y, por D-Bus, escribe y ejecuta la orden | ✓ | — |
+| Ajustes › Shortcuts › Actions: la tabla con «Saludar» y su acción | ✓ | `fase63-acciones.png` |
+| «+»: hoja Edit Action con Title, Action y OK desactivado hasta escribir un título; «Nada» y OK la guarda | ✓ | `fase63-editar-accion.png` |
+
+**No probado:** con el kit tal cual; Edit y «−» sobre una acción; una acción
+de menú o de perfil.
+
+**Difiere de iTerm2:** Open Quickly, la barra de estado y la herramienta
+Actions de la barra lateral no las listan; sin importar ni exportar; sin
+reordenar arrastrando.

@@ -120,6 +120,8 @@ pub const FIND_GLOBALLY: Action = Action::new("find-globally", || tr!("find-glob
     .shortcut(super_with(Modifiers::SHIFT, 'f'));
 pub const SELECT_MATCHES: Action = Action::new("select-matches", || tr!("select-matches"));
 pub const SNIPPETS_MENU: &str = "snippets-menu";
+pub const ACTIONS_MENU: &str = "actions-menu";
+pub const ACTION_PREFIX: &str = "action:";
 pub const MOVE_SESSION_MENU: &str = "move-session-menu";
 pub const MOVE_SESSION_TO_TAB: Action =
     Action::new("move-session-to-tab", || tr!("move-session-to-tab"));
@@ -375,6 +377,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                     ],
                 ),
                 MenuItem::Separator,
+                submenu(ACTIONS_MENU, tr!("actions-menu"), Vec::new()),
                 submenu(SNIPPETS_MENU, tr!("snippets-menu"), Vec::new()),
                 OPEN_SELECTION.item(false),
                 MenuItem::Separator,

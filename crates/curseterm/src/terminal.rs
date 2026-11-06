@@ -1374,6 +1374,17 @@ fn use_live_menu(handles: &Handles) {
         menu::SNIPPETS_MENU,
         snippets::menu_items(&handles.defaults.read().snippets),
     );
+    let action_titles: Vec<String> = handles
+        .defaults
+        .read()
+        .actions
+        .iter()
+        .map(|action| action.title.clone())
+        .collect();
+    use_submenu_items(
+        menu::ACTIONS_MENU,
+        menu::indexed_items(menu::ACTION_PREFIX, &action_titles),
+    );
     use_submenu_items(
         menu::BROADCAST_MENU,
         menu::broadcast_items(*handles.broadcast.read()),
@@ -3477,6 +3488,17 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         let mut interred = handles.interred;
         interred.write().retain(|other| *other != buried);
         workspace.write().open_tab(buried);
+        return;
+    }
+    // iTermActionsMenuController.m -applyAction: on the active session.
+    if let Some(action) = id
+        .strip_prefix(menu::ACTION_PREFIX)
+        .and_then(|index| index.parse::<usize>().ok())
+        .and_then(|index| handles.defaults.peek().actions.get(index).cloned())
+    {
+        if let Some(session) = handles.active() {
+            perform_binding(handles, events, revision, &session, &action.binding());
+        }
         return;
     }
     if let Some(snippet) = id

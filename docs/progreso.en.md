@@ -2847,3 +2847,38 @@ itself, and a name already used is refused instead of asking whether to
 replace it; no undo; the preview does not know the real screens or the
 window's position (Wayland gives neither); after restoring, the last tab is
 active, not the one that was when saving.
+
+## Phase 63 — Shortcuts › Actions and Edit › Actions
+
+### Plan
+
+iTerm2's actions (`iTermActionsModel.m`,
+`iTermActionsEditingViewController.m`, `iTermActionsMenuController.m` and
+`iTermShortcutsViewController.m`):
+
+1. **An action** is a key action with a title instead of a shortcut: the same
+   actions and parameters as Keys › Key Bindings.
+2. **Settings › Shortcuts** now has two tabs, Actions and Snippets. In
+   Actions, the Title and Action table with «+», «−» and Edit, and the Edit
+   Action sheet with the title, the action and its parameter (the same editor
+   as the keys).
+3. **Edit › Actions** lists the actions in order; choosing one applies it to
+   the active session.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Action «Saludar», Send Text `echo hola desde accion\n`: Edit › Actions lists it and, over D-Bus, types and runs the command | ✓ | — |
+| Settings › Shortcuts › Actions: the table with «Saludar» and its action | ✓ | `fase63-acciones.png` |
+| «+»: the Edit Action sheet with Title, Action and OK disabled until a title is typed; «Nada» and OK saves it | ✓ | `fase63-editar-accion.png` |
+
+**Not tested:** the kit as is; Edit and «−» on an action; a menu or profile
+action.
+
+**Differs from iTerm2:** Open Quickly, the status bar and the toolbelt's
+Actions tool do not list them; no import or export; no reordering by
+dragging.

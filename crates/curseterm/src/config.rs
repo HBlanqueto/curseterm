@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::arrangement::Arrangement;
 use crate::find_mode::FindMode;
-use crate::key_bindings::Binding;
+use crate::key_bindings::{Binding, NamedAction};
 use crate::paste_warning::PasteWarnings;
 use crate::snippets::Snippet;
 
@@ -39,6 +39,7 @@ pub struct Defaults {
     pub global_search_mode: FindMode,
     pub snippets: Vec<Snippet>,
     pub key_bindings: Vec<Binding>,
+    pub actions: Vec<NamedAction>,
     pub show_tabs_in_fullscreen: bool,
 }
 
@@ -65,6 +66,7 @@ impl Default for Defaults {
             global_search_mode: FindMode::default(),
             snippets: Vec::new(),
             key_bindings: Vec::new(),
+            actions: Vec::new(),
             // iTermPreferences.m: ShowFullScreenTabBar YES.
             show_tabs_in_fullscreen: true,
         }

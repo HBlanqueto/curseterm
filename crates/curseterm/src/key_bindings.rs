@@ -197,6 +197,33 @@ pub struct Binding {
     pub parameter: String,
 }
 
+// iTermActionsModel.m iTermAction: a key action under a title, run from Edit › Actions.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NamedAction {
+    pub title: String,
+    pub action: BindingAction,
+    pub parameter: String,
+}
+
+impl NamedAction {
+    pub fn binding(&self) -> Binding {
+        Binding {
+            combo: self.title.clone(),
+            action: self.action,
+            parameter: self.parameter.clone(),
+        }
+    }
+
+    pub fn from_binding(binding: Binding) -> Self {
+        Self {
+            title: binding.combo,
+            action: binding.action,
+            parameter: binding.parameter,
+        }
+    }
+}
+
 // iTermKeyMappings.m: the profile's mappings come before the global ones.
 pub fn find<'a>(
     profile: &'a [Binding],

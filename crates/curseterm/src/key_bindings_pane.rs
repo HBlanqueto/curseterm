@@ -13,7 +13,7 @@ use torin::prelude::{Alignment, Direction, Gaps, Size};
 use vow_design::{CAPTION, HEADLINE, SPACE_1, SPACE_2, TEXT};
 
 use crate::config::change_defaults;
-use crate::key_bindings::{Binding, BindingAction, Parameter, combo, shown};
+use crate::key_bindings::{Binding, BindingAction, NamedAction, Parameter, combo, shown};
 use crate::localize::tr;
 use crate::preferences::intern;
 
@@ -21,6 +21,8 @@ use crate::preferences::intern;
 pub enum Owner {
     Global,
     Profile(usize),
+    // iTermActionsEditingViewController: the same editor, with a title where the shortcut goes.
+    Actions,
 }
 
 impl Owner {
@@ -33,7 +35,22 @@ impl Owner {
                     change(&mut profile.key_mappings);
                 }
             }
+            Owner::Actions => {
+                let mut bindings = defaults.actions.iter().map(NamedAction::binding).collect();
+                change(&mut bindings);
+                defaults.actions = bindings
+                    .into_iter()
+                    .map(NamedAction::from_binding)
+                    .collect();
+            }
         });
+    }
+
+    fn first_column(self) -> &'static str {
+        match self {
+            Owner::Actions => tr!("action-title"),
+            _ => tr!("key-binding-shortcut"),
+        }
     }
 }
 
@@ -58,7 +75,13 @@ impl Component for KeyBindingsEditor {
         let rows = self
             .bindings
             .iter()
-            .map(|binding| vec![shown(&binding.combo), describe(binding, &self.menu_items)])
+            .map(|binding| {
+                let first = match owner {
+                    Owner::Actions => binding.combo.clone(),
+                    _ => shown(&binding.combo),
+                };
+                vec![first, describe(binding, &self.menu_items)]
+            })
             .collect();
         let open = move |index: Option<usize>, binding: Binding| {
             let (mut draft, mut editing) = (draft, editing);
@@ -76,7 +99,7 @@ impl Component for KeyBindingsEditor {
                     .child(
                         Table::new(
                             tr!("key-bindings"),
-                            vec![tr!("key-binding-shortcut"), tr!("key-binding-action")],
+                            vec![owner.first_column(), tr!("key-binding-action")],
                         )
                         .rows(rows)
                         .selected(chosen)
@@ -242,13 +265,20 @@ fn edit_sheet(
             .direction(Direction::Vertical)
             .spacing(SPACE_2)
             .child(text(
-                tr!("key-binding-sheet-title"),
+                match owner {
+                    Owner::Actions => tr!("action-sheet-title"),
+                    _ => tr!("key-binding-sheet-title"),
+                },
                 HEADLINE,
                 palette.label,
             ))
             .child(Form::new().section({
+                let first = match owner {
+                    Owner::Actions => ActionTitle { draft }.into_element(),
+                    _ => Recorder { draft }.into_element(),
+                };
                 let section = Section::new()
-                    .row(Row::new(tr!("key-binding-shortcut")).control(Recorder { draft }))
+                    .row(Row::new(owner.first_column()).control(first))
                     .row(Row::new(tr!("key-binding-action")).control(action_popups));
                 match parameter {
                     Some(control) => {
@@ -370,6 +400,25 @@ impl Component for ParameterText {
             }
         });
         TextField::new(value, tr!("key-binding-text-placeholder")).width(Size::fill())
+    }
+}
+
+#[derive(PartialEq)]
+struct ActionTitle {
+    draft: State<Binding>,
+}
+
+impl Component for ActionTitle {
+    fn render(&self) -> impl IntoElement {
+        let mut binding = self.draft;
+        let value = use_state(|| binding.peek().combo.clone());
+        use_side_effect(move || {
+            let typed = value.read().trim().to_string();
+            if binding.peek().combo != typed {
+                binding.write().combo = typed;
+            }
+        });
+        TextField::new(value, tr!("action-title")).width(Size::fill())
     }
 }
 
