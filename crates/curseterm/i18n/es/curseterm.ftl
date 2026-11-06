@@ -245,3 +245,5 @@ toolbelt-command = Orden
 toolbelt-terminate = Terminar
 toolbelt-directories = Directorios recientes
 toolbelt-path = Ruta
+status-bar = Barra de estado
+status-bar-detail = Directorio, proceso en primer plano, rama de git, equipo y hora bajo los paneles

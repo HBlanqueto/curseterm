@@ -245,3 +245,5 @@ toolbelt-command = Command
 toolbelt-terminate = Terminate
 toolbelt-directories = Recent Directories
 toolbelt-path = Path
+status-bar = Status bar
+status-bar-detail = Directory, foreground process, git branch, host and time under the panes

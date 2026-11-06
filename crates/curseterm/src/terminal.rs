@@ -27,7 +27,9 @@ use freya_core::prelude::*;
 use rustix::process::{Pid, Signal, kill_process};
 use torin::prelude::{Alignment, Content, Direction, Size};
 
-use vow_design::{CAPTION, DURATION_FAST_MS, DURATION_SLOW_MS, HEADLINE, Rgba, SPACE_1, SPACE_2};
+use vow_design::{
+    CAPTION, DURATION_FAST_MS, DURATION_SLOW_MS, HEADLINE, Rgba, SPACE_1, SPACE_2, SPACE_3,
+};
 
 use crate::clock::local_time;
 use crate::config::{
@@ -45,6 +47,7 @@ use crate::pick;
 use crate::session::{
     self, GridSize, Launch, Listener, MarkJump, Session, SessionId, TerminalState,
 };
+use crate::status;
 use crate::windows;
 use crate::workspace::{Broadcast, Closed, Tab, Workspace};
 
@@ -73,6 +76,7 @@ struct Handles {
     timers: Timers,
     alive: Rc<Cell<bool>>,
     dark: Rc<Cell<bool>>,
+    clock_armed: Rc<Cell<bool>>,
     replay: State<Option<(SessionId, usize)>>,
     toolbelt: Toolbelt,
     clipboard: ClipboardState,
@@ -282,6 +286,7 @@ impl App for Terminal {
             timers: Timers::get(),
             alive: Rc::new(Cell::new(true)),
             dark: Rc::new(Cell::new(dark)),
+            clock_armed: Rc::new(Cell::new(false)),
             replay,
             toolbelt,
             clipboard: consume_root_context(),
@@ -563,6 +568,7 @@ impl App for Terminal {
                         (*toolbelt.shown.read()).then(|| toolbelt_view(&handles, revision)),
                     ),
             )
+            .maybe_child(status_bar(&handles, revision))
             .maybe_child(replay_bar)
     }
 }
@@ -1229,6 +1235,46 @@ fn toolbelt_view(handles: &Handles, mut revision: State<u64>) -> Element {
             ),
         )
         .into_element()
+}
+
+fn status_bar(handles: &Handles, revision: State<u64>) -> Option<Element> {
+    let session = handles.active()?;
+    let profile = handles.defaults.read().profile(&session.profile);
+    if !profile.status_bar {
+        return None;
+    }
+    if !handles.clock_armed.replace(true) {
+        let armed = handles.clock_armed.clone();
+        handles.after(Duration::from_secs(1), move || {
+            armed.set(false);
+            let mut revision = revision;
+            *revision.write() += 1;
+        });
+    }
+    let directory = session.working_directory();
+    let parts = [
+        directory.as_ref().map(|path| path.display().to_string()),
+        session.foreground_name(),
+        directory.as_deref().and_then(status::git_branch),
+        status::host_name(),
+        Some(local_time(std::time::SystemTime::now())),
+    ];
+    let palette = Palette::current();
+    Some(
+        rect()
+            .width(Size::fill())
+            .direction(Direction::Horizontal)
+            .padding(SPACE_1)
+            .spacing(SPACE_3)
+            .background(color(palette.window_background))
+            .children(
+                parts
+                    .into_iter()
+                    .flatten()
+                    .map(|part| text(part, CAPTION, palette.secondary_label).into_element()),
+            )
+            .into_element(),
+    )
 }
 
 fn replay_bar(handles: &Handles, id: SessionId, index: usize) -> Element {

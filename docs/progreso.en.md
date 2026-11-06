@@ -1231,3 +1231,21 @@ recent commands tool; the tools cannot be reordered.
    `HEAD` is read (also when `.git` is a `gitdir:` file), without running
    `git`.
 3. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the kit as is: it needs no patch. `./dev.sh
+check` clean in both kit modes; 42 and 43 app tests and 1 block test.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `status_bar = true`, `cd /tmp/repo-demo; sleep 30` with a `.git/HEAD` on `rama-demo`: the bar shows `/tmp/repo-demo`, `sleep`, `rama-demo`, `vm` and the time | ✓ | `fase26-barra-de-estado.png` |
+| The time goes from 00:34:09 to 00:34:11 between two screenshots; about 5 events per second at rest | ✓ after keeping a single timer: one per render would have multiplied the chains with each output | — |
+
+**Not tested:** the option from Settings (only from the `.domain`); a real
+repository with `git worktree` outside the `git_branch` test.
+
+**Differs from iTerm2:** the components are fixed; there is no bar editor,
+no CPU, memory or network, and no top position.

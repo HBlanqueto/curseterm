@@ -18,6 +18,7 @@ mod paste_history;
 mod pick;
 mod preferences;
 mod session;
+mod status;
 #[cfg(feature = "kit-parcheado")]
 mod styled;
 mod terminal;

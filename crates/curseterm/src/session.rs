@@ -540,6 +540,13 @@ impl Session {
         Some((current + 1, all.len()))
     }
 
+    pub fn foreground_name(&self) -> Option<String> {
+        let group = rustix::termios::tcgetpgrp(self.pty.borrow().file()).ok()?;
+        let name =
+            std::fs::read_to_string(format!("/proc/{}/comm", group.as_raw_nonzero())).ok()?;
+        Some(name.trim().to_string())
+    }
+
     pub fn has_jobs(&self) -> bool {
         let foreground = rustix::termios::tcgetpgrp(self.pty.borrow().file());
         foreground.is_ok_and(|group| {

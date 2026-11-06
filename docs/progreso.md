@@ -1236,3 +1236,22 @@ rutas con espacios en Recent Directories.
 2. **Rama de git:** se busca `.git` subiendo desde el directorio y se lee
    `HEAD` (también si `.git` es un archivo `gitdir:`), sin ejecutar `git`.
 3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit tal cual: no necesita parche.
+`./dev.sh check` limpio en los dos modos del kit; 42 y 43 tests de la app y 1
+del bloque.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `status_bar = true`, `cd /tmp/repo-demo; sleep 30` con un `.git/HEAD` en `rama-demo`: la barra muestra `/tmp/repo-demo`, `sleep`, `rama-demo`, `vm` y la hora | ✓ | `fase26-barra-de-estado.png` |
+| La hora pasa de 00:34:09 a 00:34:11 entre dos capturas; unos 5 eventos por segundo en reposo | ✓ tras dejar un solo temporizador: uno por render habría multiplicado las cadenas con cada salida | — |
+
+**No probado:** la opción desde Ajustes (solo desde el `.domain`); un
+repositorio real con `git worktree` fuera del test de `git_branch`.
+
+**Difiere de iTerm2:** los componentes son fijos; no hay editor de la barra,
+ni CPU, memoria o red, ni posición arriba.

@@ -40,6 +40,7 @@ pub struct Profile {
     pub alt_key: AltKey,
     pub badge: String,
     pub transparency: u8,
+    pub status_bar: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -121,6 +122,7 @@ impl Default for Profile {
             alt_key: AltKey::Escape,
             badge: String::new(),
             transparency: 0,
+            status_bar: false,
         }
     }
 }

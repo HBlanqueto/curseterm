@@ -501,6 +501,15 @@ fn session_section(index: usize, profile: &Profile) -> Section {
             profile.prompt_before_closing,
             |profile, prompt| profile.prompt_before_closing = prompt,
         )))
+        .row(
+            Row::new(tr!("status-bar"))
+                .detail(tr!("status-bar-detail"))
+                .control(
+                    Switch::new(tr!("status-bar"))
+                        .on(profile.status_bar)
+                        .on_toggle(move |on: bool| edit(index, |profile| profile.status_bar = on)),
+                ),
+        )
 }
 
 fn keys_section(index: usize, profile: &Profile) -> Section {
