@@ -606,3 +606,33 @@ pub struct GlobalSearchMetrics {
     pub suffix_chars: usize,
     pub match_background: Rgba,
 }
+
+// HighlightTrigger.m colour menu: AppKit's named colours, in its order.
+pub const HIGHLIGHT_COLORS: [Rgba; 14] = [
+    Rgba::rgb8(0, 0, 0),
+    Rgba::rgb8(85, 85, 85),
+    Rgba::rgb8(170, 170, 170),
+    Rgba::rgb8(255, 255, 255),
+    Rgba::rgb8(128, 128, 128),
+    Rgba::rgb8(255, 0, 0),
+    Rgba::rgb8(0, 255, 0),
+    Rgba::rgb8(0, 0, 255),
+    Rgba::rgb8(0, 255, 255),
+    Rgba::rgb8(255, 255, 0),
+    Rgba::rgb8(255, 0, 255),
+    Rgba::rgb8(255, 128, 0),
+    Rgba::rgb8(128, 0, 128),
+    Rgba::rgb8(153, 102, 51),
+];
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TriggerEditorMetrics {
+    pub action_width: f32,
+    pub parameter_width: f32,
+}
+
+// TriggerController.m's table: the Action and Parameters columns keep their width.
+pub const TRIGGER_EDITOR: TriggerEditorMetrics = TriggerEditorMetrics {
+    action_width: 200.0,
+    parameter_width: 220.0,
+};

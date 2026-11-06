@@ -16,11 +16,10 @@ use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Line, Point};
 use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::Term;
-use alacritty_terminal::term::cell::{Cell, Flags};
+use alacritty_terminal::term::cell::{Cell, Flags, Hyperlink};
 use alacritty_terminal::tty::{EventedReadWrite, Pty};
-use alacritty_terminal::vte::ansi::{Handler, Processor};
+use alacritty_terminal::vte::ansi::{Handler, Processor, Rgb};
 use freya_engine::prelude::{Data, Image};
-use regex::Regex;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 
 use crate::config::{Trigger, TriggerAction};
@@ -28,6 +27,7 @@ use crate::integration::{self, Dimension, InlineImage, Notification, Report};
 use crate::key_report::{KeyMode, ModifyOtherKeysWatch};
 use crate::osc::{Piece, Splitter};
 use crate::session::Listener;
+use crate::triggers::{self, Compiled, PARTIAL_LINE_INTERVAL};
 
 const READ_BUFFER: usize = 1 << 16;
 
@@ -39,15 +39,19 @@ pub struct Placed {
     pub image: Image,
 }
 
+#[derive(PartialEq)]
 pub struct Highlight {
     pub line: i64,
     pub columns: RangeInclusive<usize>,
+    pub text: Option<Rgb>,
+    pub background: Option<Rgb>,
 }
 
-struct Compiled {
-    regex: Regex,
-    action: TriggerAction,
-    text: String,
+// The trigger effects that need the window: PTYSession.m -triggerSideEffect….
+pub enum Fired {
+    Alert { trigger: usize, message: String },
+    Notification(String),
+    Coprocess(String),
 }
 
 pub type AnnotationId = u64;
@@ -106,6 +110,8 @@ pub struct Extras {
     pub apps_change_key_mode: bool,
     triggers: Vec<Trigger>,
     compiled: Vec<Compiled>,
+    pub fired: Vec<Fired>,
+    last_partial_check: Option<Instant>,
 }
 
 impl Extras {
@@ -194,16 +200,20 @@ impl Extras {
             return;
         }
         self.triggers = triggers.to_vec();
-        self.compiled = triggers
-            .iter()
-            .filter_map(|trigger| {
-                Some(Compiled {
-                    regex: Regex::new(&trigger.regex).ok()?,
-                    action: trigger.action,
-                    text: trigger.parameter.replace("\\n", "\r"),
-                })
-            })
-            .collect();
+        self.compiled = triggers::compile(triggers);
+    }
+
+    // AlertTrigger.m: Disable This Alert turns the trigger off for this session only.
+    pub fn disable_trigger(&mut self, index: usize) {
+        for trigger in &mut self.compiled {
+            if trigger.index == index {
+                trigger.disabled = true;
+            }
+        }
+    }
+
+    fn watching_lines(&self) -> bool {
+        self.triggers_enabled && !self.compiled.is_empty()
     }
 
     pub fn forget_everything(&mut self) {
@@ -238,6 +248,17 @@ impl Extras {
             .chain(highlights)
             .chain(annotations)
             .chain(self.stamps.iter_mut().map(|(line, _)| line))
+    }
+
+    // A full scrollback dropped its oldest line: what was anchored below it moves up one.
+    fn line_scrolled_off(&mut self) {
+        let selections = std::mem::take(&mut self.sub_selections);
+        self.forget_lines(0..1);
+        self.sub_selections = selections
+            .into_iter()
+            .filter(|(start, _)| start.0 > 0)
+            .map(|(start, end)| ((start.0 - 1, start.1), (end.0 - 1, end.1)))
+            .collect();
     }
 
     pub fn forget_lines(&mut self, lines: Range<i64>) {
@@ -369,16 +390,31 @@ fn read_loop(
     let mut splitter = Splitter::default();
     let mut modify_other_keys = ModifyOtherKeysWatch::default();
     let mut buffer = vec![0; READ_BUFFER];
-    let mut scanned = 0;
+    let mut line_has_text = false;
+    let mut idle_line_checked = false;
     loop {
-        let deadline = processor.sync_timeout().sync_timeout();
+        let sync_deadline = processor.sync_timeout().sync_timeout();
+        // VT100Screen.m -performPeriodicTriggerCheck: a prompt left waiting still gets its
+        // instant triggers once the output pauses.
+        let idle_check =
+            (line_has_text && !idle_line_checked).then(|| Instant::now() + PARTIAL_LINE_INTERVAL);
+        let deadline = match (sync_deadline, idle_check) {
+            (Some(sync), Some(idle)) => Some(sync.min(idle)),
+            (sync, idle) => sync.or(idle),
+        };
         if !wait(&reader, PollFlags::IN, deadline) {
-            if deadline.is_some_and(|deadline| deadline <= Instant::now()) {
+            if sync_deadline.is_some_and(|deadline| deadline <= Instant::now()) {
                 processor.stop_sync(&mut *term.lock());
+                listener.send_event(Event::Wakeup);
+            }
+            if idle_check.is_some_and(|deadline| deadline <= Instant::now()) {
+                idle_line_checked = true;
+                check_partial_line(&mut term.lock(), &extras, &listener);
                 listener.send_event(Event::Wakeup);
             }
             continue;
         }
+        idle_line_checked = false;
         let read = match reader.read(&mut buffer) {
             Ok(0) => break,
             Ok(read) => read,
@@ -403,7 +439,14 @@ fn read_loop(
             let mut term = term.lock();
             for piece in splitter.feed(&buffer[..read]) {
                 match piece {
-                    Piece::Bytes(bytes) => processor.advance(&mut *term, &bytes),
+                    Piece::Bytes(bytes) => feed(
+                        &mut processor,
+                        &mut term,
+                        &bytes,
+                        &extras,
+                        &listener,
+                        &mut line_has_text,
+                    ),
                     Piece::Osc(payload) => {
                         if let Some(report) = integration::parse(&payload) {
                             apply(&mut term, &extras, report);
@@ -411,7 +454,9 @@ fn read_loop(
                     }
                 }
             }
-            run_triggers(&term, &extras, &mut scanned, &listener);
+            if line_has_text {
+                check_partial_line(&mut term, &extras, &listener);
+            }
             if let Ok(mut extras) = extras.lock() {
                 extras.stamp(absolute_line(&term), SystemTime::now(), term.total_lines());
                 extras.record(&term);
@@ -439,47 +484,260 @@ fn tee_output(extras: &Mutex<Extras>, bytes: &[u8]) {
     }
 }
 
-fn run_triggers(
-    term: &Term<Listener>,
+fn is_line_feed(byte: u8) -> bool {
+    matches!(byte, b'\n' | 0x0b | 0x0c)
+}
+
+// VT100Screen.m -linefeed → PTYTriggerEvaluator -clearTriggerLine: a line's triggers run just
+// before the line feed that ends it, so nothing depends on where the line ends up.
+fn feed(
+    processor: &mut Processor,
+    term: &mut Term<Listener>,
+    bytes: &[u8],
     extras: &Mutex<Extras>,
-    scanned: &mut i64,
     listener: &Listener,
+    line_has_text: &mut bool,
 ) {
-    let cursor = absolute_line(term);
-    let from = (*scanned).clamp(0, cursor);
-    *scanned = cursor;
+    let watching = extras.lock().is_ok_and(|extras| extras.watching_lines());
+    for piece in bytes.split_inclusive(|byte| is_line_feed(*byte)) {
+        let (body, line_feed) = match piece.split_last() {
+            Some((last, body)) if is_line_feed(*last) => (body, Some(*last)),
+            _ => (piece, None),
+        };
+        processor.advance(term, body);
+        if watching {
+            *line_has_text |= body.iter().any(|byte| *byte >= b' ' && *byte != 0x7f);
+        }
+        let Some(line_feed) = line_feed else {
+            continue;
+        };
+        if std::mem::take(line_has_text)
+            && let Ok(mut extras) = extras.lock()
+        {
+            check_line(term, &mut extras, listener, false);
+        }
+        line_feed_counting_lost_lines(processor, term, line_feed, extras);
+    }
+}
+
+// alacritty_terminal does not count the lines a full scrollback drops (VT100Screen.m keeps
+// totalScrollbackOverflow); seeing the top row land in the history tells it happened.
+fn line_feed_counting_lost_lines(
+    processor: &mut Processor,
+    term: &mut Term<Listener>,
+    line_feed: u8,
+    extras: &Mutex<Extras>,
+) {
+    let history = term.history_size();
+    let at_bottom =
+        history > 0 && term.grid().cursor.point.line.0 == term.screen_lines() as i32 - 1;
+    let top = at_bottom.then(|| term.grid()[Line(0)].clone());
+    processor.advance(term, &[line_feed]);
+    if let Some(top) = top
+        && term.history_size() == history
+        && term.grid()[Line(-1)] == top
+        && let Ok(mut extras) = extras.lock()
+    {
+        extras.line_scrolled_off();
+    }
+}
+
+// PTYTriggerEvaluator.m -checkPartialLineTriggers, at most twice a second.
+fn check_partial_line(term: &mut Term<Listener>, extras: &Mutex<Extras>, listener: &Listener) {
     let Ok(mut extras) = extras.lock() else {
         return;
     };
-    if !extras.triggers_enabled || extras.compiled.is_empty() {
+    let now = Instant::now();
+    let due = extras
+        .last_partial_check
+        .is_none_or(|last| now.duration_since(last) >= PARTIAL_LINE_INTERVAL);
+    if !extras.watching_lines() || !due || !extras.compiled.iter().any(|trigger| trigger.instant) {
         return;
     }
+    extras.last_partial_check = Some(now);
+    check_line(term, &mut extras, listener, true);
+}
+
+fn check_line(term: &mut Term<Listener>, extras: &mut Extras, listener: &Listener, partial: bool) {
+    let rows = cursor_logical_line(term);
+    let (text, cells) = logical_text(term, rows.clone());
+    if text.is_empty() {
+        return;
+    }
+    let mut compiled = std::mem::take(&mut extras.compiled);
+    'triggers: for trigger in &mut compiled {
+        if !trigger.should_try(rows.start, partial) {
+            continue;
+        }
+        let regex = trigger.regex.clone();
+        for captures in regex.captures_iter(&text) {
+            let Some(whole) = captures.get(0).filter(|whole| !whole.is_empty()) else {
+                continue;
+            };
+            trigger.last_line = Some(rows.start);
+            let groups: Vec<&str> = captures
+                .iter()
+                .map(|group| group.map_or("", |group| group.as_str()))
+                .collect();
+            let span = (cells[whole.start()], cells[whole.end() - 1]);
+            if perform(trigger, term, extras, listener, &groups, span, rows.clone()) {
+                break 'triggers;
+            }
+        }
+    }
+    extras.compiled = compiled;
+}
+
+fn cursor_logical_line(term: &Term<Listener>) -> Range<i64> {
     let history = term.history_size() as i64;
-    let Extras {
-        compiled,
-        highlights,
-        ..
-    } = &mut *extras;
-    for row in from..cursor {
-        let (text, columns) = trimmed_text_and_byte_columns(term, Line((row - history) as i32));
-        for trigger in compiled.iter() {
-            for found in trigger
-                .regex
-                .find_iter(&text)
-                .filter(|found| !found.is_empty())
+    let last = absolute_line(term);
+    let wraps = |row: i64| {
+        term.grid()[Line((row - history) as i32)][Column(term.columns() - 1)]
+            .flags
+            .contains(Flags::WRAPLINE)
+    };
+    let mut first = last;
+    while first > 0 && wraps(first - 1) {
+        first -= 1;
+    }
+    first..last + 1
+}
+
+// iTermStringLine: the wrapped rows joined, with each byte's cell.
+fn logical_text(term: &Term<Listener>, rows: Range<i64>) -> (String, Vec<(i64, usize)>) {
+    let history = term.history_size() as i64;
+    let mut text = String::new();
+    let mut cells = Vec::new();
+    for row in rows {
+        for (column, cell) in term.grid()[Line((row - history) as i32)]
+            .into_iter()
+            .enumerate()
+        {
+            if cell
+                .flags
+                .intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER)
             {
-                match trigger.action {
-                    TriggerAction::Highlight => highlights.push(Highlight {
-                        line: row,
-                        columns: columns[found.start()]..=columns[found.end() - 1],
-                    }),
-                    TriggerAction::Bell => listener.send_event(Event::Bell),
-                    TriggerAction::SendText => {
-                        listener.send_event(Event::PtyWrite(trigger.text.clone()))
-                    }
+                continue;
+            }
+            text.push(cell.c);
+            cells.extend(std::iter::repeat_n((row, column), cell.c.len_utf8()));
+        }
+    }
+    let length = text.trim_end().len();
+    text.truncate(length);
+    cells.truncate(length);
+    (text, cells)
+}
+
+// Trigger.m -performActionWithCapturedStrings:…stop: each action; true stops this line's triggers.
+fn perform(
+    trigger: &mut Compiled,
+    term: &mut Term<Listener>,
+    extras: &mut Extras,
+    listener: &Listener,
+    groups: &[&str],
+    (start, end): ((i64, usize), (i64, usize)),
+    rows: Range<i64>,
+) -> bool {
+    let parameter = triggers::expand(&trigger.parameter, groups);
+    let last_column = term.columns() - 1;
+    let popup = matches!(
+        trigger.action,
+        TriggerAction::Alert | TriggerAction::Notification
+    ) && trigger.popup_allowed(Instant::now());
+    match trigger.action {
+        TriggerAction::Highlight | TriggerAction::HighlightLine => {
+            let (text, background) = triggers::colors(&trigger.parameter);
+            let (start, end) = if trigger.action == TriggerAction::Highlight {
+                (start, end)
+            } else {
+                ((rows.start, 0), (rows.end - 1, last_column))
+            };
+            for line in start.0..=end.0 {
+                let first = if line == start.0 { start.1 } else { 0 };
+                let last = if line == end.0 { end.1 } else { last_column };
+                let highlight = Highlight {
+                    line,
+                    columns: first..=last,
+                    text,
+                    background,
+                };
+                if !extras.highlights.contains(&highlight) {
+                    extras.highlights.push(highlight);
                 }
             }
         }
+        TriggerAction::Bell => listener.send_event(Event::Bell),
+        TriggerAction::SendText => listener.send_event(Event::PtyWrite(parameter)),
+        TriggerAction::SetTitle => listener.send_event(Event::Title(parameter)),
+        TriggerAction::Mark => {
+            extras.add_mark(start.0);
+            extras.mark_reported = true;
+        }
+        // iTermShellPromptTrigger.m: the match is the prompt and the command follows it.
+        TriggerAction::PromptDetected => {
+            extras.add_mark(start.0);
+            extras.mark_reported = true;
+            extras.command_start = Some((end.0, end.1 + 1));
+        }
+        TriggerAction::ReportDirectory => {
+            let directory = if parameter.is_empty() {
+                groups[0].to_string()
+            } else {
+                parameter
+            };
+            extras.directory = Some(PathBuf::from(directory));
+        }
+        TriggerAction::Annotate => {
+            extras.annotate(start, end);
+            if let Some(annotation) = extras.annotations.last_mut() {
+                annotation.text = parameter;
+                annotation.focus = false;
+            }
+        }
+        TriggerAction::Hyperlink => {
+            let history = term.history_size() as i64;
+            let link = Hyperlink::new(None::<String>, parameter);
+            for line in start.0..=end.0 {
+                let first = if line == start.0 { start.1 } else { 0 };
+                let last = if line == end.0 { end.1 } else { last_column };
+                for column in first..=last {
+                    term.grid_mut()[Line((line - history) as i32)][Column(column)]
+                        .set_hyperlink(Some(link.clone()));
+                }
+            }
+        }
+        TriggerAction::RunCommand => run_command(&parameter),
+        TriggerAction::Coprocess => extras.fired.push(Fired::Coprocess(parameter)),
+        TriggerAction::Alert if popup => {
+            extras.fired.push(Fired::Alert {
+                trigger: trigger.index,
+                message: parameter,
+            });
+        }
+        TriggerAction::Notification if popup => {
+            extras.fired.push(Fired::Notification(parameter));
+        }
+        TriggerAction::Alert | TriggerAction::Notification => {}
+        TriggerAction::Stop => return true,
+    }
+    false
+}
+
+// PTYSession.m -triggerSideEffectRunBackgroundCommand:pool:: the user's shell runs it unattended.
+fn run_command(command: &str) {
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
+    match std::process::Command::new(shell)
+        .args(["-c", command])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        Ok(mut child) => {
+            std::thread::spawn(move || child.wait());
+        }
+        Err(error) => tracing::warn!(%error, "a Run Command trigger could not start"),
     }
 }
 

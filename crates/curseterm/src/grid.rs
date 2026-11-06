@@ -251,7 +251,6 @@ pub fn draw(
     ctx.canvas.translate((overlay.inset, overlay.inset));
     let offset = display_offset as i32;
     let top = term.history_size() as i64 - i64::from(offset);
-    draw_highlights(ctx, overlay.extras, top, fonts, scheme);
     draw_matches(ctx, overlay.matches, offset, term.columns(), fonts, scheme);
     if overlay.extras.cursor_guide && overlay.replay.is_none() {
         let mut ink = paint(scheme.cursor);
@@ -267,7 +266,7 @@ pub fn draw(
     if let Some(rows) = overlay.replay {
         for (line, row) in rows.iter().enumerate() {
             for (column, cell) in row.iter().enumerate() {
-                draw_cell(ctx, &frame, cell, column, line as i32, false);
+                draw_cell(ctx, &frame, cell, column, line as i32, false, (None, None));
             }
         }
         ctx.canvas.restore();
@@ -283,6 +282,25 @@ pub fn draw(
                 .iter()
                 .any(|(start, end)| *start <= at && at <= *end)
     };
+    let shown = top..top + term.screen_lines() as i64;
+    let highlights: Vec<_> = overlay
+        .extras
+        .highlights
+        .iter()
+        .filter(|highlight| shown.contains(&highlight.line))
+        .collect();
+    // HighlightTrigger.m: the later trigger's colours win, side by side.
+    let highlighted = |point: Point| {
+        let line = history + i64::from(point.line.0);
+        highlights
+            .iter()
+            .filter(|highlight| {
+                highlight.line == line && highlight.columns.contains(&point.column.0)
+            })
+            .fold((None, None), |(text, background), highlight| {
+                (highlight.text.or(text), highlight.background.or(background))
+            })
+    };
     for indexed in display_iter {
         let selected = selection.is_some_and(|range| range.contains(indexed.point))
             || sub_selected(indexed.point);
@@ -294,6 +312,7 @@ pub fn draw(
             indexed.point.column.0,
             line,
             selected,
+            highlighted(indexed.point),
         );
     }
     draw_annotations(ctx, overlay.extras, top, term.columns(), fonts);
@@ -402,23 +421,6 @@ fn fill_cells(
     let right = (*columns.end() + 1) as f32 * fonts.cell_width;
     ctx.canvas
         .draw_rect(SkRect::new(left, y, right, y + fonts.cell_height), ink);
-}
-
-fn draw_highlights(
-    ctx: &mut CanvasContext,
-    extras: &Extras,
-    top: i64,
-    fonts: &Fonts,
-    scheme: &Scheme,
-) {
-    let ink = highlight_ink(scheme);
-    for highlight in &extras.highlights {
-        let y = (highlight.line - top) as f32 * fonts.cell_height;
-        if y + fonts.cell_height < 0.0 || y > ctx.height {
-            continue;
-        }
-        fill_cells(ctx, &ink, y, highlight.columns.clone(), fonts);
-    }
 }
 
 // iTermTextDrawingHelper.m -drawNoteRangesOnLine: a one-point line two points above the cell bottom.
@@ -622,6 +624,7 @@ fn draw_cell(
     column: usize,
     line: i32,
     selected: bool,
+    (highlight_text, highlight_background): (Option<Rgb>, Option<Rgb>),
 ) {
     let Frame {
         palette,
@@ -639,7 +642,9 @@ fn draw_cell(
     } else {
         1.0
     };
-    let (fg, mut bg) = palette.cell_colors(cell);
+    let (mut fg, mut bg) = palette.cell_colors(cell);
+    fg = highlight_text.unwrap_or(fg);
+    bg = highlight_background.unwrap_or(bg);
     if selected {
         bg = palette.scheme.selection;
     }

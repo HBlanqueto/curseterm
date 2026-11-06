@@ -55,7 +55,7 @@ use crate::grid::Fonts;
 use crate::hint_view;
 use crate::hints::{self, HintAction, Hints, Typed};
 use crate::integration::Notification;
-use crate::io::AnnotationId;
+use crate::io::{AnnotationId, Fired};
 use crate::key_bindings::{self, Binding, BindingAction};
 use crate::key_report::{KITTY_FLAGS, KeyMode, Phase, Press, report};
 use crate::keys::{COPY_KEYS, CopyCommand, KeyAction, copy_command};
@@ -132,6 +132,14 @@ struct Handles {
     draft: State<String>,
     held: State<Modifiers>,
     transparency: State<bool>,
+    trigger_alert: State<Option<TriggerAlert>>,
+}
+
+#[derive(Clone, PartialEq)]
+struct TriggerAlert {
+    session: SessionId,
+    trigger: usize,
+    message: String,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -352,6 +360,7 @@ impl App for Terminal {
         let mut held = use_state(Modifiers::empty);
         let pressed = use_hook(|| Rc::new(RefCell::new(Vec::<Code>::new())));
         let transparency = use_state(|| true);
+        let trigger_alert = use_state(|| None);
         let editing = use_state(|| false);
         let hints = use_state(|| None::<Hints>);
         let replay = use_state(|| None::<(SessionId, usize)>);
@@ -420,6 +429,7 @@ impl App for Terminal {
             draft,
             held,
             transparency,
+            trigger_alert,
         });
         handles.dark.set(dark);
         use_drop({
@@ -651,6 +661,11 @@ impl App for Terminal {
             .then(|| filter_bar(handles.filter, &handles.defaults.read()));
         let replay_bar = (*replay.read()).map(|(id, index)| replay_bar(&handles, id, index));
         let alert = (*confirm.read()).map(|pending| confirm_alert(&handles, pending));
+        let trigger_alert = handles
+            .trigger_alert
+            .read()
+            .clone()
+            .map(|pending| trigger_alert_sheet(&handles, pending));
         let global_panel = (*handles.global.open.read()).then(|| {
             let (revealing, mode) = (handles.clone(), handles.defaults.read().global_search_mode);
             global_search_panel(
@@ -865,6 +880,7 @@ impl App for Terminal {
             .maybe_child(find_bar)
             .maybe_child(filter_bar)
             .maybe_child(alert)
+            .maybe_child(trigger_alert)
             .maybe_child(sheet_view)
             .child(
                 rect()
@@ -2726,14 +2742,18 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
             }
         }
         TermEvent::Wakeup => {
-            let (reported, posted, entered) = {
+            let (reported, posted, entered, fired) = {
                 let mut extras = session.extras();
                 (
                     std::mem::take(&mut extras.mark_reported),
                     std::mem::take(&mut extras.notifications),
                     std::mem::take(&mut extras.entered),
+                    std::mem::take(&mut extras.fired),
                 )
             };
+            for fired in fired {
+                trigger_fired(handles, &session, fired);
+            }
             if !entered.is_empty() {
                 let mut commands = command_history::shared();
                 let mut commands = commands.write();
@@ -3261,6 +3281,102 @@ fn confirm_alert(handles: &Handles, pending: Confirm) -> Alert {
             });
         })
         .cancel(dismiss, move |_| dismiss_later(&cancel, || {}))
+}
+
+fn trigger_fired(handles: &Handles, session: &Session, fired: Fired) {
+    match fired {
+        // CoprocessTrigger.m: only when the session has no coprocess yet.
+        Fired::Coprocess(command) => {
+            if !session.coprocess_running()
+                && let Err(error) = session.start_coprocess(&command)
+            {
+                tracing::warn!(%error, "a Run Coprocess trigger could not start");
+            }
+        }
+        // PTYSession.m -triggerSideEffectPostUserNotificationWithMessage:
+        Fired::Notification(message) => {
+            let (name, tab) = session_label(&handles.workspace.peek(), session.id);
+            post_for_session(
+                handles,
+                session.id,
+                message,
+                tr!("trigger-fired-notification", name = name, tab = tab),
+            );
+        }
+        Fired::Alert { trigger, message } => {
+            let mut shown = handles.trigger_alert;
+            if shown.peek().is_none() {
+                shown.set(Some(TriggerAlert {
+                    session: session.id,
+                    trigger,
+                    message,
+                }));
+            }
+        }
+    }
+}
+
+// PTYSession.m -reallyShowTriggerAlertWithMessage:rateLimit:disable:
+fn trigger_alert_sheet(handles: &Handles, pending: TriggerAlert) -> Element {
+    let palette = Palette::current();
+    let answers = [
+        (tr!("mark-alert-ok"), TriggerAnswer::Ok),
+        (
+            tr!("trigger-alert-show-session"),
+            TriggerAnswer::ShowSession,
+        ),
+        (tr!("trigger-alert-disable"), TriggerAnswer::Disable),
+    ];
+    let buttons = answers
+        .into_iter()
+        .enumerate()
+        .map(|(index, (label, answer))| {
+            let (answering, pending) = (handles.clone(), pending.clone());
+            let button = Button::new(label).on_press(move |_| {
+                let (handles, pending) = (answering.clone(), pending.clone());
+                answering.after(Duration::ZERO, move || {
+                    let mut shown = handles.trigger_alert;
+                    shown.set(None);
+                    match answer {
+                        TriggerAnswer::Ok => {}
+                        TriggerAnswer::ShowSession => reveal(&handles, pending.session, None),
+                        TriggerAnswer::Disable => {
+                            if let Some(session) = handles.sessions.peek().get(&pending.session) {
+                                session.extras().disable_trigger(pending.trigger);
+                            }
+                        }
+                    }
+                });
+            });
+            if index == 0 {
+                button.style(ButtonStyle::Primary).into_element()
+            } else {
+                button.into_element()
+            }
+        });
+    sheet(
+        rect()
+            .width(Size::px(PASTE_QUESTION_WIDTH))
+            .direction(Direction::Vertical)
+            .spacing(SPACE_2)
+            .child(text(pending.message.clone(), HEADLINE, palette.label))
+            .child(
+                rect()
+                    .width(Size::fill())
+                    .direction(Direction::Horizontal)
+                    .main_align(Alignment::End)
+                    .spacing(SPACE_2)
+                    .children(buttons),
+            ),
+    )
+    .into_element()
+}
+
+#[derive(Clone, Copy)]
+enum TriggerAnswer {
+    Ok,
+    ShowSession,
+    Disable,
 }
 
 // MovePaneController.m -dropInSession:half:atPoint:; a click on the moving pane cancels.

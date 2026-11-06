@@ -4,10 +4,13 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use alacritty_terminal::vte::ansi::Rgb;
 use barrier_kit::app::{use_defaults, use_menu_action};
 use barrier_kit::choices::RadioGroup;
 use barrier_kit::compact::{IconButton, Stepper};
-use barrier_kit::controls::{Button, ScrollView, SegmentedControl, Slider, Switch, TextField};
+use barrier_kit::controls::{
+    Button, Checkbox, ScrollView, SegmentedControl, Slider, Switch, TextField,
+};
 use barrier_kit::platform::{WindowControls, WindowOptions};
 use barrier_kit::popup_button::PopUpButton;
 use barrier_kit::style::{Palette, text};
@@ -17,7 +20,7 @@ use barrier_kit::titlebar::Titlebar;
 use barrier_kit::views::form::{Form, Row, Section};
 use barrier_kit::views::table::Table;
 use barrier_kit::views::tabs::TabView;
-use barrier_kit_next::tokens::{SETTINGS_WINDOW_SIZE, TERMINAL};
+use barrier_kit_next::tokens::{HIGHLIGHT_COLORS, SETTINGS_WINDOW_SIZE, TERMINAL, TRIGGER_EDITOR};
 use freya_core::integration::AppComponent;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Size};
@@ -33,6 +36,7 @@ use crate::key_bindings_pane::{KeyBindingsEditor, Owner};
 use crate::localize::tr;
 use crate::menu;
 use crate::snippets_pane::SnippetsPane;
+use crate::triggers;
 
 thread_local! {
     static INTERNED: RefCell<HashSet<&'static str>> = RefCell::new(HashSet::new());
@@ -241,16 +245,18 @@ impl Component for ProfilesPane {
             .collect();
         let several = profiles.len() > 1;
         let form = match *section.read() {
-            0 => Form::new().section(general_section(defaults, index, &profile)),
-            1 => Form::new().section(colors_section(defaults, index, &profile)),
-            2 => Form::new().section(text_section(index, &profile)),
-            3 => Form::new().section(window_section(index, &profile)),
-            4 => Form::new()
-                .section(terminal_section(index, &profile))
-                .section(notifications_section(index, &profile)),
-            5 => Form::new().section(session_section(index, &profile)),
-            6 => Form::new().section(keys_section(index, &profile)),
-            _ => Form::new().section(triggers_section(index, &profile)),
+            7 => None,
+            chosen => Some(match chosen {
+                0 => Form::new().section(general_section(defaults, index, &profile)),
+                1 => Form::new().section(colors_section(defaults, index, &profile)),
+                2 => Form::new().section(text_section(index, &profile)),
+                3 => Form::new().section(window_section(index, &profile)),
+                4 => Form::new()
+                    .section(terminal_section(index, &profile))
+                    .section(notifications_section(index, &profile)),
+                5 => Form::new().section(session_section(index, &profile)),
+                _ => Form::new().section(keys_section(index, &profile)),
+            }),
         };
         rect()
             .width(Size::fill())
@@ -338,7 +344,7 @@ impl Component for ProfilesPane {
                                 .width(Size::fill())
                                 .direction(Direction::Vertical)
                                 .spacing(SPACE_3)
-                                .child(form)
+                                .maybe_child(form)
                                 .maybe_child((*section.read() == 6).then(|| {
                                     rect()
                                         .width(Size::fill())
@@ -350,7 +356,10 @@ impl Component for ProfilesPane {
                                             Palette::current().label,
                                         ))
                                         .child(bindings_editor(defaults, Owner::Profile(index)))
-                                })),
+                                }))
+                                .maybe_child(
+                                    (*section.read() == 7).then(|| triggers_table(index, &profile)),
+                                ),
                         ),
                     ),
             )
@@ -821,24 +830,32 @@ fn notifications_section(index: usize, profile: &Profile) -> Section {
         ))
 }
 
-fn triggers_section(index: usize, profile: &Profile) -> Section {
+// TriggerController.m: the profile's trigger table, one row per trigger, and + to add one.
+fn triggers_table(index: usize, profile: &Profile) -> Rect {
     let rows = profile
         .triggers
         .iter()
         .enumerate()
-        .map(|(position, trigger)| {
-            let number = position as u64 + 1;
-            Row::new(intern(&tr!("trigger-number", number = number)))
-                .control(trigger_editor(index, position, trigger))
-        });
-    rows.fold(Section::titled(tr!("section-triggers")), Section::row)
-        .row(Row::new(tr!("trigger-add")).control(
+        .map(|(position, trigger)| trigger_editor(index, position, trigger).into_element());
+    rect()
+        .width(Size::fill())
+        .direction(Direction::Vertical)
+        .spacing(SPACE_1)
+        .child(text(
+            tr!("section-triggers"),
+            HEADLINE,
+            Palette::current().label,
+        ))
+        .children(rows)
+        .child(
             IconButton::new(Symbol::Plus, tr!("trigger-add")).on_press(move |_| {
                 edit(index, |profile| profile.triggers.push(Trigger::default()))
             }),
-        ))
+        )
 }
 
+// TriggerController.m: the table's Enabled, Regular Expression, Action, Parameters and Instant
+// columns in one row.
 fn trigger_editor(index: usize, position: usize, trigger: &Trigger) -> Rect {
     let action = TriggerAction::ALL
         .iter()
@@ -851,28 +868,51 @@ fn trigger_editor(index: usize, position: usize, trigger: &Trigger) -> Rect {
             value: value.to_string(),
         })
     };
+    let parameter = match trigger.action {
+        TriggerAction::Highlight | TriggerAction::HighlightLine => {
+            Some(highlight_colors(index, position, &trigger.parameter))
+        }
+        action if action.takes_parameter() => Some(rect().width(Size::fill()).child(ProfileText {
+            index,
+            field: Field::TriggerParameter(position, action),
+            value: trigger.parameter.clone(),
+        })),
+        _ => None,
+    };
+    let column = |width| rect().width(Size::px(width));
     rect()
         .width(Size::fill())
         .direction(Direction::Horizontal)
         .content(Content::flex())
         .cross_align(Alignment::Center)
         .spacing(SPACE_1)
+        .child(
+            Checkbox::new(tr!("trigger-enabled"))
+                .checked(trigger.enabled)
+                .on_toggle(move |on| edit_trigger(index, position, |trigger| trigger.enabled = on)),
+        )
         .child(text(Field::TriggerRegex(position), &trigger.regex))
         .child(
-            PopUpButton::new(tr!("trigger-action"))
-                .item(tr!("trigger-highlight"))
-                .item(tr!("trigger-bell"))
-                .item(tr!("trigger-send-text"))
-                .selected(action)
-                .on_change(move |choice: usize| {
-                    edit(index, |profile| {
-                        if let Some(trigger) = profile.triggers.get_mut(position) {
-                            trigger.action = TriggerAction::ALL[choice];
-                        }
+            column(TRIGGER_EDITOR.action_width).child(
+                TriggerAction::ALL
+                    .iter()
+                    .fold(PopUpButton::new(tr!("trigger-action")), |popup, action| {
+                        popup.item(trigger_action_title(*action))
                     })
-                }),
+                    .selected(action)
+                    .on_change(move |choice: usize| {
+                        edit_trigger(index, position, |trigger| {
+                            trigger.action = TriggerAction::ALL[choice];
+                        })
+                    }),
+            ),
         )
-        .child(text(Field::TriggerParameter(position), &trigger.parameter))
+        .child(column(TRIGGER_EDITOR.parameter_width).maybe_child(parameter))
+        .child(
+            Checkbox::new(tr!("trigger-instant"))
+                .checked(trigger.instant)
+                .on_toggle(move |on| edit_trigger(index, position, |trigger| trigger.instant = on)),
+        )
         .child(
             IconButton::new(Symbol::Minus, tr!("trigger-remove")).on_press(move |_| {
                 edit(index, |profile| {
@@ -884,6 +924,107 @@ fn trigger_editor(index: usize, position: usize, trigger: &Trigger) -> Rect {
         )
 }
 
+fn edit_trigger(index: usize, position: usize, change: impl FnOnce(&mut Trigger)) {
+    edit(index, |profile| {
+        if let Some(trigger) = profile.triggers.get_mut(position) {
+            change(trigger);
+        }
+    });
+}
+
+fn trigger_action_title(action: TriggerAction) -> &'static str {
+    match action {
+        TriggerAction::Annotate => tr!("trigger-annotate"),
+        TriggerAction::HighlightLine => tr!("trigger-highlight-line"),
+        TriggerAction::Highlight => tr!("trigger-highlight"),
+        TriggerAction::Hyperlink => tr!("trigger-hyperlink"),
+        TriggerAction::Notification => tr!("trigger-notification"),
+        TriggerAction::PromptDetected => tr!("trigger-prompt-detected"),
+        TriggerAction::ReportDirectory => tr!("trigger-report-directory"),
+        TriggerAction::Bell => tr!("trigger-bell"),
+        TriggerAction::RunCommand => tr!("trigger-run-command"),
+        TriggerAction::Coprocess => tr!("trigger-coprocess"),
+        TriggerAction::SendText => tr!("trigger-send-text"),
+        TriggerAction::Mark => tr!("trigger-mark"),
+        TriggerAction::SetTitle => tr!("trigger-set-title"),
+        TriggerAction::Alert => tr!("trigger-alert"),
+        TriggerAction::Stop => tr!("trigger-stop"),
+    }
+}
+
+// Each trigger's -triggerOptionalParameterPlaceholderWithInterpolation:.
+fn trigger_placeholder(action: TriggerAction) -> &'static str {
+    match action {
+        TriggerAction::Alert => tr!("trigger-alert-placeholder"),
+        TriggerAction::Annotate => tr!("trigger-annotate-placeholder"),
+        TriggerAction::Notification => tr!("trigger-notification-placeholder"),
+        TriggerAction::RunCommand => tr!("trigger-run-command-placeholder"),
+        TriggerAction::Coprocess => tr!("trigger-coprocess-placeholder"),
+        TriggerAction::ReportDirectory => tr!("trigger-report-directory-placeholder"),
+        TriggerAction::SetTitle => tr!("trigger-set-title-placeholder"),
+        TriggerAction::Hyperlink => tr!("trigger-hyperlink-placeholder"),
+        _ => tr!("trigger-send-text-placeholder"),
+    }
+}
+
+// HighlightTrigger.m -paramIsTwoColorWells: the text and the background, each optional.
+fn highlight_colors(index: usize, position: usize, parameter: &str) -> Rect {
+    let (text, background) = triggers::colors(parameter);
+    let popup = |label, chosen: Option<Rgb>, background_side: bool| {
+        let selected = chosen.map_or(0, |chosen| {
+            HIGHLIGHT_COLORS
+                .iter()
+                .position(|swatch| triggers::rgb(*swatch) == chosen)
+                .map_or(0, |found| found + 1)
+        });
+        HIGHLIGHT_COLORS
+            .iter()
+            .enumerate()
+            .fold(
+                PopUpButton::new(label).item(tr!("highlight-unchanged")),
+                |popup, (swatch, _)| popup.item(highlight_color_name(swatch)),
+            )
+            .selected(selected)
+            .on_change(move |choice: usize| {
+                let picked = choice
+                    .checked_sub(1)
+                    .map(|swatch| triggers::rgb(HIGHLIGHT_COLORS[swatch]));
+                edit_trigger(index, position, |trigger| {
+                    let (text, background) = triggers::colors(&trigger.parameter);
+                    trigger.parameter = if background_side {
+                        triggers::colors_parameter(text, picked)
+                    } else {
+                        triggers::colors_parameter(picked, background)
+                    };
+                });
+            })
+    };
+    rect()
+        .direction(Direction::Horizontal)
+        .spacing(SPACE_1)
+        .child(popup(tr!("highlight-text-color"), text, false))
+        .child(popup(tr!("highlight-background-color"), background, true))
+}
+
+fn highlight_color_name(swatch: usize) -> &'static str {
+    match swatch {
+        0 => tr!("highlight-black"),
+        1 => tr!("highlight-dark-gray"),
+        2 => tr!("highlight-light-gray"),
+        3 => tr!("highlight-white"),
+        4 => tr!("highlight-gray"),
+        5 => tr!("highlight-red"),
+        6 => tr!("highlight-green"),
+        7 => tr!("highlight-blue"),
+        8 => tr!("highlight-cyan"),
+        9 => tr!("highlight-yellow"),
+        10 => tr!("highlight-magenta"),
+        11 => tr!("highlight-orange"),
+        12 => tr!("highlight-purple"),
+        _ => tr!("highlight-brown"),
+    }
+}
+
 #[derive(Clone, Copy, PartialEq)]
 enum Field {
     Name,
@@ -893,7 +1034,7 @@ enum Field {
     Directory,
     Family,
     TriggerRegex(usize),
-    TriggerParameter(usize),
+    TriggerParameter(usize, TriggerAction),
     Scrollback,
     Columns,
     Rows,
@@ -913,7 +1054,7 @@ impl Field {
             Self::Directory => tr!("directory-path"),
             Self::Family => tr!("font-family"),
             Self::TriggerRegex(_) => tr!("trigger-regex"),
-            Self::TriggerParameter(_) => tr!("trigger-parameter"),
+            Self::TriggerParameter(_, action) => trigger_placeholder(action),
             Self::Scrollback => tr!("scrollback-lines"),
             Self::Columns => tr!("window-columns"),
             Self::Rows => tr!("window-rows"),
@@ -925,7 +1066,7 @@ impl Field {
         if value.is_empty()
             && !matches!(
                 self,
-                Self::Command | Self::InitialText | Self::Badge | Self::TriggerParameter(_)
+                Self::Command | Self::InitialText | Self::Badge | Self::TriggerParameter(..)
             )
         {
             return;
@@ -961,7 +1102,7 @@ impl Field {
                         profile.scrollback_lines = lines.min(SCROLLBACK_LIMIT);
                     }
                 }
-                Self::TriggerRegex(position) | Self::TriggerParameter(position) => {
+                Self::TriggerRegex(position) | Self::TriggerParameter(position, _) => {
                     if let Some(trigger) = profile.triggers.get_mut(position) {
                         match self {
                             Self::TriggerRegex(_) => trigger.regex = value.clone(),

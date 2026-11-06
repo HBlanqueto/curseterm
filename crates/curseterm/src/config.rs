@@ -205,25 +205,77 @@ impl AltKey {
     pub const ALL: [Self; 2] = [Self::Normal, Self::Escape];
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Trigger {
     pub regex: String,
     pub action: TriggerAction,
     pub parameter: String,
+    pub instant: bool,
+    pub enabled: bool,
 }
 
+impl Default for Trigger {
+    fn default() -> Self {
+        Self {
+            regex: String::new(),
+            action: TriggerAction::default(),
+            parameter: String::new(),
+            instant: false,
+            enabled: true,
+        }
+    }
+}
+
+// TriggerController.m +triggerClassesForTerminal:, sorted by title as iTerm2 lists them; the
+// ones that need macOS, the Python API or a browser are left out.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TriggerAction {
+    Annotate,
+    HighlightLine,
     #[default]
     Highlight,
+    Hyperlink,
+    Notification,
+    PromptDetected,
+    ReportDirectory,
     Bell,
+    RunCommand,
+    Coprocess,
     SendText,
+    Mark,
+    SetTitle,
+    Alert,
+    Stop,
 }
 
 impl TriggerAction {
-    pub const ALL: [Self; 3] = [Self::Highlight, Self::Bell, Self::SendText];
+    pub const ALL: [Self; 15] = [
+        Self::Annotate,
+        Self::HighlightLine,
+        Self::Highlight,
+        Self::Hyperlink,
+        Self::Notification,
+        Self::PromptDetected,
+        Self::ReportDirectory,
+        Self::Bell,
+        Self::RunCommand,
+        Self::Coprocess,
+        Self::SendText,
+        Self::Mark,
+        Self::SetTitle,
+        Self::Alert,
+        Self::Stop,
+    ];
+
+    // Trigger.m -takesParameter.
+    pub fn takes_parameter(self) -> bool {
+        !matches!(
+            self,
+            Self::Bell | Self::PromptDetected | Self::Mark | Self::Stop
+        )
+    }
 }
 
 impl Default for Profile {

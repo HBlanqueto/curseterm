@@ -2726,3 +2726,77 @@ patch 0008).
 
 **Detail:** with the Settings window below its minimum width (tiled sway
 ignores it), the profile tabs break their text.
+
+## Phase 61 — Triggers like iTerm2's
+
+### Plan
+
+iTerm2's Profiles › Advanced › Triggers (`Trigger.m`, `PTYTriggerEvaluator.m`,
+`TriggerController.m` and each `*Trigger.m`), on top of phase 4's triggers:
+
+1. **When:** each logical line (its wrapped rows joined) is checked just
+   before the line feed that ends it (`VT100Screen.m -linefeed`). «Instant»
+   triggers also look at the unfinished line, at most twice a second, also
+   when the output stops (a waiting prompt). An instant trigger fires once per
+   line; highlights follow the line as it grows.
+2. **Parameters:** `\0` to `\9` with the expression's groups and the escapes
+   `\a \b \e \n \r \t \\ \xNN` (`Trigger.m`).
+3. **Actions**, in iTerm2's order by title: Annotate, Highlight Line,
+   Highlight Text, Make Hyperlink, Post Notification, Prompt Detected, Report
+   Directory, Ring Bell, Run Command, Run Coprocess, Send Text, Set Mark, Set
+   Title, Show Alert and Stop Processing Triggers.
+4. **Highlight:** a text and a background colour, each optional, saved as
+   `{#rrggbb,#rrggbb}`; a new one paints the background red. They replace the
+   cell's colours.
+5. **Show Alert:** OK, Show Session and Disable This Alert, which turns it off
+   in that session; alerts and notifications, at most one a second per
+   trigger.
+6. **Settings:** a table with Enabled, the expression, the action, the
+   parameter (text or the two colours) and Instant, plus «+» and «−».
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit, a profile with
+`scrollback_lines = 20` and a script that prints each case. `./dev.sh check`
+clean in both modes; new tests for the parameters, the colours and the
+once-per-line rule.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `error ([0-9]+)` white on red, also at the end of a 115-character line | ✓ | `fase61-triggers.png` |
+| `^WARN` with Highlight Line: the whole row yellow | ✓ | `fase61-triggers.png` |
+| With a full history (60 lines, 20 of history), each highlight stays on its line | ✓ | `fase61-triggers.png` |
+| `title:(\w+)` with Set Title `T-\1`: title «T-Probando» | ✓ | — |
+| `read -p "continue? "` and Instant Send Text `yes\n`: `answer=yes` without touching the keyboard | ✓ | `fase61-triggers.png` |
+| Annotate «annotated» over «note this» | ✓ | `fase61-triggers.png` |
+| Run Command `touch …`: the file appears | ✓ | — |
+| `STOP` with Stop ahead of a `STOP\|later` highlight: the STOP line stays plain and «only later here» is highlighted | ✓ | `fase61-aviso.png` |
+| Show Alert `Alert: \0`: an alert with the three buttons; Disable This Alert and another `ALERTME`: no alert | ✓ | `fase61-aviso.png` |
+| Post Notification `Saw \0`: `Notify` with «Saw NOTIFYME» and «A trigger fired in session “root@vm: ~” in tab #1.» | ✓ | — |
+| Make Hyperlink `https://example.com/issues/\1` and Super+click: `xdg-open https://example.com/issues/123` | ✓ | — |
+| An unchecked trigger does nothing | ✓ | — |
+| Settings: the table; checking Enabled and picking a Cyan background saves `enabled = true` and `{,#00ffff}` | ✓ | `fase61-ajustes.png` |
+
+**Bugs found and fixed while testing:**
+- With a full history, triggers stopped looking at new lines and highlights
+  drifted: `alacritty_terminal` does not count the lines it drops. Now a line
+  is checked before its line feed, and a line feed that drops the top row
+  into the history moves everything anchored up one. That also fixes, for
+  normal output, phase 35's drift of marks and annotations.
+- A waiting prompt never got its Instant trigger because the line was only
+  checked when output arrived; now it is also checked 0.5 s after the output
+  stops.
+- In Settings, the columns changed width with the action; the table spans the
+  full width with fixed action and parameter columns.
+
+**Not tested:** the kit as is; Prompt Detected, Report Directory, Set Mark and
+Run Coprocess; Highlight Line on a wrapped line; drift with scrolls that are
+not line feeds (`ESC D`, `CSI S`).
+
+**Differs from iTerm2:** no actions that need macOS, the Python API or the
+browser (Bounce Dock Icon, Open Password Manager, Invoke Script Function,
+Capture Output, Set User Variable and the workgroup ones); no Run Silent
+Coprocess; no trigger names, job filter or «Use interpolated strings»; Set
+Mark without «Stop scrolling»; the highlight colours are AppKit's fourteen
+named ones, not a free picker; an alert arriving while another is open is
+dropped instead of waiting.

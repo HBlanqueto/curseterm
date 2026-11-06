@@ -44,6 +44,7 @@ mod status;
 mod styled;
 mod terminal;
 mod theme;
+mod triggers;
 mod windows;
 mod workspace;
 

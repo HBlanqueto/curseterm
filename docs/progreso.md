@@ -2750,3 +2750,77 @@ parche 0001); cerrar Ajustes con ⌘W entra en pánico en `close_window`
 
 **Detalle:** con la ventana de Ajustes por debajo de su ancho mínimo (sway en
 mosaico no lo respeta), las pestañas del perfil parten su texto.
+
+## Fase 61 — Triggers como los de iTerm2
+
+### Plan
+
+Profiles › Advanced › Triggers de iTerm2 (`Trigger.m`, `PTYTriggerEvaluator.m`,
+`TriggerController.m` y cada `*Trigger.m`), sobre los triggers de la fase 4:
+
+1. **Cuándo:** cada línea lógica (las filas partidas, unidas) se evalúa justo
+   antes del salto de línea que la termina (`VT100Screen.m -linefeed`). Los
+   triggers «Instant» miran además la línea a medias, como mucho dos veces
+   por segundo, también cuando la salida se para (un prompt que espera).
+   Un trigger instantáneo se dispara una vez por línea; los resaltados la
+   siguen mientras crece.
+2. **Parámetros:** `\0` a `\9` con los grupos de la expresión y los escapes
+   `\a \b \e \n \r \t \\ \xNN` (`Trigger.m`).
+3. **Acciones**, en el orden por título de iTerm2: Annotate, Highlight Line,
+   Highlight Text, Make Hyperlink, Post Notification, Prompt Detected, Report
+   Directory, Ring Bell, Run Command, Run Coprocess, Send Text, Set Mark, Set
+   Title, Show Alert y Stop Processing Triggers.
+4. **Resaltado:** color de texto y de fondo, cada uno opcional, guardados como
+   `{#rrggbb,#rrggbb}`; uno nuevo pinta el fondo rojo. Sustituyen los colores
+   de la celda.
+5. **Show Alert:** OK, Show Session y Disable This Alert, que lo apaga en esa
+   sesión; aviso y notificación, como mucho uno por segundo por trigger.
+6. **Ajustes:** una tabla con Enabled, la expresión, la acción, el parámetro
+   (texto o los dos colores) e Instant, más «+» y «−».
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado, un perfil con
+`scrollback_lines = 20` y un guion que imprime cada caso. `./dev.sh check`
+limpio en los dos modos; tests nuevos de los parámetros, los colores y la
+regla de una vez por línea.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `error ([0-9]+)` en blanco sobre rojo, también al final de una línea de 115 caracteres | ✓ | `fase61-triggers.png` |
+| `^WARN` con Highlight Line: toda la fila en amarillo | ✓ | `fase61-triggers.png` |
+| Con el historial lleno (60 líneas, 20 de historial), cada resaltado sigue en su línea | ✓ | `fase61-triggers.png` |
+| `title:(\w+)` con Set Title `T-\1`: título «T-Probando» | ✓ | — |
+| `read -p "continue? "` y Send Text `yes\n` Instant: `answer=yes` sin tocar el teclado | ✓ | `fase61-triggers.png` |
+| Annotate «annotated» sobre «note this» | ✓ | `fase61-triggers.png` |
+| Run Command `touch …`: el archivo aparece | ✓ | — |
+| `STOP` con Stop delante de un resaltado `STOP\|later`: la línea con STOP queda sin resaltar y «only later here» sí | ✓ | `fase61-aviso.png` |
+| Show Alert `Alert: \0`: aviso con los tres botones; Disable This Alert y otro `ALERTME`: sin aviso | ✓ | `fase61-aviso.png` |
+| Post Notification `Saw \0`: `Notify` con «Saw NOTIFYME» y «A trigger fired in session “root@vm: ~” in tab #1.» | ✓ | — |
+| Make Hyperlink `https://example.com/issues/\1` y Super+clic: `xdg-open https://example.com/issues/123` | ✓ | — |
+| Un trigger desmarcado no actúa | ✓ | — |
+| Ajustes: la tabla; marcar Enabled y elegir Cyan de fondo guarda `enabled = true` y `{,#00ffff}` | ✓ | `fase61-ajustes.png` |
+
+**Fallos encontrados y corregidos en la prueba:**
+- Con el historial lleno, los triggers dejaban de mirar las líneas nuevas y
+  los resaltados se corrían: `alacritty_terminal` no cuenta las líneas que
+  descarta. Ahora la línea se evalúa antes de su salto de línea, y un salto
+  que hace caer la fila de arriba al historial sube una posición todo lo
+  anclado. Eso arregla también, para la salida normal, la deriva de marcas y
+  anotaciones de la fase 35.
+- Un prompt que espera no recibía su trigger Instant porque solo se miraba al
+  llegar salida; ahora también se mira 0,5 s después de que la salida pare.
+- En Ajustes, las columnas cambiaban de ancho según la acción; la tabla va a
+  todo el ancho con las columnas de acción y parámetro fijas.
+
+**No probado:** con el kit tal cual; Prompt Detected, Report Directory, Set
+Mark y Run Coprocess; Highlight Line en una línea partida; la deriva con
+desplazamientos que no son saltos de línea (`ESC D`, `CSI S`).
+
+**Difiere de iTerm2:** sin las acciones que dependen de macOS, de la API de
+Python o del navegador (Bounce Dock Icon, Open Password Manager, Invoke Script
+Function, Capture Output, Set User Variable y las de grupos de trabajo); sin
+Run Silent Coprocess; sin nombres de trigger, sin el filtro por trabajo ni
+«Use interpolated strings»; Set Mark sin «Stop scrolling»; los colores de
+resaltado son los catorce con nombre de AppKit, no un selector libre; si llega
+un aviso con otro abierto, se descarta en vez de esperar.
