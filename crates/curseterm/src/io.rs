@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::ops::RangeInclusive;
+use std::ops::{Range, RangeInclusive};
 use std::path::PathBuf;
 use std::process::ChildStdin;
 use std::sync::mpsc::{Sender, channel};
@@ -182,14 +182,18 @@ impl Extras {
             .chain(self.stamps.iter_mut().map(|(line, _)| line))
     }
 
-    pub fn forget_lines_above(&mut self, line: i64) {
-        self.marks.retain(|mark| *mark >= line);
-        self.output = self.output.filter(|[start, _]| *start >= line);
-        self.output_start = self.output_start.filter(|start| *start >= line);
-        self.stamps.retain(|(stamped, _)| *stamped >= line);
-        self.images.retain(|image| image.line >= line);
-        self.highlights.retain(|highlight| highlight.line >= line);
-        self.anchored_lines().for_each(|anchored| *anchored -= line);
+    pub fn forget_lines(&mut self, lines: Range<i64>) {
+        let kept = |line: i64| !lines.contains(&line);
+        self.marks.retain(|mark| kept(*mark));
+        self.output = self.output.filter(|[start, _]| kept(*start));
+        self.output_start = self.output_start.filter(|start| kept(*start));
+        self.stamps.retain(|(stamped, _)| kept(*stamped));
+        self.images.retain(|image| kept(image.line));
+        self.highlights.retain(|highlight| kept(highlight.line));
+        let removed = lines.end - lines.start;
+        self.anchored_lines()
+            .filter(|anchored| **anchored >= lines.end)
+            .for_each(|anchored| *anchored -= removed);
     }
 }
 

@@ -747,6 +747,17 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::CLOSE_PANES.id, split);
     use_menu_enabled(menu::UNDO_CLOSE.id, handles.buried.read().is_some());
     use_menu_enabled(menu::PASTE_HISTORY.id, !handles.pastes.read().is_empty());
+    let current = handles.active();
+    use_menu_enabled(
+        menu::CLEAR_TO_SELECTION.id,
+        current
+            .as_ref()
+            .is_some_and(|session| session.selection_start().is_some()),
+    );
+    use_menu_enabled(
+        menu::CLEAR_TO_LAST_MARK.id,
+        current.is_some_and(|session| session.last_mark_above_cursor().is_some()),
+    );
     use_menu_enabled(
         menu::RECENT_DIRECTORIES.id,
         !handles.toolbelt.directories.read().is_empty(),
@@ -1988,6 +1999,24 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         _ if id == menu::CLEAR_BUFFER.id => {
             if let Some(session) = &active {
                 session.clear_buffer();
+            }
+        }
+        _ if id == menu::CLEAR_TO_SELECTION.id => {
+            if let Some(session) = &active
+                && let Some(line) = session.selection_start()
+            {
+                session.clear_from(line);
+            }
+        }
+        _ if id == menu::CLEAR_TO_LAST_MARK.id => {
+            if let Some(session) = &active {
+                session.clear_to_last_mark();
+            }
+        }
+        _ if id == menu::CLEAR_REPLAY.id => {
+            if let Some(session) = &active {
+                session.extras().replay.clear();
+                handles.replay.clone().set(None);
             }
         }
         _ if id == menu::CLEAR_SCROLLBACK.id => {

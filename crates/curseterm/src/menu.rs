@@ -57,6 +57,13 @@ pub const COPY_STYLED: Action =
 pub const PASTE: Action = Action::new("paste", || tr!("paste")).shortcut(super_key('v'));
 pub const CLEAR_BUFFER: Action =
     Action::new("clear-buffer", || tr!("clear-buffer")).shortcut(super_key('k'));
+pub const CLEAR_TO_SELECTION: Action =
+    Action::new("clear-to-selection", || tr!("clear-to-selection")).shortcut(super_key('l'));
+pub const CLEAR_TO_LAST_MARK: Action =
+    Action::new("clear-to-last-mark", || tr!("clear-to-last-mark"))
+        .shortcut(super_with(Modifiers::ALT, 'l'));
+pub const CLEAR_REPLAY: Action =
+    Action::new("clear-replay", || tr!("clear-replay")).shortcut(super_with(Modifiers::ALT, 'k'));
 pub const CLEAR_SCROLLBACK: Action = Action::new("clear-scrollback", || tr!("clear-scrollback"))
     .shortcut(super_with(Modifiers::SHIFT, 'k'));
 pub const RESTART_SESSION: Action = Action::new("restart-session", || tr!("restart-session"));
@@ -258,7 +265,10 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 ),
                 MenuItem::Separator,
                 CLEAR_BUFFER.item(true),
+                CLEAR_REPLAY.item(true),
                 CLEAR_SCROLLBACK.item(false),
+                CLEAR_TO_SELECTION.item(false),
+                CLEAR_TO_LAST_MARK.item(false),
             ],
         ),
         Menu::new(

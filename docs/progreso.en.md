@@ -1404,3 +1404,43 @@ check` clean in both kit modes.
 **Differs from iTerm2:** the path is always escaped; iTerm2 only does it when
 the cursor is at the prompt. The list belongs to the window and is not kept
 when it closes, nor sorted by how often it is used.
+
+## Phase 32 — Clear to a mark or the selection
+
+### Plan
+
+The three iTerm2 «Edit» items (`sources/MainMenu/Base.lproj/MainMenu.xib`)
+that were missing:
+
+1. **Clear to Last Mark (⌥⌘L):** clears from the last mark above the cursor
+   down to the cursor; the cursor line moves up. The marked line stays unless
+   it is the one just above the cursor, like `clearToLastMark` in
+   `sources/VT100Screen/VT100Screen.m`. Enabled only when there is such a
+   mark.
+2. **Clear to Start of Selection (⌘L):** the same from the first line of the
+   selection (`clearToStartOfSelection:` in `PseudoTerminal.m`).
+3. **Clear Instant Replay (⌥⌘K):** drops the stored frames and leaves replay
+   if it was open.
+4. Marks, times, images and highlights of the cleared lines are forgotten and
+   those below move up with the text (`Extras::forget_lines`, which replaces
+   `forget_lines_above`).
+5. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the kit as is: it needs no patch. `./dev.sh
+check` clean in both kit modes.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `echo A`, ⇧⌘M, `seq 5` and ⌥⌘L: the `seq 5` line stays with its mark and 1–5 go away; the prompt moves up | ✓ | `fase32-borrar-hasta-la-marca.png` |
+| Then `echo B`, selecting the `A` line and ⌘L: `echo A` and the prompt remain; the `seq 5` mark goes with its line | ✓ | — |
+| ⌥⌘B opens replay, ⌥⌘K closes it and ⌥⌘B no longer does anything; the app stays alive | ✓ | — |
+
+**Not tested:** the disabled items in the global D-Bus menu.
+
+**Differs from iTerm2:** only visible lines are cleared. If the mark or the
+selection starts in the scrollback, clearing starts at the first screen line,
+because alacritty cannot remove single lines from the scrollback.

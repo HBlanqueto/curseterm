@@ -1408,3 +1408,42 @@ Probado en sway sin pantalla con el kit tal cual: no necesita parche.
 **Difiere de iTerm2:** la ruta se escapa siempre; iTerm2 solo lo hace cuando
 el cursor está en el prompt. La lista es de la ventana y no se guarda al
 cerrarla, ni se ordena por frecuencia de uso.
+
+## Fase 32 — Borrar hasta una marca o la selección
+
+### Plan
+
+Los tres ítems de «Edit» de iTerm2 (`sources/MainMenu/Base.lproj/MainMenu.xib`)
+que faltaban:
+
+1. **Clear to Last Mark (⌥⌘L):** borra desde la última marca por encima del
+   cursor hasta el cursor; la línea del cursor sube. La línea marcada se
+   queda salvo que sea la justo encima del cursor, como `clearToLastMark` en
+   `sources/VT100Screen/VT100Screen.m`. Solo activo si hay esa marca.
+2. **Clear to Start of Selection (⌘L):** lo mismo desde la primera línea de la
+   selección (`clearToStartOfSelection:` en `PseudoTerminal.m`).
+3. **Clear Instant Replay (⌥⌘K):** descarta las fotos guardadas y sale de la
+   repetición si estaba abierta.
+4. Las marcas, horas, imágenes y resaltados de las líneas borradas se
+   olvidan y los de debajo suben con el texto (`Extras::forget_lines`, que
+   sustituye a `forget_lines_above`).
+5. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit tal cual: no necesita parche.
+`./dev.sh check` limpio en los dos modos del kit.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `echo A`, ⇧⌘M, `seq 5` y ⌥⌘L: queda la línea `seq 5` con su marca y desaparecen 1–5; el prompt sube | ✓ | `fase32-borrar-hasta-la-marca.png` |
+| Después `echo B`, seleccionar la línea `A` y ⌘L: quedan `echo A` y el prompt; la marca de `seq 5` desaparece con su línea | ✓ | — |
+| ⌥⌘B abre la repetición, ⌥⌘K la cierra y ⌥⌘B ya no hace nada; la app sigue viva | ✓ | — |
+
+**No probado:** los ítems desactivados en el menú global de D-Bus.
+
+**Difiere de iTerm2:** solo se borran líneas visibles. Si la marca o la
+selección empiezan en el historial, se borra desde la primera línea de la
+pantalla, porque alacritty no permite quitar líneas sueltas del historial.

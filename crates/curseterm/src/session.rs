@@ -374,7 +374,7 @@ impl Session {
         let mut term = self.term.lock();
         let history = term.history_size() as i64;
         term.grid_mut().clear_history();
-        self.extras().forget_lines_above(history);
+        self.extras().forget_lines(0..history);
     }
 
     pub fn clear_buffer(&self) {
@@ -384,6 +384,48 @@ impl Session {
         term.grid_mut().clear_history();
         term.goto(0, cursor.column.0);
         self.extras().forget_everything();
+    }
+
+    pub fn last_mark_above_cursor(&self) -> Option<i64> {
+        let cursor = pty_io::absolute_line(&self.term.lock());
+        self.extras()
+            .marks
+            .iter()
+            .rev()
+            .find(|mark| **mark < cursor)
+            .copied()
+    }
+
+    pub fn clear_to_last_mark(&self) {
+        let Some(mark) = self.last_mark_above_cursor() else {
+            return;
+        };
+        let cursor = pty_io::absolute_line(&self.term.lock());
+        // VT100Screen.m clearToLastMark: keep the marked line unless it is just above the cursor.
+        self.clear_from(if mark == cursor - 1 { mark } else { mark + 1 });
+    }
+
+    pub fn selection_start(&self) -> Option<i64> {
+        let term = self.term.lock();
+        let range = term.selection.as_ref()?.to_range(&term)?;
+        Some(term.history_size() as i64 + i64::from(range.start.line.0))
+    }
+
+    pub fn clear_from(&self, line: i64) {
+        let mut term = self.term.lock();
+        let history = term.history_size() as i64;
+        let cursor = pty_io::absolute_line(&term);
+        let start = line.max(history);
+        if start >= cursor {
+            return;
+        }
+        let column = term.grid().cursor.point.column.0;
+        let top = (start - history) as i32;
+        term.selection = None;
+        term.goto(top, 0);
+        term.delete_lines((cursor - start) as usize);
+        term.goto(top, column);
+        self.extras().forget_lines(start..cursor);
     }
 
     pub fn set_mark(&self) {
