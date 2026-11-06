@@ -49,6 +49,20 @@ struct Compiled {
     text: String,
 }
 
+pub type AnnotationId = u64;
+
+#[derive(Clone, PartialEq)]
+pub struct Annotation {
+    pub id: AnnotationId,
+    pub start: (i64, usize),
+    pub end: (i64, usize),
+    pub text: String,
+    pub hidden: bool,
+    pub toggled: Option<Instant>,
+    pub highlighted: Option<Instant>,
+    pub focus: bool,
+}
+
 const REPLAY_FRAMES: usize = 120;
 const REPLAY_INTERVAL: Duration = Duration::from_millis(500);
 
@@ -65,6 +79,9 @@ pub struct Extras {
     output_start: Option<i64>,
     pub images: Vec<Placed>,
     pub highlights: Vec<Highlight>,
+    pub annotations: Vec<Annotation>,
+    next_annotation: AnnotationId,
+    pub current_annotation: Option<AnnotationId>,
     pub cell: (f32, f32),
     pub bell: Option<Instant>,
     pub stamps: VecDeque<(i64, SystemTime)>,
@@ -92,6 +109,26 @@ impl Extras {
         if let Err(at) = self.marks.binary_search(&line) {
             self.marks.insert(at, line);
         }
+    }
+
+    pub fn annotate(&mut self, start: (i64, usize), end: (i64, usize)) {
+        self.next_annotation += 1;
+        self.annotations.push(Annotation {
+            id: self.next_annotation,
+            start,
+            end,
+            text: String::new(),
+            hidden: false,
+            toggled: None,
+            highlighted: None,
+            focus: true,
+        });
+    }
+
+    pub fn annotation(&mut self, id: AnnotationId) -> Option<&mut Annotation> {
+        self.annotations
+            .iter_mut()
+            .find(|annotation| annotation.id == id)
     }
 
     fn end_output(&mut self, line: i64, column: usize) {
@@ -164,6 +201,7 @@ impl Extras {
         self.stamps.clear();
         self.images.clear();
         self.highlights.clear();
+        self.annotations.clear();
     }
 
     fn anchored_lines(&mut self) -> impl Iterator<Item = &mut i64> {
@@ -173,12 +211,17 @@ impl Extras {
             .iter_mut()
             .map(|highlight| &mut highlight.line);
         let output = self.output.iter_mut().flatten();
+        let annotations = self
+            .annotations
+            .iter_mut()
+            .flat_map(|annotation| [&mut annotation.start.0, &mut annotation.end.0]);
         self.marks
             .iter_mut()
             .chain(output)
             .chain(self.output_start.iter_mut())
             .chain(images)
             .chain(highlights)
+            .chain(annotations)
             .chain(self.stamps.iter_mut().map(|(line, _)| line))
     }
 
@@ -190,6 +233,8 @@ impl Extras {
         self.stamps.retain(|(stamped, _)| kept(*stamped));
         self.images.retain(|image| kept(image.line));
         self.highlights.retain(|highlight| kept(highlight.line));
+        self.annotations
+            .retain(|annotation| kept(annotation.start.0) && kept(annotation.end.0));
         let removed = lines.end - lines.start;
         self.anchored_lines()
             .filter(|anchored| **anchored >= lines.end)

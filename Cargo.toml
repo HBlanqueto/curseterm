@@ -19,6 +19,8 @@ barrier-kit-next = { path = "crates/barrier-kit-next" }
 freya-core = "=0.4.3"
 freya-engine = "=0.4.3"
 freya-clipboard = "=0.4.3"
+freya-components = { version = "=0.4.3", default-features = false }
+freya-edit = "=0.4.3"
 torin = "=0.4.3"
 
 alacritty_terminal = "0.26"

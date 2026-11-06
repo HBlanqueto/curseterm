@@ -1518,3 +1518,68 @@ ventanas, porque cada ventana solo conoce sus pestañas; no se guardan ni el
 tamaño ni la posición (Wayland no deja colocar ventanas), ni el contenido,
 ni hay disposición por omisión al arrancar, ni importar o exportar a un
 archivo.
+
+## Fase 35 — Anotaciones
+
+### Plan
+
+Edit › Marks and Annotations y View › Show Annotations de iTerm2, copiados de
+`sources/Annotations/PTYNoteViewController.m`, `sources/TerminalView/PTYNoteView.m`,
+`PTYSession.m` (`addNoteAtCursor`, `nextMarkOrNote:`) y
+`iTermTextDrawingHelper.m` (`drawNoteRangesOnLine:`):
+
+1. **Modelo.** Una anotación es un rango de celdas (inicio y fin en líneas
+   absolutas) con su texto, anclado como las marcas: sigue al scroll y al
+   redimensionado y se borra con el búfer.
+2. **Add Annotation at Cursor (⌥⌘M):** anota la selección inteligente en el
+   cursor, después la de la celda siguiente, la de la anterior y, si no hay
+   ninguna, la línea entera. **Annotate Selection:** anota la selección.
+3. **Subrayado:** una línea amarilla de 1 punto, 2 puntos por encima del pie
+   de cada celda anotada.
+4. **Burbuja** (`note_view.rs`): rectángulo de radio 5 con flecha de 7×7
+   hacia el final del rango, 40 puntos desde su borde izquierdo si cabe;
+   arriba del texto si no cabe debajo. Fondo (250, 250, 250) y borde negro al
+   10 % en claro; (50, 50, 52) y blanco al 40 % en oscuro; sombra negra al
+   15 %, 2 puntos abajo y 8 de desenfoque. Texto de 12 puntos y 250 de ancho
+   que crece en alto; papelera de 17 puntos arriba a la derecha.
+5. **Edición** con el bloque `views::text_view` (BK-036): la nota nueva toma
+   el foco; Enter parte la línea; Escape devuelve el teclado al terminal.
+6. **Papelera:** pide «Really remove annotation?» (OK, Cancel) y la borra.
+7. **Next/Previous Annotation (⌥⇧⌘↓/↑):** recorre por posición, da la vuelta,
+   la muestra si estaba oculta, la centra si no está en pantalla y resalta el
+   fondo hacia (0.85, 0.92, 1.0), que vuelve en 0,75 s con la curva al
+   cuadrado.
+8. **Show Annotations (⌘\\):** si alguna está visible las oculta todas; si
+   no, las muestra; fundido de 0,25 s. La casilla del menú sigue a «hay
+   anotaciones», como en iTerm2.
+9. **Prueba** en sway sin pantalla en los dos modos del kit y documentación.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla en los dos modos del kit. `./dev.sh check`
+limpio en los dos modos; 44 tests de la app.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `echo palabra` y ⌥⌘M con el cursor detrás: subraya `palabra` (columnas 20–26), la burbuja toma el foco y lo tecleado no llega a la shell | ✓ | `fase35-anotacion.png` |
+| Enter dentro de la nota parte la línea y la burbuja crece; Escape devuelve el teclado a la shell | ✓ | — |
+| `seq 1 120` y ⌥⇧⌘↑: vuelve a la nota, la centra y el fondo azul se desvanece | ✓ | `fase35-anotacion.png` |
+| ⌘\\ dos veces: se funde a 0 y vuelve a 1 | ✓ | `fase35-mostrar-anotaciones.png` |
+| Papelera: aviso «Really remove annotation?»; OK borra la burbuja y el subrayado | ✓ | `fase35-confirmar.png` |
+| Kit parcheado, menú D-Bus: Annotate Selection activo solo con selección; anota «seleccion de varias» con la flecha al final | ✓ | — |
+| Arrastrar dentro de la burbuja selecciona texto de la nota, no del terminal | ✓ | — |
+| Apariencia oscura: fondo (50, 50, 52) y borde blanco | ✓ | `fase35-anotacion-oscura.png` |
+
+**No probado:** varias anotaciones en la misma línea ni la vuelta de Next al
+principio; una nota en un panel sin foco.
+
+**Falla:** con el historial lleno, las líneas que salen por arriba desplazan
+las anotaciones, igual que las marcas: `alacritty_terminal` no cuenta las
+líneas que descarta. Se vio con `scrollback_lines = 50`.
+
+**Difiere de iTerm2:** la burbuja no se redimensiona con el ratón ni se puede
+arrastrar; no tiene barra de desplazamiento; sin destello de «vuelta» al dar
+la vuelta Next o Previous; la selección inteligente es la de CurseTerm (URL o
+palabra), no las reglas de iTerm2; las anotaciones no se guardan al cerrar.

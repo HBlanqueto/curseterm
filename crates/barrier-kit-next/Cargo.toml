@@ -9,7 +9,9 @@ repository.workspace = true
 
 [dependencies]
 barrier-kit.workspace = true
+freya-components.workspace = true
 freya-core.workspace = true
+freya-edit.workspace = true
 freya-engine.workspace = true
 torin.workspace = true
 vow-design.workspace = true

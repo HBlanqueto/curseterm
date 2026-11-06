@@ -19,7 +19,9 @@ use barrier_kit::titlebar::Titlebar;
 use barrier_kit::views::feedback::{Alert, sheet};
 use barrier_kit::views::table::Table;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
-use barrier_kit_next::tokens::{PASTE_HISTORY_SIZE, RENAME_WIDTH, TERMINAL, TOOLBELT_WIDTH};
+use barrier_kit_next::tokens::{
+    ANNOTATION, PASTE_HISTORY_SIZE, RENAME_WIDTH, TERMINAL, TOOLBELT_WIDTH,
+};
 use barrier_kit_next::views::split_panes::SplitPanes;
 use barrier_kit_next::views::tab_bar::{Badge, TabBar};
 use freya_clipboard::copypasta::ClipboardProvider;
@@ -37,11 +39,13 @@ use crate::config::{
     APP_ID, AltKey, ClosePrompt, Defaults, Profile, SessionEnd, WorkingDirectory, change_defaults,
 };
 use crate::grid::Fonts;
+use crate::io::AnnotationId;
 use crate::keys::{COPY_KEYS, CopyCommand, KeyAction, copy_command, encode};
 use crate::links;
 use crate::localize::tr;
 use crate::menu;
-use crate::pane_view::TerminalPane;
+use crate::note_view::NoteEvent;
+use crate::pane_view::{self, TerminalPane};
 use crate::panes::{Axis, Pane, Toward};
 use crate::paste_history;
 use crate::pick;
@@ -79,12 +83,14 @@ struct Handles {
     dark: Rc<Cell<bool>>,
     clock_armed: Rc<Cell<bool>>,
     blink_armed: Rc<Cell<bool>>,
+    notes_armed: Rc<Cell<bool>>,
+    note_focused: State<bool>,
     replay: State<Option<(SessionId, usize)>>,
     toolbelt: Toolbelt,
     clipboard: ClipboardState,
     broadcast: State<Broadcast>,
     find: Find,
-    closing: State<Option<Closing>>,
+    confirm: State<Option<Confirm>>,
     events: Rc<OnceCell<Events>>,
     buried: State<Option<Buried>>,
     pastes: State<Vec<String>>,
@@ -142,6 +148,12 @@ enum Choice {
 struct PickerState {
     query: State<String>,
     selected: State<usize>,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Confirm {
+    Close(Closing),
+    RemoveAnnotation(SessionId, AnnotationId),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -259,12 +271,13 @@ impl App for Terminal {
         let text_zoom = use_state(|| 0i32);
         let mut revision = use_state(|| 0u64);
         let broadcast = use_state(Broadcast::default);
-        let closing = use_state(|| None::<Closing>);
+        let confirm = use_state(|| None::<Confirm>);
         let buried = use_state(|| None::<Buried>);
         let pastes = paste_history::shared();
         let sheet = use_state(|| None::<Sheet>);
         let mut held = use_state(Modifiers::empty);
         let transparency = use_state(|| true);
+        let note_focused = use_state(|| false);
         let replay = use_state(|| None::<(SessionId, usize)>);
         let toolbelt = Toolbelt {
             shown: use_state(|| false),
@@ -295,12 +308,14 @@ impl App for Terminal {
             dark: Rc::new(Cell::new(dark)),
             clock_armed: Rc::new(Cell::new(false)),
             blink_armed: Rc::new(Cell::new(false)),
+            notes_armed: Rc::new(Cell::new(false)),
+            note_focused,
             replay,
             toolbelt,
             clipboard: consume_root_context(),
             broadcast,
             find,
-            closing,
+            confirm,
             events: Rc::default(),
             buried,
             pastes,
@@ -454,6 +469,7 @@ impl App for Terminal {
                 replay: *replay.read(),
                 blink_off: window_focused && cursor_blink_off(&handles, revision),
             };
+            animate_notes(&handles, revision);
             pane_tree(&root, Vec::new(), &painting)
         });
         drop(state);
@@ -467,7 +483,7 @@ impl App for Terminal {
         let keyboard = handles.clone();
         let find_bar = (*find.open.read()).then(|| find_bar(&handles, revision));
         let replay_bar = (*replay.read()).map(|(id, index)| replay_bar(&handles, id, index));
-        let alert = (*closing.read()).map(|pending| close_alert(&handles, pending));
+        let alert = (*confirm.read()).map(|pending| confirm_alert(&handles, pending));
         let sheet_view = (*sheet.read()).map(|open| match open {
             Sheet::Pick(picker) => pick_sheet(&handles, picker, revision),
             Sheet::CopyModeKeys => copy_mode_keys_sheet(&handles),
@@ -493,7 +509,7 @@ impl App for Terminal {
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
                 let data = event.data();
                 held.set_if_modified(data.modifiers.union(key_modifier(&data.key)));
-                if keyboard.closing.peek().is_some() {
+                if keyboard.confirm.peek().is_some() || *keyboard.note_focused.peek() {
                     return;
                 }
                 let replaying = *keyboard.replay.peek();
@@ -642,6 +658,26 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                         .filter(|(replayed, _)| replayed == id)
                         .map(|(_, index)| index),
                     blink_off: painting.blink_off && *id == painting.active,
+                    annotations: session.extras().annotations.clone(),
+                    dark: painting.dark,
+                    on_note: {
+                        let handles = painting.handles.clone();
+                        let session = session.clone();
+                        Callback::new(move |(note, event)| match event {
+                            NoteEvent::Changed(text) => session.set_annotation_text(note, text),
+                            NoteEvent::Focused(focused) => {
+                                let mut note_focused = handles.note_focused;
+                                note_focused.set(focused);
+                                if focused {
+                                    session.annotation_focused(note);
+                                }
+                            }
+                            NoteEvent::Remove => {
+                                let mut confirm = handles.confirm;
+                                confirm.set(Some(Confirm::RemoveAnnotation(session.id, note)));
+                            }
+                        })
+                    },
                     opacity: if painting.transparent {
                         profile.opacity()
                     } else {
@@ -727,6 +763,11 @@ fn use_live_menu(handles: &Handles) {
         .active()
         .is_some_and(|session| session.extras().cursor_guide);
     use_menu_checked(menu::CURSOR_GUIDE.id, guide);
+    let annotated = handles
+        .active()
+        .is_some_and(|session| session.has_annotations());
+    use_menu_checked(menu::SHOW_ANNOTATIONS.id, annotated);
+    use_menu_enabled(menu::ANNOTATE_SELECTION.id, selection);
     use_menu_checked(menu::TOOLBELT.id, *handles.toolbelt.shown.read());
     for state in TerminalState::ALL {
         let on = handles
@@ -1338,6 +1379,24 @@ fn repaint_after(handles: &Handles, revision: State<u64>, armed: &Rc<Cell<bool>>
     }
 }
 
+fn animate_notes(handles: &Handles, revision: State<u64>) {
+    let animating = handles.sessions.peek().values().any(|session| {
+        session
+            .extras()
+            .annotations
+            .iter()
+            .any(pane_view::note_animating)
+    });
+    if animating {
+        repaint_after(
+            handles,
+            revision,
+            &handles.notes_armed,
+            Duration::from_millis(ANNOTATION.frame_ms),
+        );
+    }
+}
+
 fn cursor_blink_off(handles: &Handles, revision: State<u64>) -> bool {
     let Some(session) = handles.active() else {
         return false;
@@ -1721,8 +1780,8 @@ fn request_close(handles: &Handles, closing: Closing) {
         );
     drop(defaults);
     if ask {
-        let mut pending = handles.closing;
-        pending.set(Some(closing));
+        let mut pending = handles.confirm;
+        pending.set(Some(Confirm::Close(closing)));
     } else {
         close_now(handles, closing);
     }
@@ -1804,20 +1863,38 @@ fn undo_close(handles: &Handles) {
 
 // BK-027: the Alert's key also reaches the global handler, so the alert goes one loop later.
 fn dismiss_later(handles: &Handles, then: impl Fn() + 'static) {
-    let closing = handles.closing;
+    let confirm = handles.confirm;
     handles.after(Duration::ZERO, move || {
-        let mut closing = closing;
-        closing.set(None);
+        let mut confirm = confirm;
+        confirm.set(None);
         then();
     });
 }
 
-fn close_alert(handles: &Handles, pending: Closing) -> Alert {
+fn confirm_alert(handles: &Handles, pending: Confirm) -> Alert {
     let (confirm, cancel) = (handles.clone(), handles.clone());
-    Alert::new(tr!("close-title"), tr!("close-message"))
-        .confirm(tr!("close-confirm"), move |_| {
+    let alert = match pending {
+        Confirm::Close(_) => Alert::new(tr!("close-title"), tr!("close-message")),
+        Confirm::RemoveAnnotation(..) => Alert::new(
+            tr!("remove-annotation-title"),
+            tr!("remove-annotation-message"),
+        ),
+    };
+    let label = match pending {
+        Confirm::Close(_) => tr!("close-confirm"),
+        Confirm::RemoveAnnotation(..) => tr!("remove-annotation-confirm"),
+    };
+    alert
+        .confirm(label, move |_| {
             let handles = confirm.clone();
-            dismiss_later(&confirm, move || close_now(&handles, pending));
+            dismiss_later(&confirm, move || match pending {
+                Confirm::Close(closing) => close_now(&handles, closing),
+                Confirm::RemoveAnnotation(session, note) => {
+                    if let Some(session) = handles.sessions.peek().get(&session) {
+                        session.remove_annotation(note);
+                    }
+                }
+            });
         })
         .cancel(tr!("close-cancel"), move |_| dismiss_later(&cancel, || {}))
 }
@@ -2072,6 +2149,26 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             if let Some(session) = &active {
                 let mut extras = session.extras();
                 extras.show_timestamps = !extras.show_timestamps;
+            }
+        }
+        _ if id == menu::ADD_ANNOTATION.id => {
+            if let Some(session) = &active {
+                session.annotate_cursor();
+            }
+        }
+        _ if id == menu::ANNOTATE_SELECTION.id => {
+            if let Some(session) = &active {
+                session.annotate_selection();
+            }
+        }
+        menu::NEXT_ANNOTATION | menu::PREVIOUS_ANNOTATION => {
+            if let Some(session) = &active {
+                session.step_annotation(id == menu::NEXT_ANNOTATION);
+            }
+        }
+        _ if id == menu::SHOW_ANNOTATIONS.id => {
+            if let Some(session) = &active {
+                session.toggle_annotations();
             }
         }
         _ if id == menu::CURSOR_GUIDE.id => {

@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::io::{self, Read};
+use std::ops::RangeInclusive;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -460,17 +461,137 @@ impl Session {
 
     pub fn smart_select(&self, point: Point) {
         let mut term = self.term.lock();
-        let (text, columns) = pty_io::trimmed_text_and_byte_columns(&term, point.line);
-        let column = point.column.0;
-        let Some(span) = links::url_span(&text, &columns, column)
-            .or_else(|| links::word_span(&text, &columns, column))
+        let Some((first, last)) = smart_span(&term, point) else {
+            return;
+        };
+        let mut selection = Selection::new(
+            SelectionType::Simple,
+            Point::new(point.line, first),
+            Side::Left,
+        );
+        selection.update(Point::new(point.line, last), Side::Right);
+        term.selection = Some(selection);
+    }
+
+    // The order of the tries follows PTYSession.m -addNoteAtCursor.
+    pub fn annotate_cursor(&self) {
+        let term = self.term.lock();
+        let cursor = term.grid().cursor.point;
+        let line = pty_io::absolute_line(&term);
+        let around = [cursor.column.0, cursor.column.0 + 1];
+        let span = around
+            .into_iter()
+            .chain(cursor.column.0.checked_sub(1))
+            .filter(|column| *column < term.columns())
+            .find_map(|column| smart_span(&term, Point::new(cursor.line, Column(column))));
+        let (start, end) = span.map_or((0, term.columns()), |(first, last)| (first.0, last.0 + 1));
+        drop(term);
+        self.extras().annotate((line, start), (line, end));
+    }
+
+    pub fn annotate_selection(&self) {
+        let term = self.term.lock();
+        let Some(range) = term
+            .selection
+            .as_ref()
+            .and_then(|selection| selection.to_range(&term))
         else {
             return;
         };
-        let cell = |byte: usize| Point::new(point.line, Column(columns[byte]));
-        let mut selection = Selection::new(SelectionType::Simple, cell(span.start), Side::Left);
-        selection.update(cell(span.end - 1), Side::Right);
-        term.selection = Some(selection);
+        let history = term.history_size() as i64;
+        let absolute = |point: Point| history + i64::from(point.line.0);
+        let start = (absolute(range.start), range.start.column.0);
+        let end = (absolute(range.end), range.end.column.0 + 1);
+        drop(term);
+        self.extras().annotate(start, end);
+    }
+
+    pub fn has_annotations(&self) -> bool {
+        !self.extras().annotations.is_empty()
+    }
+
+    pub fn toggle_annotations(&self) {
+        let mut extras = self.extras();
+        let hide = extras
+            .annotations
+            .iter()
+            .any(|annotation| !annotation.hidden);
+        let now = Instant::now();
+        for annotation in &mut extras.annotations {
+            if annotation.hidden != hide {
+                annotation.hidden = hide;
+                annotation.toggled = Some(now);
+            }
+        }
+    }
+
+    pub fn step_annotation(&self, forward: bool) {
+        let mut extras = self.extras();
+        let mut order: Vec<_> = extras
+            .annotations
+            .iter()
+            .map(|annotation| (annotation.start, annotation.id))
+            .collect();
+        order.sort_unstable();
+        let current = extras
+            .current_annotation
+            .and_then(|id| order.iter().find(|(_, other)| *other == id))
+            .map(|(start, _)| *start);
+        let target = match (current, forward) {
+            (Some(at), true) => order.iter().find(|(start, _)| *start > at),
+            (Some(at), false) => order.iter().rev().find(|(start, _)| *start < at),
+            (None, _) => None,
+        }
+        .or(if forward { order.first() } else { order.last() });
+        let Some(&(_, id)) = target else {
+            return;
+        };
+        extras.current_annotation = Some(id);
+        let Some(annotation) = extras.annotation(id) else {
+            return;
+        };
+        let now = Instant::now();
+        if annotation.hidden {
+            annotation.hidden = false;
+            annotation.toggled = Some(now);
+        }
+        annotation.highlighted = Some(now);
+        let lines = annotation.start.0..=annotation.end.0;
+        drop(extras);
+        self.scroll_into_view(lines);
+    }
+
+    // PTYTextView.m -scrollLineNumberRangeIntoView: centers a range that is not on screen.
+    fn scroll_into_view(&self, lines: RangeInclusive<i64>) {
+        let mut term = self.term.lock();
+        let history = term.history_size() as i64;
+        let offset = term.grid().display_offset() as i64;
+        let screen = term.screen_lines() as i64;
+        let top = history - offset;
+        if *lines.start() >= top && *lines.end() < top + screen {
+            return;
+        }
+        let middle = (lines.start() + lines.end()) / 2;
+        let wanted = (history - (middle - screen / 2)).clamp(0, history);
+        term.scroll_display(Scroll::Delta((wanted - offset) as i32));
+    }
+
+    pub fn set_annotation_text(&self, id: pty_io::AnnotationId, text: String) {
+        if let Some(annotation) = self.extras().annotation(id) {
+            annotation.text = text;
+        }
+    }
+
+    pub fn annotation_focused(&self, id: pty_io::AnnotationId) {
+        if let Some(annotation) = self.extras().annotation(id) {
+            annotation.focus = false;
+        }
+    }
+
+    pub fn remove_annotation(&self, id: pty_io::AnnotationId) {
+        self.extras()
+            .annotations
+            .retain(|annotation| annotation.id != id);
     }
 
     #[cfg(feature = "kit-parcheado")]
@@ -777,6 +898,14 @@ fn toggle_vi_selection(term: &mut Term<Listener>, kind: SelectionType) {
         selection.include_all();
         selection
     });
+}
+
+fn smart_span(term: &Term<Listener>, point: Point) -> Option<(Column, Column)> {
+    let (text, columns) = pty_io::trimmed_text_and_byte_columns(term, point.line);
+    let column = point.column.0;
+    let span = links::url_span(&text, &columns, column)
+        .or_else(|| links::word_span(&text, &columns, column))?;
+    Some((Column(columns[span.start]), Column(columns[span.end - 1])))
 }
 
 #[cfg(test)]

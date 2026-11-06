@@ -101,6 +101,14 @@ pub const SET_MARK: Action =
 pub const JUMP_TO_MARK: Action =
     Action::new("jump-to-mark", || tr!("jump-to-mark")).shortcut(super_with(Modifiers::SHIFT, 'j'));
 pub const NEXT_MARK: &str = "next-mark";
+pub const ADD_ANNOTATION: Action = Action::new("add-annotation", || tr!("add-annotation"))
+    .shortcut(super_with(Modifiers::ALT, 'm'));
+pub const ANNOTATE_SELECTION: Action =
+    Action::new("annotate-selection", || tr!("annotate-selection"));
+pub const NEXT_ANNOTATION: &str = "next-annotation";
+pub const PREVIOUS_ANNOTATION: &str = "previous-annotation";
+pub const SHOW_ANNOTATIONS: Action =
+    Action::new("show-annotations", || tr!("show-annotations")).shortcut(super_key('\\'));
 pub const PREVIOUS_MARK: &str = "previous-mark";
 
 pub const BROADCAST_MENU: &str = "broadcast-menu";
@@ -270,6 +278,18 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                         keyed(NEXT_MARK, tr!("next-mark"), "Super+Shift+Down").with_enabled(false),
                         keyed(PREVIOUS_MARK, tr!("previous-mark"), "Super+Shift+Up")
                             .with_enabled(false),
+                        ADD_ANNOTATION.item(true),
+                        ANNOTATE_SELECTION.item(false),
+                        keyed(
+                            NEXT_ANNOTATION,
+                            tr!("next-annotation"),
+                            "Super+Alt+Shift+Down",
+                        ),
+                        keyed(
+                            PREVIOUS_ANNOTATION,
+                            tr!("previous-annotation"),
+                            "Super+Alt+Shift+Up",
+                        ),
                     ],
                 ),
                 MenuItem::Separator,
@@ -288,6 +308,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 USE_TRANSPARENCY.item_with(false, CheckState::Checkbox(true)),
                 MenuItem::Separator,
                 FIND_CURSOR.item(true),
+                SHOW_ANNOTATIONS.item_with(true, CheckState::Checkbox(false)),
                 OPEN_QUICKLY.item(true),
                 INSTANT_REPLAY.item(true),
                 TOOLBELT.item_with(true, CheckState::Checkbox(false)),

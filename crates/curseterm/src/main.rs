@@ -12,6 +12,7 @@ mod links;
 mod localize;
 mod menu;
 mod mouse;
+mod note_view;
 mod osc;
 mod pane_view;
 mod panes;

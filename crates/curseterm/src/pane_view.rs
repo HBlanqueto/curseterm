@@ -2,20 +2,22 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use alacritty_terminal::grid::Scroll;
+use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Line, Point, Side};
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::TermMode;
 use barrier_kit_next::canvas::canvas;
-use barrier_kit_next::tokens::TERMINAL;
+use barrier_kit_next::tokens::{ANNOTATION, TERMINAL};
 use freya_core::prelude::*;
 use torin::prelude::Size;
 use vow_design::SPACE_2;
 
 use crate::config::Scheme;
 use crate::grid::{self, Fonts};
+use crate::io::{Annotation, AnnotationId};
 use crate::links;
 use crate::mouse::{self, Pointer};
+use crate::note_view::{NoteEvent, NoteView};
 use crate::session::{self, Session, SessionId};
 
 pub struct TerminalPane {
@@ -35,6 +37,9 @@ pub struct TerminalPane {
     pub preedit: Option<Rc<str>>,
     pub replay: Option<usize>,
     pub blink_off: bool,
+    pub annotations: Vec<Annotation>,
+    pub dark: bool,
+    pub on_note: Callback<(AnnotationId, NoteEvent), ()>,
 }
 
 impl PartialEq for TerminalPane {
@@ -51,6 +56,8 @@ impl PartialEq for TerminalPane {
             && self.preedit == other.preedit
             && self.replay == other.replay
             && self.blink_off == other.blink_off
+            && self.annotations == other.annotations
+            && self.dark == other.dark
     }
 }
 
@@ -84,6 +91,15 @@ impl Component for TerminalPane {
         let preedit = self.preedit.clone();
         let replay = self.replay;
         let blink_off = self.blink_off;
+        let mut size = use_state(|| (0.0, 0.0));
+        let notes = notes(
+            &session,
+            &fonts,
+            &self.annotations,
+            *size.read(),
+            self.dark,
+            &self.on_note,
+        );
 
         let mut look = DefaultHasher::new();
         (
@@ -96,7 +112,16 @@ impl Component for TerminalPane {
             &badge,
             opacity.to_bits(),
             &preedit,
-            (replay, blink_off),
+            (
+                replay,
+                blink_off,
+                notes.len(),
+                &self
+                    .annotations
+                    .iter()
+                    .map(|note| (note.start, note.end))
+                    .collect::<Vec<_>>(),
+            ),
             &scheme.name,
             fonts.cell_width.to_bits(),
         )
@@ -155,6 +180,7 @@ impl Component for TerminalPane {
                         move |event: Event<SizedEventData>| {
                             let area = event.data().area;
                             session.origin.set((area.min_x(), area.min_y()));
+                            size.set_if_modified((area.width(), area.height()));
                             session.fit(
                                 area.width() - 2.0 * SPACE_2,
                                 area.height() - 2.0 * SPACE_2,
@@ -287,7 +313,84 @@ impl Component for TerminalPane {
                     })
                     .child(painter),
             )
+            .children(notes)
     }
+}
+
+fn notes(
+    session: &Rc<Session>,
+    fonts: &Fonts,
+    annotations: &[Annotation],
+    bounds: (f32, f32),
+    dark: bool,
+    on_note: &Callback<(AnnotationId, NoteEvent), ()>,
+) -> Vec<Element> {
+    let (history, offset, lines) = {
+        let term = session.term.lock();
+        (
+            term.history_size() as i64,
+            term.grid().display_offset() as i64,
+            term.screen_lines() as i64,
+        )
+    };
+    let top = history - offset;
+    annotations
+        .iter()
+        .filter_map(|annotation| {
+            let row = annotation.end.0 - top;
+            let opacity = note_opacity(annotation);
+            if !(0..lines).contains(&row) || opacity == 0.0 {
+                return None;
+            }
+            let id = annotation.id;
+            let on_note = on_note.clone();
+            Some(
+                NoteView {
+                    text: annotation.text.clone(),
+                    anchor: (
+                        annotation.end.1 as f32 * fonts.cell_width + SPACE_2,
+                        (row + 1) as f32 * fonts.cell_height + SPACE_2,
+                    ),
+                    bounds,
+                    dark,
+                    opacity,
+                    highlight: note_highlight(annotation),
+                    focus: annotation.focus,
+                    on_event: Callback::new(move |event| on_note.call((id, event))),
+                    key: DiffKey::None,
+                }
+                .key(id)
+                .into_element(),
+            )
+        })
+        .collect()
+}
+
+fn progress(since: Option<Instant>, duration_ms: u64) -> f32 {
+    since.map_or(1.0, |since| {
+        (since.elapsed().as_secs_f32() * 1000.0 / duration_ms as f32).min(1.0)
+    })
+}
+
+pub fn note_animating(annotation: &Annotation) -> bool {
+    progress(annotation.toggled, ANNOTATION.fade_ms) < 1.0
+        || progress(annotation.highlighted, ANNOTATION.highlight_ms) < 1.0
+}
+
+fn note_opacity(annotation: &Annotation) -> f32 {
+    let shown = progress(annotation.toggled, ANNOTATION.fade_ms);
+    if annotation.hidden {
+        1.0 - shown
+    } else {
+        shown
+    }
+}
+
+// PTYNoteViewController.m -updateBackgroundColor squares the progress to linger on the highlight.
+fn note_highlight(annotation: &Annotation) -> f32 {
+    annotation.highlighted.map_or(0.0, |_| {
+        1.0 - progress(annotation.highlighted, ANNOTATION.highlight_ms).powi(2)
+    })
 }
 
 #[derive(Clone)]

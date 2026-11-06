@@ -1512,3 +1512,70 @@ default profile).
 window, because each window only knows its own tabs; neither size nor
 position is saved (Wayland does not let apps place windows), nor contents,
 and there is no default arrangement at start, nor import or export to a file.
+
+## Phase 35 — Annotations
+
+### Plan
+
+iTerm2's Edit › Marks and Annotations and View › Show Annotations, copied
+from `sources/Annotations/PTYNoteViewController.m`,
+`sources/TerminalView/PTYNoteView.m`, `PTYSession.m` (`addNoteAtCursor`,
+`nextMarkOrNote:`) and `iTermTextDrawingHelper.m` (`drawNoteRangesOnLine:`):
+
+1. **Model.** An annotation is a range of cells (start and end on absolute
+   lines) with its text, anchored like marks: it follows scrolling and resizing
+   and is cleared with the buffer.
+2. **Add Annotation at Cursor (⌥⌘M):** annotates the smart selection at the
+   cursor, then the one of the next cell, the one of the previous cell and, if
+   there is none, the whole line. **Annotate Selection:** annotates the
+   selection.
+3. **Underline:** a 1-point yellow line, 2 points above the bottom of each
+   annotated cell.
+4. **Bubble** (`note_view.rs`): a rectangle of radius 5 with a 7×7 pointer to
+   the end of the range, 40 points from its left edge when it fits; above the
+   text when it does not fit below. Background (250, 250, 250) and black border
+   at 10 % in light; (50, 50, 52) and white at 40 % in dark; black shadow at
+   15 %, 2 points down and 8 of blur. 12-point text 250 wide that grows in
+   height; a 17-point trash at the top right.
+5. **Editing** with the `views::text_view` block (BK-036): a new note takes
+   the focus; Enter breaks the line; Escape gives the keyboard back to the
+   terminal.
+6. **Trash:** asks «Really remove annotation?» (OK, Cancel) and deletes it.
+7. **Next/Previous Annotation (⌥⇧⌘↓/↑):** walks by position, wraps around,
+   shows it if hidden, centers it when it is off screen and highlights the
+   background towards (0.85, 0.92, 1.0), which returns in 0.75 s on a
+   squared curve.
+8. **Show Annotations (⌘\\):** if any is visible it hides them all;
+   otherwise it shows them; 0.25 s fade. The menu checkbox follows «there are
+   annotations», as in iTerm2.
+9. **Test** on headless sway in both kit modes and documentation.
+
+### Result (2026-11-06)
+
+Tested on headless sway in both kit modes. `./dev.sh check` clean in both
+modes; 44 app tests.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `echo palabra` and ⌥⌘M with the cursor after it: underlines `palabra` (columns 20–26), the bubble takes the focus and typing does not reach the shell | ✓ | `fase35-anotacion.png` |
+| Enter inside the note breaks the line and the bubble grows; Escape gives the keyboard back to the shell | ✓ | — |
+| `seq 1 120` and ⌥⇧⌘↑: goes back to the note, centers it and the blue background fades | ✓ | `fase35-anotacion.png` |
+| ⌘\\ twice: fades to 0 and back to 1 | ✓ | `fase35-mostrar-anotaciones.png` |
+| Trash: «Really remove annotation?» alert; OK removes the bubble and the underline | ✓ | `fase35-confirmar.png` |
+| Patched kit, D-Bus menu: Annotate Selection enabled only with a selection; annotates «seleccion de varias» with the pointer at the end | ✓ | — |
+| Dragging inside the bubble selects text of the note, not of the terminal | ✓ | — |
+| Dark appearance: background (50, 50, 52) and white border | ✓ | `fase35-anotacion-oscura.png` |
+
+**Not tested:** several annotations on the same line or Next wrapping to the
+start; a note in an unfocused pane.
+
+**Fails:** with a full scrollback, the lines that leave at the top shift the
+annotations, like marks: `alacritty_terminal` does not count the lines it
+drops. Seen with `scrollback_lines = 50`.
+
+**Differs from iTerm2:** the bubble cannot be resized with the mouse nor
+dragged; it has no scroll bar; no «wrap» flash when Next or Previous wraps
+around; smart selection is CurseTerm's (URL or word), not iTerm2's rules;
+annotations are not saved on close.

@@ -363,7 +363,9 @@ name = "barrier-kit-next"
 version = "0.1.0"
 dependencies = [
  "barrier-kit",
+ "freya-components",
  "freya-core",
+ "freya-edit",
  "freya-engine",
  "torin",
  "vow-design",

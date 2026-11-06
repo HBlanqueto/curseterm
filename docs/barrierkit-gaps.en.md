@@ -53,7 +53,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-021 | controls | `RadioGroup` is always horizontal | low | Workaround: one single-option group per row |
 | BK-022 | platform / persistence | A `.domain` change does not repaint unfocused windows | high | Patch 0005 tested |
 | BK-023 | app | No file chooser | medium | Workaround: path in a field and `--import-colors` |
-| BK-024 | symbols | Missing symbols for a settings bar and for the bell | low | `SlidersVertical`, `CircleHalf`, `ListBullet`, `SquareGrid` and `SpeakerWave` are used |
+| BK-024 | symbols | Missing symbols for a settings bar, the bell and the trash | low | `SlidersVertical`, `CircleHalf`, `ListBullet`, `SquareGrid` and `SpeakerWave` are used; the trash is drawn on the canvas |
 | BK-025 | platform / input | No global shortcuts nor a way to hide and show the window | medium | Tested workaround: `curseterm --hotkey` |
 | BK-026 | app / platform | No bell, attention request or notifications | low | Tested workaround: visual bell |
 | BK-027 | controls / input | A view with global keyboard does not know whether a text field or an `Alert` keeps the key | low | Tested workaround: tracked focus and deferred `Alert` dismissal |
@@ -65,6 +65,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-033 | input | No input method (`zwp_text_input_v3`) | high | Patch 0009 tested |
 | BK-034 | clipboard | No primary selection | medium | Patch 0010 tested |
 | BK-035 | clipboard | The clipboard only offers plain text | low | Patch 0011 tested |
+| BK-036 | controls | No multi-line text view | medium | Tested block `views::text_view` |
 
 ## Gaps
 
@@ -520,19 +521,22 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Severity**: medium
 - **How to reproduce**: search for `FileChooser` in `crates/barrier-kit/src`: it does not appear.
 
-### BK-024 — Missing symbols for a settings bar and for the bell
+### BK-024 — Missing symbols for a settings bar, the bell and the trash
 - **Area**: symbols
 - **What CurseTerm needed**: the icons of iTerm2's Settings bar
-  (gear, eye, person, keyboard, pointer, bolt) and the bell that marks a
-  background tab where it rang (phase 5).
+  (gear, eye, person, keyboard, pointer, bolt), the bell that marks a
+  background tab where it rang (phase 5) and the trash that deletes an
+  annotation (phase 35).
 - **What BarrierKit offers today**: 31 symbols in `symbol.rs`; none of those.
 - **What is missing**: extending the registry.
 - **How CurseTerm solves it**: `SlidersVertical` for General,
   `CircleHalf` for Appearance, `ListBullet` for Profiles, `SquareGrid` for
   Pointer and `SpeakerWave` in the tab badge (`Badge` of
-  the `views::tab_bar` block).
-- **Cost of the workaround**: less like iTerm2.
-- **Proposed kit API**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt, Bell}`.
+  the `views::tab_bar` block). The note's trash is drawn on its canvas with
+  the grid and stroke of `SYMBOL` (`note_view.rs`).
+- **Cost of the workaround**: less like iTerm2; an SVG path outside the
+  registry.
+- **Proposed kit API**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt, Bell, Trash}`.
 - **Severity**: low
 - **How to reproduce**: read `enum Symbol` in `crates/barrier-kit/src/symbol.rs`.
 
@@ -762,6 +766,27 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Severity**: low
 - **How to reproduce**: copy with the kit as is and run `wl-paste -l`: there are only text types.
 
+### BK-036 — No multi-line text view
+- **Area**: controls
+- **What CurseTerm needed**: the text of an annotation, which in iTerm2 is a
+  frameless `NSTextView`: Enter breaks the line, the text wraps to the width
+  and Escape gives the focus back to the terminal (`PTYNoteViewController.m`).
+- **What BarrierKit offers today**: `TextField`, `SearchField` and
+  `SecureField`, all single-line on Freya's `Input`, which uses
+  `max_lines(1)` and turns Enter into `on_submit`.
+- **What is missing**: a multi-line text control.
+- **How CurseTerm solves it**: the `views::text_view::TextView` block in
+  `barrier-kit-next`, on `use_editable` from `freya-edit` 0.4.3, with the same
+  editing, drag selection, IME and cursor blink as `Input`. It reports text
+  and focus changes through callbacks.
+- **Cost of the workaround**: two more dependencies in the block
+  (`freya-components` without default features and `freya-edit`, already in
+  the tree through the kit) and no scroll bar: it grows with the text.
+- **Proposed kit API**: `TextView::new(value, font, ink)` with `width`,
+  `auto_focus`, `on_change` and `on_focus_change`, like the block.
+- **Severity**: medium
+- **How to reproduce**: look in `crates/barrier-kit/src/controls.rs` for a
+  control that takes Enter as a line break.
 ## Things that worked well
 
 Checked in phase 1 (headless sway, lavapipe):

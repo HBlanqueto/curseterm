@@ -10,12 +10,12 @@ use alacritty_terminal::term::search::Match;
 use alacritty_terminal::term::{RenderableContent, RenderableCursor, Term};
 use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Rgb};
 use barrier_kit_next::canvas::CanvasContext;
-use barrier_kit_next::tokens::TERMINAL;
+use barrier_kit_next::tokens::{ANNOTATION, TERMINAL};
 use freya_engine::prelude::{
     ClipOp, Color4f, Font, FontEdging, FontMgr, FontStyle, Paint, PaintStyle, PathBuilder, RRect,
     Rect as SkRect, Typeface,
 };
-use vow_design::{DURATION_FAST_MS, DURATION_SLOW_MS};
+use vow_design::{DURATION_FAST_MS, DURATION_SLOW_MS, Rgba};
 
 use crate::clock::local_time;
 use crate::config::Scheme;
@@ -172,6 +172,13 @@ fn dim(rgb: Rgb) -> Rgb {
     }
 }
 
+pub fn rgba_paint(rgba: Rgba) -> Paint {
+    let mut paint = Paint::default();
+    paint.set_color4f(Color4f::new(rgba.r, rgba.g, rgba.b, rgba.a), None);
+    paint.set_anti_alias(true);
+    paint
+}
+
 fn paint(rgb: Rgb) -> Paint {
     let mut paint = Paint::default();
     paint.set_color4f(
@@ -277,6 +284,7 @@ pub fn draw(
             selected,
         );
     }
+    draw_annotations(ctx, overlay.extras, top, term.columns(), fonts);
     let spotlight = (
         overlay.inset + (cursor.point.column.0 as f32 + 0.5) * fonts.cell_width,
         overlay.inset + ((cursor.point.line.0 + offset) as f32 + 0.5) * fonts.cell_height,
@@ -398,6 +406,45 @@ fn draw_highlights(
             continue;
         }
         fill_cells(ctx, &ink, y, highlight.columns.clone(), fonts);
+    }
+}
+
+// iTermTextDrawingHelper.m -drawNoteRangesOnLine: a one-point line two points above the cell bottom.
+fn draw_annotations(
+    ctx: &mut CanvasContext,
+    extras: &Extras,
+    top: i64,
+    columns: usize,
+    fonts: &Fonts,
+) {
+    let ink = rgba_paint(ANNOTATION.underline);
+    for annotation in &extras.annotations {
+        for line in annotation.start.0..=annotation.end.0 {
+            let y = (line - top) as f32 * fonts.cell_height;
+            if y + fonts.cell_height < 0.0 || y > ctx.height {
+                continue;
+            }
+            let first = if line == annotation.start.0 {
+                annotation.start.1
+            } else {
+                0
+            };
+            let end = if line == annotation.end.0 {
+                annotation.end.1
+            } else {
+                columns
+            };
+            let underline = y + fonts.cell_height - 2.0;
+            ctx.canvas.draw_rect(
+                SkRect::new(
+                    first as f32 * fonts.cell_width,
+                    underline,
+                    end.min(columns) as f32 * fonts.cell_width,
+                    underline + 1.0,
+                ),
+                &ink,
+            );
+        }
     }
 }
 

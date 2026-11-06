@@ -53,7 +53,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-021 | controles | `RadioGroup` es siempre horizontal | baja | Workaround: un grupo de una opción por fila |
 | BK-022 | plataforma / persistencia | Un cambio de `.domain` no repinta las ventanas sin foco | alta | Parche 0005 probado |
 | BK-023 | app | Sin selector de archivos | media | Workaround: ruta en un campo y `--import-colors` |
-| BK-024 | símbolos | Faltan símbolos para una barra de ajustes y para la campana | baja | Se usan `SlidersVertical`, `CircleHalf`, `ListBullet`, `SquareGrid` y `SpeakerWave` |
+| BK-024 | símbolos | Faltan símbolos para una barra de ajustes, la campana y la papelera | baja | Se usan `SlidersVertical`, `CircleHalf`, `ListBullet`, `SquareGrid` y `SpeakerWave`; la papelera se dibuja en el lienzo |
 | BK-025 | plataforma / input | Sin atajos globales ni forma de ocultar y mostrar la ventana | media | Workaround probado: `curseterm --hotkey` |
 | BK-026 | app / plataforma | Sin campana, petición de atención ni notificaciones | baja | Workaround probado: campana visual |
 | BK-027 | controles / input | Una vista con teclado global no sabe si un campo de texto o un `Alert` se quedan la tecla | baja | Workaround probado: foco seguido y cierre diferido del `Alert` |
@@ -65,6 +65,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-033 | entrada | Sin método de entrada (`zwp_text_input_v3`) | alta | Parche 0009 probado |
 | BK-034 | portapapeles | Sin selección primaria | media | Parche 0010 probado |
 | BK-035 | portapapeles | El portapapeles solo ofrece texto plano | baja | Parche 0011 probado |
+| BK-036 | controles | Sin vista de texto de varias líneas | media | Bloque probado `views::text_view` |
 
 ## Gaps
 
@@ -523,19 +524,22 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Gravedad**: media
 - **Cómo reproducirlo**: buscar `FileChooser` en `crates/barrier-kit/src`: no aparece.
 
-### BK-024 — Faltan símbolos para una barra de ajustes y para la campana
+### BK-024 — Faltan símbolos para una barra de ajustes, la campana y la papelera
 - **Área**: símbolos
 - **Qué necesitaba CurseTerm**: los iconos de la barra de Settings de iTerm2
-  (engranaje, ojo, persona, teclado, puntero, rayo) y la campana que marca
-  una pestaña de fondo donde ha sonado (fase 5).
+  (engranaje, ojo, persona, teclado, puntero, rayo), la campana que marca
+  una pestaña de fondo donde ha sonado (fase 5) y la papelera que borra una
+  anotación (fase 35).
 - **Qué ofrece hoy BarrierKit**: 31 símbolos en `symbol.rs`; ninguno de esos.
 - **Qué falta**: ampliar el registro.
 - **Cómo lo resolví en CurseTerm**: `SlidersVertical` para General,
   `CircleHalf` para Appearance, `ListBullet` para Profiles, `SquareGrid` para
   Pointer y `SpeakerWave` en la insignia de la pestaña
-  (`Badge` del bloque `views::tab_bar`).
-- **Coste del workaround**: menos parecido a iTerm2.
-- **API propuesta para el kit**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt, Bell}`.
+  (`Badge` del bloque `views::tab_bar`). La papelera de la nota se dibuja en
+  su lienzo con la rejilla y el trazo de `SYMBOL` (`note_view.rs`).
+- **Coste del workaround**: menos parecido a iTerm2; una ruta SVG fuera del
+  registro.
+- **API propuesta para el kit**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt, Bell, Trash}`.
 - **Gravedad**: baja
 - **Cómo reproducirlo**: leer `enum Symbol` en `crates/barrier-kit/src/symbol.rs`.
 
@@ -765,6 +769,28 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **API propuesta para el kit**: la del parche, o una lista de pares formato y datos.
 - **Gravedad**: baja
 - **Cómo reproducirlo**: copiar con el kit tal cual y `wl-paste -l`: solo hay tipos de texto.
+
+### BK-036 — Sin vista de texto de varias líneas
+- **Área**: controles
+- **Qué necesitaba CurseTerm**: el texto de una anotación, que en iTerm2 es
+  un `NSTextView` sin marco: Enter parte la línea, el texto se ajusta al ancho
+  y Escape devuelve el foco al terminal (`PTYNoteViewController.m`).
+- **Qué ofrece hoy BarrierKit**: `TextField`, `SearchField` y `SecureField`,
+  todos de una línea sobre el `Input` de Freya, que usa `max_lines(1)` y
+  convierte Enter en `on_submit`.
+- **Qué falta**: un control de texto de varias líneas.
+- **Cómo lo resolví en CurseTerm**: el bloque `views::text_view::TextView` en
+  `barrier-kit-next`, sobre `use_editable` de `freya-edit` 0.4.3, con la misma
+  edición, selección con arrastre, IME y parpadeo del cursor que `Input`.
+  Avisa del cambio de texto y del foco por callbacks.
+- **Coste del workaround**: dos dependencias más en el bloque
+  (`freya-components` sin features por defecto y `freya-edit`, ya en el
+  árbol por el kit) y sin barra de desplazamiento: crece con el texto.
+- **API propuesta para el kit**: `TextView::new(value, font, ink)` con
+  `width`, `auto_focus`, `on_change` y `on_focus_change`, como el bloque.
+- **Gravedad**: media
+- **Cómo reproducirlo**: buscar en `crates/barrier-kit/src/controls.rs` un
+  control que acepte Enter como salto de línea.
 
 ## Cosas que funcionaron bien
 
