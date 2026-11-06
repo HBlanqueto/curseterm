@@ -2580,7 +2580,7 @@ desplazamiento, paneles y Run Coprocess desde una combinación.
 
 **Difiere de iTerm2:** sin Bypass Terminal, remapeo de modificadores,
 pestañas recientes, ventanas siguiente y anterior, cambiar de colores, la
-selección ni scripts (las fases 74 y 76 añaden el resto); sin presets; una combinación con Super que ya es un atajo del menú hace las dos
+selección ni scripts (las fases 74, 76 y 77 añaden el resto); una combinación con Super que ya es un atajo del menú hace las dos
 cosas; el icono de Keys repite el de General porque el kit no tiene teclado
 (BK-024).
 
@@ -3344,3 +3344,34 @@ los dos modos.
 
 **No probado:** con el kit tal cual; quitar pasos; una secuencia desde Edit ›
 Actions.
+
+## Fase 77 — Presets de combinaciones
+
+### Plan
+
+`iTermPresetKeyMappings.m` carga `PresetKeyMappings.plist` en el perfil y
+`DefaultGlobalKeyMap.plist` en las globales, con ⌘ como Super:
+
+1. Keys › Key Bindings ofrece Factory Defaults; Keys del perfil, Terminal.app
+   Compatibility y Natural Text Editing. Edit › Actions no tiene presets.
+2. Si alguna combinación actual no está en el preset, pregunta «¿Quitar todas
+   las combinaciones antes de cargar un preajuste?» con Conservar, Quitar y
+   Cancelar. Conservar deja las demás y el preset gana en las mismas teclas.
+3. Tras elegir, el pop-up vuelve a «Presets…» (BK-042).
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado |
+|---|---|
+| Factory Defaults con F8 definida: pregunta; Conservar deja 13 combinaciones | ✓ |
+| Otra vez con Quitar: quedan las 12 del preset | ✓ |
+| ⌘↑ ×3 sube tres líneas | ✓ |
+
+**No probado:** con el kit tal cual; los presets del perfil en el terminal.
+
+**Difiere de iTerm2:** sin Simulate Numlock, porque una combinación no
+distingue el teclado numérico; Factory Defaults no trae ⌃Tab ni ⌃⇧Tab, porque
+CurseTerm no ordena las pestañas por uso reciente.

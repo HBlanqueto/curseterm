@@ -304,6 +304,113 @@ impl NamedAction {
     }
 }
 
+// PresetKeyMappings.plist and DefaultGlobalKeyMap.plist, with ⌘ as Super. Simulate Numlock is
+// left out because a combo does not tell the keypad apart; Factory Defaults has no recent-tab
+// entries because CurseTerm has no recent-tab order.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Preset {
+    FactoryDefaults,
+    TerminalApp,
+    NaturalTextEditing,
+}
+
+impl Preset {
+    pub const GLOBAL: [Self; 1] = [Self::FactoryDefaults];
+    pub const PROFILE: [Self; 2] = [Self::TerminalApp, Self::NaturalTextEditing];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::FactoryDefaults => tr!("preset-factory-defaults"),
+            Self::TerminalApp => tr!("preset-terminal-app"),
+            Self::NaturalTextEditing => tr!("preset-natural-text-editing"),
+        }
+    }
+
+    pub fn bindings(self) -> Vec<Binding> {
+        use BindingAction::*;
+        let entries: &[(&str, BindingAction, &str)] = match self {
+            Self::FactoryDefaults => &[
+                ("Shift+Super+Left", MoveTabLeft, ""),
+                ("Shift+Super+Right", MoveTabRight, ""),
+                ("Super+Up", ScrollLineUp, ""),
+                ("Super+Down", ScrollLineDown, ""),
+                ("Super+Left", PreviousTab, ""),
+                ("Super+Right", NextTab, ""),
+                ("Super+Home", ScrollToTop, ""),
+                ("Super+End", ScrollToEnd, ""),
+                ("Super+PageUp", ScrollPageUp, ""),
+                ("Shift+PageUp", ScrollPageUp, ""),
+                ("Super+PageDown", ScrollPageDown, ""),
+                ("Shift+PageDown", ScrollPageDown, ""),
+            ],
+            Self::TerminalApp => &[
+                ("Ctrl+^", SendHexCode, "0x1e"),
+                ("Shift+Up", SendEscapeSequence, "[A"),
+                ("Ctrl+Up", SendEscapeSequence, "[A"),
+                ("Ctrl+Shift+Up", SendEscapeSequence, "[A"),
+                ("Alt+Up", SendVimText, r"\e\e[A"),
+                ("Shift+Down", SendEscapeSequence, "[B"),
+                ("Ctrl+Down", SendEscapeSequence, "[B"),
+                ("Ctrl+Shift+Down", SendEscapeSequence, "[B"),
+                ("Alt+Down", SendVimText, r"\e\e[B"),
+                ("Ctrl+Left", SendEscapeSequence, "[1;5D"),
+                ("Ctrl+Shift+Left", SendEscapeSequence, "[D"),
+                ("Alt+Left", SendEscapeSequence, "b"),
+                ("Ctrl+Right", SendEscapeSequence, "[1;5C"),
+                ("Ctrl+Shift+Right", SendEscapeSequence, "[C"),
+                ("Alt+Right", SendEscapeSequence, "f"),
+                ("Shift+F5", SendEscapeSequence, "[25~"),
+                ("Shift+F6", SendEscapeSequence, "[26~"),
+                ("Shift+F7", SendEscapeSequence, "[28~"),
+                ("Shift+F8", SendEscapeSequence, "[29~"),
+                ("Shift+Home", SendEscapeSequence, "[H"),
+                ("Ctrl+Home", ScrollToTop, ""),
+                ("Shift+End", SendEscapeSequence, "[F"),
+                ("Ctrl+End", ScrollToEnd, ""),
+            ],
+            Self::NaturalTextEditing => &[
+                ("Super+Backspace", SendHexCode, "0x15"),
+                ("Alt+Backspace", SendHexCode, "0x1b 0x7f"),
+                ("Alt+Left", SendEscapeSequence, "b"),
+                ("Super+Left", SendHexCode, "0x1"),
+                ("Alt+Right", SendEscapeSequence, "f"),
+                ("Super+Right", SendHexCode, "0x5"),
+                ("Delete", SendHexCode, "0x4"),
+                ("Alt+Delete", SendEscapeSequence, "d"),
+            ],
+        };
+        entries
+            .iter()
+            .map(|(combo, action, parameter)| Binding {
+                combo: combo.to_string(),
+                action: *action,
+                parameter: parameter.to_string(),
+                ..Binding::default()
+            })
+            .collect()
+    }
+}
+
+// iTermPresetKeyMappings.m -profileByLoadingPresetNamed:…byReplacingAll:: kept mappings stay
+// unless the preset binds the same keys.
+pub fn load_preset(bindings: &mut Vec<Binding>, preset: Preset, replace_all: bool) {
+    let loaded = preset.bindings();
+    if replace_all {
+        bindings.clear();
+    }
+    bindings.retain(|kept| loaded.iter().all(|binding| binding.combo != kept.combo));
+    bindings.extend(loaded);
+}
+
+// ProfilesKeysPreferencesViewController.m -keyMapping:loadPresetsNamed:: asks only when some
+// mapping would survive.
+pub fn preset_needs_question(bindings: &[Binding], preset: Preset) -> bool {
+    let loaded = preset.bindings();
+    bindings
+        .iter()
+        .any(|kept| loaded.iter().all(|binding| binding.combo != kept.combo))
+}
+
 // iTermKeyMappings.m: the profile's mappings come before the global ones.
 pub fn find<'a>(
     profile: &'a [Binding],
@@ -489,6 +596,31 @@ pub fn hex_bytes(text: &str) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keeping_mappings_lets_the_preset_win_on_the_same_keys() {
+        let mine = |combo: &str| Binding {
+            combo: combo.into(),
+            action: BindingAction::Ignore,
+            ..Binding::default()
+        };
+        let mut bindings = vec![mine("Delete"), mine("F9")];
+        assert!(preset_needs_question(&bindings, Preset::NaturalTextEditing));
+        load_preset(&mut bindings, Preset::NaturalTextEditing, false);
+        assert_eq!(bindings.len(), 9);
+        assert!(bindings.iter().any(|binding| binding.combo == "F9"));
+        let delete = bindings.iter().find(|binding| binding.combo == "Delete");
+        assert_eq!(
+            delete.map(|binding| binding.action),
+            Some(BindingAction::SendHexCode)
+        );
+        load_preset(&mut bindings, Preset::NaturalTextEditing, true);
+        assert_eq!(bindings.len(), 8);
+        assert!(!preset_needs_question(
+            &bindings,
+            Preset::NaturalTextEditing
+        ));
+    }
 
     #[test]
     fn vim_special_characters_expand_as_iterm2_does() {

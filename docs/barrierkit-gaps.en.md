@@ -71,6 +71,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-039 | controls / windows | No outline view nor floating panel | medium | Tested workaround: a panel inside the window |
 | BK-040 | controls | `PopUpButton` neither scrolls nor searches | medium | Tested workaround: groups and a filter |
 | BK-041 | windows | An acked configure goes out with the old geometry | high | Patch 0012 tested |
+| BK-042 | controls | `PopUpButton` has no pull-down mode | low | Workaround tested: remount with `key` |
 
 ## Gaps
 
@@ -927,6 +928,24 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **How to reproduce**: weston 16 with `window_style = "maximized"` in the
   profile: «xdg_surface geometry (656 x 470) does not match the configured
   maximized state (1100 x 668)».
+
+### BK-042 — `PopUpButton` has no pull-down mode
+- **Area**: controls
+- **What CurseTerm needed**: the Keys Presets… pop-up, which in iTerm2 is an
+  `NSPopUpButton` with `pullsDown`: choosing loads the preset and the button
+  says “Presets…” again.
+- **What BarrierKit offers today**: `PopUpButton` keeps the chosen option
+  with `use_controlled`, which only follows `selected()` when its value
+  changes (`choices.rs:21`). With a fixed `selected(0)` it stays on the last
+  choice.
+- **What is missing**: a pull-down mode that does not remember the choice.
+- **How I solved it in CurseTerm**: the pop-up sits in a `rect` whose `key`
+  goes up on every choice, so it remounts showing “Presets…”.
+- **Cost of the workaround**: a counter state and one remount per choice.
+- **Proposed kit API**: `PopUpButton::pulls_down(true)`.
+- **Severity**: low
+- **How to reproduce**: a `PopUpButton` with a fixed `.selected(0)`; after
+  choosing the second option it keeps showing it.
 
 ## Things that worked well
 

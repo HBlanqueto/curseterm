@@ -2561,7 +2561,7 @@ Coprocess actions from a binding.
 
 **Differs from iTerm2:** no Bypass Terminal, modifier remapping, recent
 tabs, next and previous window, changing colors, selection moves nor scripts
-(phases 74 and 76 add the rest); no presets; a Super binding that is already a
+(phases 74, 76 and 77 add the rest); a Super binding that is already a
 menu shortcut does both; the Keys icon repeats General's because the kit has
 no keyboard symbol (BK-024).
 
@@ -3321,3 +3321,34 @@ modes.
 | Editing a step's text and adding one saves the three steps in the `.domain` | ✓ |
 
 **Not tested:** the kit as is; removing steps; a sequence from Edit › Actions.
+
+## Phase 77 — Key binding presets
+
+### Plan
+
+`iTermPresetKeyMappings.m` loads `PresetKeyMappings.plist` into the profile
+and `DefaultGlobalKeyMap.plist` into the global bindings, with ⌘ as Super:
+
+1. Keys › Key Bindings offers Factory Defaults; the profile's Keys, Terminal.app
+   Compatibility and Natural Text Editing. Edit › Actions has no presets.
+2. If some current binding is not in the preset, it asks “Remove all key
+   mappings before loading a preset?” with Keep, Remove and Cancel. Keep
+   leaves the others, and the preset wins on the same keys.
+3. After a choice, the pop-up says “Presets…” again (BK-042).
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+| Test | Result |
+|---|---|
+| Factory Defaults with F8 bound: it asks; Keep leaves 13 bindings | ✓ |
+| Again with Remove: the preset's 12 remain | ✓ |
+| ⌘↑ ×3 scrolls up three lines | ✓ |
+
+**Not tested:** the kit as is; the profile presets in the terminal.
+
+**Differs from iTerm2:** no Simulate Numlock, because a binding does not tell
+the keypad apart; Factory Defaults has no ⌃Tab nor ⌃⇧Tab, because CurseTerm
+does not order tabs by recent use.

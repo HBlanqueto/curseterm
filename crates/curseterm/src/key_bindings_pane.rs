@@ -13,7 +13,10 @@ use torin::prelude::{Alignment, Direction, Gaps, Size};
 use vow_design::{CAPTION, HEADLINE, SPACE_1, SPACE_2, TEXT};
 
 use crate::config::change_defaults;
-use crate::key_bindings::{Binding, BindingAction, NamedAction, Parameter, combo, shown};
+use crate::key_bindings::{
+    Binding, BindingAction, NamedAction, Parameter, Preset, combo, load_preset,
+    preset_needs_question, shown,
+};
 use crate::localize::tr;
 use crate::preferences::intern;
 
@@ -70,6 +73,8 @@ impl Component for KeyBindingsEditor {
         let mut selected = use_state(|| None::<usize>);
         let editing = use_state(|| None::<Option<usize>>);
         let draft = use_state(Binding::default);
+        let pending = use_state(|| None::<Preset>);
+        let presets_shown = use_state(|| 0_u32);
         let owner = self.owner;
         let chosen = selected.read().filter(|index| *index < self.bindings.len());
         let rows = self
@@ -137,8 +142,10 @@ impl Component for KeyBindingsEditor {
                                     open(chosen, binding);
                                 }
                             }),
-                    ),
+                    )
+                    .maybe_child(presets_popup(owner, &self.bindings, pending, presets_shown)),
             )
+            .maybe_child((*pending.read()).map(|preset| preset_question(owner, preset, pending)))
             .maybe_child((*editing.read()).map(|index| {
                 edit_sheet(self, draft, index, move || {
                     let mut editing = editing;
@@ -461,6 +468,89 @@ impl Component for Steps {
             )
             .maybe_child(controls)
     }
+}
+
+// iTermKeyMappingViewController.xib: the Presets… pop-up under the table; Actions has none.
+fn presets_popup(
+    owner: Owner,
+    bindings: &[Binding],
+    pending: State<Option<Preset>>,
+    mut shown: State<u32>,
+) -> Option<Element> {
+    let presets: &'static [Preset] = match owner {
+        Owner::Global => &Preset::GLOBAL,
+        Owner::Profile(_) => &Preset::PROFILE,
+        Owner::Actions => return None,
+    };
+    let kept = bindings.to_vec();
+    let popup = presets
+        .iter()
+        .fold(
+            PopUpButton::new(tr!("key-binding-presets")).item(tr!("key-binding-presets")),
+            |button, preset| button.item(preset.name()),
+        )
+        .selected(0)
+        .on_change(move |position: usize| {
+            *shown.write() += 1;
+            let Some(preset) = position.checked_sub(1).and_then(|index| presets.get(index)) else {
+                return;
+            };
+            if preset_needs_question(&kept, *preset) {
+                let mut pending = pending;
+                pending.set(Some(*preset));
+            } else {
+                owner.change(|bindings| load_preset(bindings, *preset, true));
+            }
+        });
+    // BK-042: the kit pop-up keeps its last choice, so a new key brings back «Presets…».
+    Some(rect().key(*shown.read()).child(popup).into_element())
+}
+
+// iTermKeyMappingViewController.m -removeBeforeLoadingWithTitle:: Keep, Remove or Cancel.
+fn preset_question(owner: Owner, preset: Preset, pending: State<Option<Preset>>) -> Element {
+    let palette = Palette::current();
+    let answer = move |replace_all: Option<bool>| {
+        move |_| {
+            let mut pending = pending;
+            pending.set(None);
+            if let Some(replace_all) = replace_all {
+                owner.change(|bindings| load_preset(bindings, preset, replace_all));
+            }
+        }
+    };
+    sheet(
+        rect()
+            .a11y_role(AccessibilityRole::AlertDialog)
+            .a11y_alt(tr!("preset-load-heading"))
+            .width(Size::px(KEY_BINDING_EDITOR.width))
+            .direction(Direction::Vertical)
+            .spacing(SPACE_2)
+            .child(text(tr!("preset-load-heading"), HEADLINE, palette.label))
+            .child(
+                text(
+                    tr!("preset-remove-before-loading"),
+                    TEXT,
+                    palette.secondary_label,
+                )
+                .width(Size::fill())
+                .max_lines(None),
+            )
+            .child(
+                rect()
+                    .width(Size::fill())
+                    .direction(Direction::Horizontal)
+                    .main_align(Alignment::End)
+                    .spacing(SPACE_2)
+                    .child(Button::new(tr!("close-cancel")).on_press(answer(None)))
+                    .child(Button::new(tr!("preset-remove")).on_press(answer(Some(true))))
+                    .child(
+                        Button::new(tr!("preset-keep"))
+                            .style(ButtonStyle::Primary)
+                            .on_press(answer(Some(false))),
+                    ),
+            ),
+    )
+    .into_element()
 }
 
 // iTermSearchableComboView: the menu items narrowed by what is typed, since a long kit pop-up

@@ -71,6 +71,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-039 | controles / ventanas | Sin vista de contorno ni panel flotante | media | Workaround probado: panel dentro de la ventana |
 | BK-040 | controles | `PopUpButton` no se desplaza ni busca | media | Workaround probado: grupos y filtro |
 | BK-041 | ventanas | Un configure confirmado sale con la geometría vieja | alta | Parche 0012 probado |
+| BK-042 | controles | `PopUpButton` no tiene modo desplegable (pull-down) | baja | Workaround probado: remontar con `key` |
 
 ## Gaps
 
@@ -933,6 +934,23 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Cómo reproducirlo**: weston 16 con `window_style = "maximized"` en el
   perfil: «xdg_surface geometry (656 x 470) does not match the configured
   maximized state (1100 x 668)».
+
+### BK-042 — `PopUpButton` no tiene modo desplegable (pull-down)
+- **Área**: controles
+- **Qué necesitaba CurseTerm**: el pop-up Presets… de Keys, que en iTerm2 es
+  un `NSPopUpButton` con `pullsDown`: elegir carga el preset y el botón vuelve
+  a decir «Presets…».
+- **Qué ofrece hoy BarrierKit**: `PopUpButton` guarda la opción elegida con
+  `use_controlled`, que solo sigue a `selected()` cuando su valor cambia
+  (`choices.rs:21`). Con `selected(0)` fijo se queda en la última opción.
+- **Qué falta**: un modo desplegable que no recuerde la elección.
+- **Cómo lo resolví en CurseTerm**: el pop-up va dentro de un `rect` con una
+  `key` que sube en cada elección, así se remonta con «Presets…».
+- **Coste del workaround**: un estado contador y un remontaje por elección.
+- **API propuesta para el kit**: `PopUpButton::pulls_down(true)`.
+- **Gravedad**: baja
+- **Cómo reproducirlo**: un `PopUpButton` con `.selected(0)` fijo; tras
+  elegir la segunda opción sigue mostrándola.
 
 ## Cosas que funcionaron bien
 
