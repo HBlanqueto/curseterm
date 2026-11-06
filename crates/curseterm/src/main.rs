@@ -8,6 +8,7 @@ mod config;
 mod grid;
 mod hint_view;
 mod hints;
+mod indicators;
 mod integration;
 mod io;
 mod itermcolors;

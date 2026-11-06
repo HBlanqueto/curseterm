@@ -1888,3 +1888,43 @@ Alerts…»), ni texto propio de fin de sesión (`sessionEndMessageText`), ni
 en la primera línea del cuerpo; la salida tras cambiar el tamaño de la
 ventana no se descarta; no se cuenta en la insignia del Dock ni se manda al
 iPhone.
+
+## Fase 42 — Indicadores de sesión
+
+### Plan
+
+Los indicadores de la esquina de arriba a la derecha de iTerm2
+(`iTermIndicatorsHelper.m` y `PTYTextView.m -updateIndicators`), para los
+estados que CurseTerm ya tiene:
+
+1. **Cuáles**, en el orden de iTerm2 y el primero más a la derecha: panel
+   maximizado, recibe la difusión de entrada, coproceso, Alert on Next Mark
+   y modo copia.
+2. **Dibujo:** cuadros de 26 puntos con radio de un sexto, el símbolo 4
+   puntos más pequeño, 4 puntos entre ellos y 5 desde arriba, todo a media
+   opacidad; negro con borde gris claro y símbolo blanco sobre un fondo de
+   terminal oscuro, y al revés sobre uno claro. Medidas en el token
+   `INDICATOR` y símbolos dibujados en el lienzo (BK-024).
+3. **Prueba** en sway sin pantalla y documentación.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| ⌘D, ⌥⌘A, ⌥⌘I, ⇧⌘↩ y ⇧⌘C: de derecha a izquierda maximizado, difusión, ojo y modo copia | ✓ | `fase42-indicadores.png` |
+| ⌥⌘A en el primer panel no marca el segundo: el indicador es de su sesión | ✓ | — |
+| Escape sale del modo copia y su indicador se va; Run Coprocess `cat > /dev/null` añade el del coproceso entre la difusión y el ojo | ✓ | `fase42-coproceso.png` |
+| Solarized Dark: cuadros negros con símbolo blanco | ✓ | — |
+
+**No probado:** con el kit tal cual; un esquema de fondo claro.
+
+**Difiere de iTerm2:** no hay indicadores de los estados que CurseTerm no
+tiene (filtro, salida suprimida, zoom, registro de depuración, entrada
+segura, ventana fijada, IA, canales, entrada en espera, capturas); pulsar un
+indicador no muestra su ayuda; los extremos de los trazos no son redondos;
+los símbolos son dibujos propios, no los SF Symbols.

@@ -1879,3 +1879,42 @@ Alerts…»), no custom session-end text (`sessionEndMessageText`), no
 `simpleNotifications` and no `1337;Notification` image; the subtitle goes on
 the first line of the body; output after a window resize is not discarded;
 nothing is counted on a Dock badge or sent to the iPhone.
+
+## Phase 42 — Session indicators
+
+### Plan
+
+iTerm2's top-right corner indicators (`iTermIndicatorsHelper.m` and
+`PTYTextView.m -updateIndicators`), for the states CurseTerm already has:
+
+1. **Which ones**, in iTerm2's order with the first rightmost: maximized
+   pane, receives broadcast input, coprocess, Alert on Next Mark and copy
+   mode.
+2. **Drawing:** 26-point squares with a sixth-of-a-side radius, the symbol 4
+   points smaller, 4 points apart and 5 from the top, all at half opacity;
+   black with a light grey border and a white symbol on a dark terminal
+   background, and the other way round on a light one. Metrics in the
+   `INDICATOR` token and symbols drawn on the canvas (BK-024).
+3. **Test** on headless sway and documentation.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| ⌘D, ⌥⌘A, ⌥⌘I, ⇧⌘↩ and ⇧⌘C: from right to left maximized, broadcast, eye and copy mode | ✓ | `fase42-indicadores.png` |
+| ⌥⌘A in the first pane does not mark the second: the indicator belongs to its session | ✓ | — |
+| Escape leaves copy mode and its indicator goes; Run Coprocess `cat > /dev/null` adds the coprocess one between broadcast and the eye | ✓ | `fase42-coproceso.png` |
+| Solarized Dark: black squares with a white symbol | ✓ | — |
+
+**Not tested:** the kit as is; a light background scheme.
+
+**Differs from iTerm2:** there are no indicators for states CurseTerm lacks
+(filter, suppressed output, zoom, debug logging, secure input, pinned
+window, AI, channels, buffered input, screenshots); clicking an indicator
+shows no help; stroke ends are not round; the symbols are our own drawings,
+not SF Symbols.

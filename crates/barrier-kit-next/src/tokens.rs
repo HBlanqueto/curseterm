@@ -247,3 +247,41 @@ pub const SHORTCUT_LABEL: ShortcutLabelMetrics = ShortcutLabelMetrics {
     pop_scale: 2.0,
     dissolve_scale: 0.1,
 };
+
+// iTermIndicatorsHelper.m: 26-point squares with a sixth-of-a-side radius, the symbol 4 points
+// smaller, 4 apart, at least 5 from the top, drawn at half opacity.
+pub const INDICATOR: IndicatorMetrics = IndicatorMetrics {
+    size: 26.0,
+    symbol_inset: 4.0,
+    gap: 4.0,
+    top: 5.0,
+    alpha: 0.5,
+    dark: IndicatorColors {
+        fill: Rgba::rgba8(0, 0, 0, 1.0),
+        stroke: Rgba::rgba8(170, 170, 170, 1.0),
+        ink: Rgba::rgba8(255, 255, 255, 1.0),
+    },
+    light: IndicatorColors {
+        fill: Rgba::rgba8(255, 255, 255, 1.0),
+        stroke: Rgba::rgba8(85, 85, 85, 1.0),
+        ink: Rgba::rgba8(0, 0, 0, 1.0),
+    },
+};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct IndicatorMetrics {
+    pub size: f32,
+    pub symbol_inset: f32,
+    pub gap: f32,
+    pub top: f32,
+    pub alpha: f32,
+    pub dark: IndicatorColors,
+    pub light: IndicatorColors,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct IndicatorColors {
+    pub fill: Rgba,
+    pub stroke: Rgba,
+    pub ink: Rgba,
+}

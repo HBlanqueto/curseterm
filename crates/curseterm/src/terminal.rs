@@ -496,6 +496,7 @@ impl App for Terminal {
                 preedit: ime_preedit(&handles),
                 replay: *replay.read(),
                 blink_off: window_focused && cursor_blink_off(&handles, revision),
+                maximized: tab.zoomed,
             };
             animate_notes(&handles, revision);
             pane_tree(&root, Vec::new(), &painting)
@@ -649,6 +650,7 @@ struct Painting {
     preedit: Option<Rc<str>>,
     replay: Option<(SessionId, usize)>,
     blink_off: bool,
+    maximized: bool,
 }
 
 fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
@@ -664,6 +666,7 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                     focused: painting.window_focused && *id == painting.active,
                     revision: painting.revision,
                     broadcast: painting.receivers.contains(id),
+                    maximized: painting.maximized,
                     find: painting.find.clone().filter(|_| *id == painting.active),
                     on_focus: {
                         let mut hints = painting.handles.hints;

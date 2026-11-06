@@ -526,18 +526,25 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Area**: symbols
 - **What CurseTerm needed**: the icons of iTerm2's Settings bar
   (gear, eye, person, keyboard, pointer, bolt), the bell that marks a
-  background tab where it rang (phase 5) and the trash that deletes an
-  annotation (phase 35).
+  background tab where it rang (phase 5), the trash that deletes an
+  annotation (phase 35) and the session indicators (phase 42): maximize
+  arrows, broadcast waves, two swapping rectangles, an eye and two
+  documents.
 - **What BarrierKit offers today**: 31 symbols in `symbol.rs`; none of those.
-- **What is missing**: extending the registry.
+  `Symbol::path` is private, so a canvas cannot draw the ones there are
+  either.
+- **What is missing**: extending the registry and exposing each symbol's
+  path.
 - **How CurseTerm solves it**: `SlidersVertical` for General,
   `CircleHalf` for Appearance, `ListBullet` for Profiles, `SquareGrid` for
   Pointer and `SpeakerWave` in the tab badge (`Badge` of
   the `views::tab_bar` block). The note's trash is drawn on its canvas with
-  the grid and stroke of `SYMBOL` (`note_view.rs`).
-- **Cost of the workaround**: less like iTerm2; an SVG path outside the
-  registry.
-- **Proposed kit API**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt, Bell, Trash}`.
+  the grid and stroke of `SYMBOL` (`note_view.rs`), like the indicators
+  (`indicators.rs`).
+- **Cost of the workaround**: less like iTerm2; SVG paths outside the
+  registry, with unrounded ends because `freya-engine` does not re-export
+  `paint::Cap`.
+- **Proposed kit API**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt, Bell, Trash, Broadcast, Swap, DocOnDoc}` and a public `Symbol::path`.
 - **Severity**: low
 - **How to reproduce**: read `enum Symbol` in `crates/barrier-kit/src/symbol.rs`.
 

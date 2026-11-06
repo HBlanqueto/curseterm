@@ -18,6 +18,7 @@ use crate::config::Scheme;
 use crate::grid::{self, Fonts};
 use crate::hint_view::{self, HintLabel};
 use crate::hints::Hints;
+use crate::indicators::{self, Indicator};
 use crate::io::{Annotation, AnnotationId};
 use crate::links;
 use crate::mouse::{self, Pointer};
@@ -31,6 +32,7 @@ pub struct TerminalPane {
     pub focused: bool,
     pub revision: u64,
     pub broadcast: bool,
+    pub maximized: bool,
     pub find: Option<Rc<str>>,
     pub on_focus: Callback<SessionId, ()>,
     pub on_hover: Callback<SessionId, ()>,
@@ -57,6 +59,7 @@ impl PartialEq for TerminalPane {
             && self.focused == other.focused
             && self.revision == other.revision
             && self.broadcast == other.broadcast
+            && self.maximized == other.maximized
             && self.find == other.find
             && self.badge == other.badge
             && self.opacity == other.opacity
@@ -101,6 +104,8 @@ impl Component for TerminalPane {
         let replay = self.replay;
         let blink_off = self.blink_off;
         let mut size = use_state(|| (0.0, 0.0));
+        let indicators = shown_indicators(&session, self.maximized, broadcast);
+        let dark = is_dark(scheme.background);
         let notes = notes(
             &session,
             &fonts,
@@ -131,6 +136,7 @@ impl Component for TerminalPane {
                     .map(|note| (note.start, note.end))
                     .collect::<Vec<_>>(),
                 self.hints.as_ref().map(|hints| hints.items.len()),
+                &indicators,
             ),
             &scheme.name,
             fonts.cell_width.to_bits(),
@@ -178,6 +184,7 @@ impl Component for TerminalPane {
                     blink_off,
                 };
                 grid::draw(ctx, &term, &fonts, &scheme, focused, &overlay);
+                indicators::draw(ctx, &indicators, dark);
             })
         };
         let point_at = {
@@ -592,4 +599,19 @@ fn wheel(session: &Session, lines: i32) {
     } else {
         session.scroll(Scroll::Delta(lines));
     }
+}
+
+// PTYTextView.m -updateIndicators, for the states CurseTerm has.
+fn shown_indicators(session: &Session, maximized: bool, broadcast: bool) -> Vec<Indicator> {
+    let extras = session.extras();
+    [
+        (Indicator::Maximized, maximized),
+        (Indicator::Broadcast, broadcast),
+        (Indicator::Coprocess, extras.coprocess.is_some()),
+        (Indicator::Alert, extras.alert_on_next_mark),
+        (Indicator::CopyMode, session.copy_mode()),
+    ]
+    .into_iter()
+    .filter_map(|(indicator, shown)| shown.then_some(indicator))
+    .collect()
 }

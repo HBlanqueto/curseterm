@@ -529,18 +529,24 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Área**: símbolos
 - **Qué necesitaba CurseTerm**: los iconos de la barra de Settings de iTerm2
   (engranaje, ojo, persona, teclado, puntero, rayo), la campana que marca
-  una pestaña de fondo donde ha sonado (fase 5) y la papelera que borra una
-  anotación (fase 35).
+  una pestaña de fondo donde ha sonado (fase 5), la papelera que borra una
+  anotación (fase 35) y los indicadores de sesión (fase 42): flechas de
+  maximizar, ondas de difusión, dos rectángulos que se cambian, ojo y dos
+  documentos.
 - **Qué ofrece hoy BarrierKit**: 31 símbolos en `symbol.rs`; ninguno de esos.
-- **Qué falta**: ampliar el registro.
+  `Symbol::path` es privado, así que un lienzo tampoco puede dibujar los que
+  hay.
+- **Qué falta**: ampliar el registro y exponer la ruta de cada símbolo.
 - **Cómo lo resolví en CurseTerm**: `SlidersVertical` para General,
   `CircleHalf` para Appearance, `ListBullet` para Profiles, `SquareGrid` para
   Pointer y `SpeakerWave` en la insignia de la pestaña
   (`Badge` del bloque `views::tab_bar`). La papelera de la nota se dibuja en
-  su lienzo con la rejilla y el trazo de `SYMBOL` (`note_view.rs`).
-- **Coste del workaround**: menos parecido a iTerm2; una ruta SVG fuera del
-  registro.
-- **API propuesta para el kit**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt, Bell, Trash}`.
+  su lienzo con la rejilla y el trazo de `SYMBOL` (`note_view.rs`), igual
+  que los indicadores (`indicators.rs`).
+- **Coste del workaround**: menos parecido a iTerm2; rutas SVG fuera del
+  registro, con los extremos sin redondear porque `freya-engine` no
+  reexporta `paint::Cap`.
+- **API propuesta para el kit**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt, Bell, Trash, Broadcast, Swap, DocOnDoc}` y un `Symbol::path` público.
 - **Gravedad**: baja
 - **Cómo reproducirlo**: leer `enum Symbol` en `crates/barrier-kit/src/symbol.rs`.
 
