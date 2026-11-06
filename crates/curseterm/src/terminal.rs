@@ -1,4 +1,4 @@
-use std::cell::{OnceCell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -69,6 +69,7 @@ struct Handles {
     fonts: FontCache,
     controls: WindowControls,
     timers: Timers,
+    alive: Rc<Cell<bool>>,
     clipboard: ClipboardState,
     broadcast: State<Broadcast>,
     find: Find,
@@ -150,6 +151,16 @@ impl Find {
 }
 
 impl Handles {
+    // BK-032: Timers callbacks outlive their window, so a closed window's ones must do nothing.
+    fn after(&self, delay: Duration, callback: impl Fn() + 'static) {
+        let alive = self.alive.clone();
+        self.timers.after(delay, move || {
+            if alive.get() {
+                callback();
+            }
+        });
+    }
+
     fn active(&self) -> Option<Rc<Session>> {
         let id = self.workspace.peek().active_session()?;
         self.sessions.peek().get(&id).cloned()
@@ -209,6 +220,7 @@ pub struct Terminal {
 
 impl App for Terminal {
     fn render(&self) -> impl IntoElement {
+        windows::use_registered_window();
         let defaults = barrier_kit::app::use_defaults::<Defaults>(APP_ID);
         let dark = barrier_kit::theme::resolved().scheme.is_dark();
         let workspace = use_state(Workspace::default);
@@ -219,7 +231,7 @@ impl App for Terminal {
         let broadcast = use_state(Broadcast::default);
         let closing = use_state(|| None::<Closing>);
         let buried = use_state(|| None::<Buried>);
-        let pastes = use_state(Vec::<String>::new);
+        let pastes = paste_history::shared();
         let sheet = use_state(|| None::<Sheet>);
         let mut held = use_state(Modifiers::empty);
         let transparency = use_state(|| true);
@@ -243,6 +255,7 @@ impl App for Terminal {
             fonts: FontCache::default(),
             controls: WindowControls::get(),
             timers: Timers::get(),
+            alive: Rc::new(Cell::new(true)),
             clipboard: consume_root_context(),
             broadcast,
             find,
@@ -255,6 +268,10 @@ impl App for Terminal {
             draft,
             held,
             transparency,
+        });
+        use_drop({
+            let alive = handles.alive.clone();
+            move || alive.set(false)
         });
         use_side_effect({
             let handles = handles.clone();
@@ -279,13 +296,11 @@ impl App for Terminal {
                     session.find(&query, SearchDirection::Left);
                     *revision.write() += 1;
                     let typed = query.clone();
-                    handles
-                        .timers
-                        .after(Duration::from_millis(DURATION_FAST_MS), move || {
-                            if *find.query.peek() == typed {
-                                find.show_position(&session, &typed);
-                            }
-                        });
+                    handles.after(Duration::from_millis(DURATION_FAST_MS), move || {
+                        if *find.query.peek() == typed {
+                            find.show_position(&session, &typed);
+                        }
+                    });
                 }
             }
         });
@@ -797,7 +812,7 @@ fn pick_sheet(handles: &Handles, picker: Picker, mut revision: State<u64>) -> El
 // BK-027: Enter also reaches the global handler, so the sheet closes one loop later.
 fn choose_later(handles: &Handles, choice: Choice) {
     let later = handles.clone();
-    handles.timers.after(Duration::ZERO, move || {
+    handles.after(Duration::ZERO, move || {
         let mut sheet = later.sheet;
         sheet.set(None);
         match &choice {
@@ -890,7 +905,7 @@ fn field(draft: State<String>, placeholder: &'static str) -> TextField {
 // BK-027: Enter also reaches the global handler, so the sheet closes one loop later.
 fn confirm_later(handles: &Handles, target: Sheet) {
     let later = handles.clone();
-    handles.timers.after(Duration::ZERO, move || {
+    handles.after(Duration::ZERO, move || {
         let typed = later.draft.peek().clone();
         let mut workspace = later.workspace;
         match target {
@@ -952,11 +967,9 @@ fn paste_slowly(handles: &Handles, text: String) {
         let bytes = session.pasted_bytes(&text);
         for (index, chunk) in bytes.chunks(SLOW_PASTE_CHUNK).enumerate() {
             let (session, chunk) = (session.clone(), chunk.to_vec());
-            handles
-                .timers
-                .after(SLOW_PASTE_PAUSE * index as u32, move || {
-                    session.write(chunk.clone())
-                });
+            handles.after(SLOW_PASTE_PAUSE * index as u32, move || {
+                session.write(chunk.clone())
+            });
         }
     }
     remember_paste(handles, text);
@@ -1085,6 +1098,9 @@ fn listen(handles: Handles, revision: State<u64>) -> Events {
     let receiver: RefCell<Receiver<(SessionId, TermEvent)>> = RefCell::new(receiver);
     let timers = handles.timers.clone();
     let wake = timers.wakeup(move || {
+        if !handles.alive.get() {
+            return;
+        }
         let pending: Vec<_> = receiver.borrow().try_iter().collect();
         if pending.is_empty() {
             return;
@@ -1132,12 +1148,10 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
             }
             if profile.flash_visual_bell {
                 session.extras().bell = Some(Instant::now());
-                handles
-                    .timers
-                    .after(Duration::from_millis(DURATION_FAST_MS), move || {
-                        let mut revision = revision;
-                        *revision.write() += 1;
-                    });
+                handles.after(Duration::from_millis(DURATION_FAST_MS), move || {
+                    let mut revision = revision;
+                    *revision.write() += 1;
+                });
             }
         }
         TermEvent::ChildExit(_) | TermEvent::Exit => {
@@ -1309,7 +1323,7 @@ fn bury(handles: &Handles, tab: Tab) {
         titles,
         at,
     }));
-    handles.timers.after(UNDO_CLOSE, move || {
+    handles.after(UNDO_CLOSE, move || {
         if buried.peek().as_ref().is_some_and(|buried| buried.at == at) {
             let mut buried = buried;
             buried.set(None);
@@ -1337,7 +1351,7 @@ fn undo_close(handles: &Handles) {
 // BK-027: the Alert's key also reaches the global handler, so the alert goes one loop later.
 fn dismiss_later(handles: &Handles, then: impl Fn() + 'static) {
     let closing = handles.closing;
-    handles.timers.after(Duration::ZERO, move || {
+    handles.after(Duration::ZERO, move || {
         let mut closing = closing;
         closing.set(None);
         then();
@@ -1404,10 +1418,7 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
     match id {
         _ if id == menu::ABOUT.id => windows::open(&["--about"]),
         _ if id == menu::SETTINGS.id => windows::open(&["--settings"]),
-        _ if id == menu::QUIT.id => {
-            windows::quit_others();
-            handles.controls.close();
-        }
+        _ if id == menu::QUIT.id => windows::quit(),
         _ if id == menu::NEW_WINDOW.id => windows::open(&[]),
         _ if id == menu::NEW_TAB.id => {
             let profile = handles.defaults.peek().default_profile_name();
@@ -1581,12 +1592,10 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         _ if id == menu::FIND_CURSOR.id => {
             if let Some(session) = &active {
                 session.extras().cursor_spotlight = Some(Instant::now());
-                handles
-                    .timers
-                    .after(Duration::from_millis(DURATION_SLOW_MS), move || {
-                        let mut revision = revision;
-                        *revision.write() += 1;
-                    });
+                handles.after(Duration::from_millis(DURATION_SLOW_MS), move || {
+                    let mut revision = revision;
+                    *revision.write() += 1;
+                });
             }
         }
         _ if id == menu::SHOW_TAB_BAR.id => {

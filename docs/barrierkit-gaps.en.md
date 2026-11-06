@@ -2,7 +2,7 @@
 
 BarrierKit version/commit used: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Summary: living document; state at the close of phase 19 (2026-11-05), tested on
+Summary: living document; state at the close of phase 20 (2026-11-06), tested on
 headless sway with lavapipe (`progreso.en.md`). The most serious: the
 `use_menu_action` handlers run outside Freya's context and abort the app if
 they touch the clipboard or `WindowControls::get()` (BK-017); the menu is only
@@ -30,7 +30,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 
 | ID | Area | Gap | Severity | Workaround in CurseTerm |
 |---|---|---|---|---|
-| BK-001 | window | One window per process | high | Tested workaround: one process per window (`windows.rs`) |
+| BK-001 | window | One window per process | high | Patch 0008 tested; without it, one process per window |
 | BK-002 | window | Fixed window title | medium | Patch 0001 tested; as is, only the `Titlebar` |
 | BK-003 | input / global menu | Shortcuts not consumed and `ShortcutKey` limited | high | Patch 0002 (kit tests); as is, the encoder ignores Super |
 | BK-004 | IME | No `zwp_text_input_v3` | medium | None |
@@ -61,6 +61,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-029 | controls | `TextField` cannot take the focus when it opens | medium | Patch 0006 tested |
 | BK-030 | input | Mouse events carry no modifiers | medium | Workaround: modifiers tracked through the keyboard |
 | BK-031 | window / appearance | A window cannot ask for a translucent background | medium | Patch 0007 tested |
+| BK-032 | platform | `Timers` callbacks outlive their window | high | Tested workaround: `alive` in `terminal.rs` |
 
 ## Gaps
 
@@ -82,6 +83,12 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Cost of the workaround**: one Vulkan and Skia context per window; shared
   state goes through files; «Quit» cannot ask before closing in
   the other processes; tabs cannot be listed or moved between windows.
+- **Tested patch**:
+  [`kit-parches/0008-varias-ventanas.patch`](../kit-parches/0008-varias-ventanas.patch)
+  adds `WindowControls::open_window(app, options)`. With it, `windows::open`
+  opens the window in the same process and Quit closes them all; the paste
+  history is shared. The patch also fixes a `close_window` panic, which wrote
+  the status while the read was still borrowed.
 - **Proposed kit API**: `WindowControls::open(app: AppComponent, options: WindowOptions) -> WindowControls` and `Windows::get().list() -> State<Vec<WindowInfo>>`.
 - **Severity**: high
 - **How to reproduce**: search `barrier_kit::platform` for a public function
@@ -670,6 +677,26 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Proposed kit API**: `WindowControls::set_background(Rgba)` or `WindowOptions::background`.
 - **Severity**: medium
 - **How to reproduce**: paint the app root with alpha 0.5; the window stays opaque.
+
+### BK-032 — `Timers` callbacks outlive their window
+- **Area**: platform
+- **What CurseTerm needed**: closing a terminal window while the others in
+  the same process stay open (patch 0008).
+- **What BarrierKit offers today**: `Timers::wakeup` and `Timers::after`
+  (`platform/timer.rs:47-58`) keep the function in a runtime queue shared by
+  every window; each ping calls all the `wakeup` ones and none is removed when
+  its window closes.
+- **What is missing**: tying callbacks to the window that asked for them and
+  dropping them when it closes.
+- **How CurseTerm solves it**: an `alive: Rc<Cell<bool>>` turned off in
+  `use_drop`; the I/O wakeup and `Handles::after` do nothing when it is off.
+  Without it, closing a window made the next ping read freed states and the
+  process panicked.
+- **Workaround cost**: the closed windows' functions stay in the queue and
+  run on every ping until the process ends.
+- **Proposed kit API**: make `Timers` per window, or have `wakeup` return a guard that removes it when dropped.
+- **Severity**: high
+- **How to reproduce**: with patch 0008, open two terminal windows and close one without the `alive` flag.
 
 ## Things that worked well
 

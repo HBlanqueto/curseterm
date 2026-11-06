@@ -1,4 +1,14 @@
+use freya_core::prelude::State;
+
 const LIMIT: usize = 20;
+
+thread_local! {
+    static SHARED: State<Vec<String>> = State::create_global(Vec::new());
+}
+
+pub fn shared() -> State<Vec<String>> {
+    SHARED.with(|history| *history)
+}
 
 pub fn remember(history: &mut Vec<String>, text: String) {
     if text.is_empty() {

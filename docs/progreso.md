@@ -1044,3 +1044,28 @@ cuatro clics en una ruta fuera del test de `word_span`.
 4. **Lo que gana la ventana compartida:** el historial de pegado es común a
    todas las ventanas del proceso.
 5. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla en los dos modos del kit. `./dev.sh check`
+limpio en los dos; 40 tests de la app y 1 del bloque. Un gap nuevo: BK-032,
+los avisos de `Timers` sobreviven a su ventana.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Kit parcheado: ⌘N y ⌘, abren dos ventanas más en el mismo proceso (3 ventanas, 1 proceso) | ✓ | — |
+| Pegar `echo compartido` en la primera y ⇧⌘H en la segunda: la entrada está | ✓ | `fase20-historial-compartido.png` |
+| Cerrar Ajustes y una ventana de terminal: el proceso sigue, la shell de la ventana cerrada termina y la otra ventana responde | ✓ tras corregir dos pánicos: el de `close_window` (en el parche 0008) y el del aviso de E/S de la ventana cerrada (BK-032) | — |
+| Quit con dos ventanas: se cierran las dos y el proceso termina | ✓ | — |
+| Kit tal cual: ⌘N abre un segundo proceso y Quit cierra los dos | ✓ | — |
+
+**No probado:** cerrar una ventana con temporizadores pendientes (campana,
+deshacer cierre) en vuelo; la ventana hotkey, que sigue siendo un proceso
+aparte.
+
+**Difiere de iTerm2:**
+
+- Open Quickly y Undo Close siguen sin ver las otras ventanas; tampoco se
+  pueden mover pestañas entre ventanas.

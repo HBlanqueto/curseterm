@@ -1041,3 +1041,27 @@ indicator); four clicks on a path outside the `word_span` test.
 4. **What sharing the process brings:** the paste history is common to all
    the process's windows.
 5. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-06)
+
+Tested on headless sway in both kit modes. `./dev.sh check` clean in both;
+40 app tests and 1 block test. One new gap: BK-032, `Timers` callbacks
+outlive their window.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Patched kit: ⌘N and ⌘, open two more windows in the same process (3 windows, 1 process) | ✓ | — |
+| Paste `echo compartido` in the first and ⇧⌘H in the second: the entry is there | ✓ | `fase20-historial-compartido.png` |
+| Closing Settings and a terminal window: the process stays, the closed window's shell ends and the other window responds | ✓ after fixing two panics: `close_window`'s (in patch 0008) and the closed window's I/O wakeup (BK-032) | — |
+| Quit with two windows: both close and the process ends | ✓ | — |
+| Kit as is: ⌘N opens a second process and Quit closes both | ✓ | — |
+
+**Not tested:** closing a window with pending timers (bell, undo close) in
+flight; the hotkey window, which is still a separate process.
+
+**Differs from iTerm2:**
+
+- Open Quickly and Undo Close still do not see the other windows; tabs
+  cannot be moved between windows either.

@@ -2,7 +2,7 @@
 
 Versión/commit de BarrierKit usado: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Resumen: documento vivo; estado al cerrar la fase 19 (2026-11-05), probado en
+Resumen: documento vivo; estado al cerrar la fase 20 (2026-11-06), probado en
 sway sin pantalla con lavapipe (`progreso.md`). Lo más serio: los handlers de
 `use_menu_action` corren fuera del contexto de Freya y hacen abortar la app si
 tocan el portapapeles o `WindowControls::get()` (BK-017); el menú solo se
@@ -30,7 +30,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 
 | ID | Área | Gap | Gravedad | Workaround en CurseTerm |
 |---|---|---|---|---|
-| BK-001 | ventana | Una ventana por proceso | alta | Workaround probado: un proceso por ventana (`windows.rs`) |
+| BK-001 | ventana | Una ventana por proceso | alta | Parche 0008 probado; sin él, un proceso por ventana |
 | BK-002 | ventana | Título de ventana fijo | media | Parche 0001 probado; tal cual, solo la `Titlebar` |
 | BK-003 | input / menú global | Atajos no consumidos y `ShortcutKey` limitado | alta | Parche 0002 (tests del kit); tal cual, el codificador ignora Super |
 | BK-004 | IME | Sin `zwp_text_input_v3` | media | Ninguno |
@@ -61,6 +61,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-029 | controles | `TextField` no puede tomar el foco al abrirse | media | Parche 0006 probado |
 | BK-030 | entrada | Los eventos de ratón no traen modificadores | media | Workaround: modificadores seguidos con el teclado |
 | BK-031 | ventana / apariencia | Una ventana no puede pedir fondo translúcido | media | Parche 0007 probado |
+| BK-032 | plataforma | Los avisos de `Timers` sobreviven a su ventana | alta | Workaround probado: `alive` en `terminal.rs` |
 
 ## Gaps
 
@@ -82,6 +83,12 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Coste del workaround**: un contexto Vulkan y Skia por ventana; el estado
   compartido pasa por ficheros; «Quit» no puede preguntar antes de cerrar en
   los otros procesos; no se puede listar ni mover pestañas entre ventanas.
+- **Parche probado**:
+  [`kit-parches/0008-varias-ventanas.patch`](../kit-parches/0008-varias-ventanas.patch)
+  añade `WindowControls::open_window(app, opciones)`. Con él, `windows::open`
+  abre la ventana en el mismo proceso y Quit las cierra todas; el historial de
+  pegado es común. El parche también corrige un pánico de `close_window`, que
+  escribía el estado con la lectura aún prestada.
 - **API propuesta para el kit**: `WindowControls::open(app: AppComponent, options: WindowOptions) -> WindowControls` y `Windows::get().list() -> State<Vec<WindowInfo>>`.
 - **Gravedad**: alta
 - **Cómo reproducirlo**: buscar en `barrier_kit::platform` una función pública
@@ -674,6 +681,26 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **API propuesta para el kit**: `WindowControls::set_background(Rgba)` o `WindowOptions::background`.
 - **Gravedad**: media
 - **Cómo reproducirlo**: pintar la raíz de la app con alfa 0,5; la ventana sigue opaca.
+
+### BK-032 — Los avisos de `Timers` sobreviven a su ventana
+- **Área**: plataforma
+- **Qué necesitaba CurseTerm**: cerrar una ventana de terminal mientras las
+  demás del mismo proceso siguen abiertas (parche 0008).
+- **Qué ofrece hoy BarrierKit**: `Timers::wakeup` y `Timers::after`
+  (`platform/timer.rs:47-58`) guardan la función en una cola del runtime, común
+  a todas las ventanas; cada aviso llama a todas las de `wakeup` y ninguna se
+  quita al cerrar su ventana.
+- **Qué falta**: atar los avisos a la ventana que los pidió y soltarlos al
+  cerrarla.
+- **Cómo lo resolví en CurseTerm**: un `alive: Rc<Cell<bool>>` que se apaga en
+  `use_drop`; el aviso de E/S y `Handles::after` no hacen nada si está
+  apagado. Sin él, cerrar una ventana hacía que el aviso siguiente leyera
+  estados ya liberados y el proceso entraba en pánico.
+- **Coste del workaround**: las funciones de las ventanas cerradas siguen en
+  la cola y se llaman en cada aviso hasta que termina el proceso.
+- **API propuesta para el kit**: que `Timers` sea por ventana o que `wakeup` devuelva un guardián que lo quite al soltarse.
+- **Gravedad**: alta
+- **Cómo reproducirlo**: con el parche 0008, abrir dos ventanas de terminal y cerrar una sin el indicador `alive`.
 
 ## Cosas que funcionaron bien
 

@@ -24,41 +24,9 @@ mod workspace;
 use std::path::Path;
 use std::process::ExitCode;
 
-use barrier_kit::platform::{WindowOptions, run_window};
-use barrier_kit_next::tokens::TAB_BAR;
-use freya_core::integration::AppComponent;
-use vow_design::{HAIRLINE, SPACE_2, TITLEBAR_CLIENT_HEIGHT, WINDOW_MIN_SIZE};
+use barrier_kit::platform::run_window;
 
-use crate::config::{APP_ID, APP_NAME, Defaults, change_defaults};
-use crate::grid::Fonts;
-
-fn profile_names() -> Vec<String> {
-    let defaults: Defaults = barrier_kit::app::load_defaults(APP_ID);
-    defaults
-        .profiles()
-        .into_iter()
-        .map(|profile| profile.name)
-        .collect()
-}
-
-fn terminal_size(profile: Option<&str>) -> (u32, u32) {
-    let defaults: Defaults = barrier_kit::app::load_defaults(APP_ID);
-    let name = profile.map_or_else(|| defaults.default_profile_name(), str::to_string);
-    let profile = defaults.profile(&name);
-    let fonts = Fonts::new(&profile.font_family, profile.text_size(0));
-    let tab_bar = if defaults.show_tab_bar {
-        TAB_BAR.height + HAIRLINE
-    } else {
-        0.0
-    };
-    let inset = 2.0 * SPACE_2;
-    let width = f32::from(profile.columns) * fonts.cell_width + inset;
-    let height = f32::from(profile.rows) * fonts.cell_height
-        + inset
-        + TITLEBAR_CLIENT_HEIGHT as f32
-        + tab_bar;
-    (width.ceil() as u32, height.ceil() as u32)
-}
+use crate::config::{APP_ID, change_defaults};
 
 fn import_colors(path: &Path) -> ExitCode {
     match itermcolors::import(path) {
@@ -94,26 +62,9 @@ fn main() -> ExitCode {
         _ => None,
     };
     let _registration = windows::register();
-    windows::forget_saved_size();
-    let profile = match arguments.as_slice() {
-        [flag, name] if flag == "--profile" => Some(name.clone()),
-        _ => None,
-    };
-    let result = match arguments.first().map(String::as_str) {
-        Some("--about") => auxiliary::run_about(),
-        Some("--settings") => preferences::run(arguments.get(1).cloned()),
-        _ => {
-            let size = terminal_size(profile.as_deref());
-            run_window(
-                AppComponent::new(terminal::Terminal { profile }),
-                WindowOptions::new(APP_NAME, "curseterm")
-                    .app_id(APP_ID)
-                    .size(size)
-                    .min_size(Some(WINDOW_MIN_SIZE))
-                    .menu(menu::terminal_menu(&profile_names())),
-            )
-        }
-    };
+    let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
+    let (app, options) = windows::describe(&arguments);
+    let result = run_window(app, options);
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {

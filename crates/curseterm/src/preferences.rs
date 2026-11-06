@@ -8,7 +8,7 @@ use barrier_kit::app::{use_defaults, use_menu_action};
 use barrier_kit::choices::RadioGroup;
 use barrier_kit::compact::{IconButton, Stepper};
 use barrier_kit::controls::{Button, ScrollView, SegmentedControl, Slider, Switch, TextField};
-use barrier_kit::platform::{RunError, WindowControls, WindowOptions, run_window};
+use barrier_kit::platform::{WindowControls, WindowOptions};
 use barrier_kit::popup_button::PopUpButton;
 use barrier_kit::style::{Palette, text};
 use barrier_kit::symbol::Symbol;
@@ -51,15 +51,13 @@ fn intern(text: &str) -> &'static str {
     })
 }
 
-pub fn run(profile: Option<String>) -> Result<(), RunError> {
-    run_window(
-        AppComponent::new(Settings { profile }),
-        WindowOptions::new(tr!("settings-title"), "curseterm")
-            .app_id(APP_ID)
-            .size(SETTINGS_WINDOW_SIZE)
-            .min_size(Some(WINDOW_MIN_SIZE))
-            .menu(menu::auxiliary_menu()),
-    )
+pub fn window(profile: Option<String>) -> (AppComponent, WindowOptions) {
+    let options = WindowOptions::new(tr!("settings-title"), "curseterm")
+        .app_id(APP_ID)
+        .size(SETTINGS_WINDOW_SIZE)
+        .min_size(Some(WINDOW_MIN_SIZE))
+        .menu(menu::auxiliary_menu());
+    (AppComponent::new(Settings { profile }), options)
 }
 
 struct Settings {
@@ -68,6 +66,7 @@ struct Settings {
 
 impl App for Settings {
     fn render(&self) -> impl IntoElement {
+        crate::windows::use_registered_window();
         let controls = WindowControls::get();
         use_menu_action(move |id| on_action(id, &controls));
         let defaults = use_defaults::<Defaults>(APP_ID).read().clone();
