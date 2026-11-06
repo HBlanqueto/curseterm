@@ -25,8 +25,8 @@ use crate::session::Listener;
 const TIMESTAMP_COLUMNS: usize = "00:00:00".len();
 
 pub struct Fonts {
-    family: String,
-    size: f32,
+    pub family: String,
+    pub size: f32,
     faces: [Font; 4],
     fallback: RefCell<HashMap<(char, usize), Option<Font>>>,
     pub cell_width: f32,

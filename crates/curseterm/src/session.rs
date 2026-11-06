@@ -25,6 +25,7 @@ use barrier_kit::platform::WakeHandle;
 
 use rustix::process::{Pid, Signal, kill_process_group};
 
+use crate::composer::Composer;
 use crate::config::{APP_NAME, CursorType, Profile, SCROLLBACK_LIMIT};
 use crate::io::{self as pty_io, Extras};
 use crate::jobs;
@@ -114,6 +115,7 @@ pub struct Session {
     ended: Cell<bool>,
     options: Cell<(usize, CursorStyle)>,
     coprocess: RefCell<Option<Child>>,
+    pub composer: RefCell<Composer>,
 }
 
 thread_local! {
@@ -178,6 +180,7 @@ impl Session {
             ended: Cell::new(false),
             options: Cell::new((Config::default().scrolling_history, CursorStyle::default())),
             coprocess: RefCell::new(None),
+            composer: RefCell::default(),
         })
     }
 
@@ -260,6 +263,10 @@ impl Session {
 
     pub fn scroll(&self, scroll: Scroll) {
         self.term.lock().scroll_display(scroll);
+    }
+
+    pub fn send_command(&self, command: &str) {
+        self.write(format!("{}\r", command.replace('\n', "\r")).into_bytes());
     }
 
     pub fn paste(&self, text: &str) {

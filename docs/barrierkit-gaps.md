@@ -383,8 +383,9 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
   US, la tecla `]` llega como `}`.
 - **Qué falta**: comparar por tecla física (`Code`) o por keysym sin Mayús.
 - **Cómo lo resolví en CurseTerm**: «Select Next Tab» y «Select Previous
-  Tab» se declaran por texto como `Super+Shift+}` y `Super+Shift+{`
-  (`crates/curseterm/src/menu.rs`). Probado con `wtype`.
+  Tab» se declaran por texto como `Super+Shift+}` y `Super+Shift+{`, y
+  «Show Composer» (⇧⌘.) como `Super+Shift+>` (`crates/curseterm/src/menu.rs`).
+  Probado con `wtype`.
 - **Coste del workaround**: depende de la distribución de teclado; el menú muestra `}` en vez de `]`.
 - **API propuesta para el kit**: que `find_menu_shortcut` reciba también el `Code` y compare por él cuando hay Mayús.
 - **Gravedad**: media
@@ -605,7 +606,9 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
   manejador global ignora las teclas y Escape cierra la barra. Con el aviso
   abierto el manejador ignora todo, y el aviso se quita con
   `Timers::after(Duration::ZERO)` (`dismiss_later`) para que el manejador
-  aún lo vea abierto al recibir esa misma tecla.
+  aún lo vea abierto al recibir esa misma tecla. Las notas y el Composer
+  avisan del foco con `on_focus_change` del bloque `views::text_view`, y el
+  Composer deja de editar una vuelta después de cerrarse con Escape.
 - **Coste del workaround**: un estado más que se desincroniza si la barra se
   cierra sin pasar por `Find::close`.
 - **API propuesta para el kit**: `SearchField::on_cancel` y
@@ -782,12 +785,15 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Cómo lo resolví en CurseTerm**: el bloque `views::text_view::TextView` en
   `barrier-kit-next`, sobre `use_editable` de `freya-edit` 0.4.3, con la misma
   edición, selección con arrastre, IME y parpadeo del cursor que `Input`.
-  Avisa del cambio de texto y del foco por callbacks.
+  Avisa del cambio de texto y del foco por callbacks; `on_key` deja a la app
+  quedarse una tecla con la posición del cursor (el Composer usa ⇧↩ y ⌥⇧↩),
+  y no escribe caracteres con Super o Ctrl, salvo las órdenes de edición.
 - **Coste del workaround**: dos dependencias más en el bloque
   (`freya-components` sin features por defecto y `freya-edit`, ya en el
   árbol por el kit) y sin barra de desplazamiento: crece con el texto.
-- **API propuesta para el kit**: `TextView::new(value, font, ink)` con
-  `width`, `auto_focus`, `on_change` y `on_focus_change`, como el bloque.
+- **API propuesta para el kit**: `TextView::new(value, family, size,
+  line_height, ink)` con `cursor`, `width`, `auto_focus`, `on_change`,
+  `on_focus_change` y `on_key`, como el bloque.
 - **Gravedad**: media
 - **Cómo reproducirlo**: buscar en `crates/barrier-kit/src/controls.rs` un
   control que acepte Enter como salto de línea.

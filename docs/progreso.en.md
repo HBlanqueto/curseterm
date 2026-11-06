@@ -1579,3 +1579,58 @@ drops. Seen with `scrollback_lines = 50`.
 dragged; it has no scroll bar; no «wrap» flash when Next or Previous wraps
 around; smart selection is CurseTerm's (URL or word), not iTerm2's rules;
 annotations are not saved on close.
+
+## Phase 36 — Composer
+
+### Plan
+
+iTerm2's View › Show Composer (⇧⌘.), copied from
+`sources/Composer/iTermComposerManager.m`,
+`iTermMinimalComposerViewController.m` and its `.xib`, `ComposerTextView.swift`,
+`iTermStatusBarLargeComposerViewController.xib` and `PTYSession.m`
+(`frameForDesiredHeight:`, `composerManagerAppearance:`, `sendCommand:`):
+
+1. **Model** (`composer.rs`): each session keeps whether the Composer is open
+   and its text. ⇧⌘. opens or closes it keeping the text.
+2. **Box:** at the top of the pane, 20 points from each side (at least 217
+   wide), 135 high and never more than the pane minus 8. Inside, 9 points in,
+   a «sheet» material: translucent window background over the blurred
+   terminal, radius 6 and a 1-point grey border. The appearance follows the
+   terminal background (perceived brightness 0.30/0.59/0.11 under 0.5 = dark).
+3. **Text** with the `views::text_view` block (BK-036): the profile's font,
+   size, colour and cursor; 5-point margin; vertical scrolling.
+4. **Bottom row** of 19 points with «Press ⇧↩ to send.» on the right, hidden
+   under 180 points; a 24×23 close button at the top right.
+5. **Keys** (`standardActions`): ↩ breaks the line; ⇧↩ sends everything, each
+   line with its return, and closes without the fade; ⌥⇧↩ sends the command at
+   the cursor (its line and those joined by a trailing `\`) and removes it
+   from the text; Escape and the button close with a 0.125 s fade and keep
+   the text.
+6. **Test** on headless sway in both kit modes and documentation.
+
+### Result (2026-11-06)
+
+Tested on headless sway in both kit modes. `./dev.sh check` clean in both
+modes; 45 app tests (a new one for the command at the cursor).
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| ⇧⌘. (in `wtype`, Super+Shift+`greater`): it opens at the top with the focus, dark on the dark scheme, and typing does not reach the shell | ✓ | `fase36-composer.png` |
+| A four-line `for` and ⇧↩: the shell runs it (`uno`, `dos`, `tres`) and the box closes | ✓ | `fase36-composer-enviado.png` |
+| ⌥⇧↩ with the cursor on the first line: sends `echo uno` and removes it; the box stays open | ✓ | — |
+| Escape and the close button: it closes, Escape does not reach the shell and ⇧⌘. brings it back with the text | ✓ | — |
+| The «>» of ⇧⌘> does not get into the text | ✓ | — |
+| Patched kit, D-Bus menu: View › Show Composer opens it | ✓ | — |
+
+**Not tested:** a light scheme (light material), the closing fade in a
+screenshot, pasting with ⌘V inside, the IME, and scrolling following the
+cursor with a lot of text.
+
+**Differs from iTerm2:** no handles to change the height (always 135) nor
+dragging; no ⌥↩ (enqueue), completions, history, help, AI, multiple cursors
+nor sending only the selection; no Auto Composer nor status bar Composer;
+the text stops before the close button because Freya gives the pointer to
+the scroll view under it; after ⌥⇧↩ the cursor does not go back to the start
+of the removed command.

@@ -169,3 +169,46 @@ pub const ANNOTATION: AnnotationMetrics = AnnotationMetrics {
         weight: 400,
     },
 };
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ComposerMetrics {
+    pub side_margin: f32,
+    pub height: f32,
+    pub min_height: f32,
+    pub min_width: f32,
+    pub bottom_room: f32,
+    pub inset: f32,
+    pub radius: f32,
+    pub border: Rgba,
+    pub tint_alpha: f32,
+    pub blur: f32,
+    pub text_inset: f32,
+    pub accessory_height: f32,
+    pub close: f32,
+    pub close_frame: (f32, f32),
+    pub close_inset: (f32, f32),
+    pub tip_size: f32,
+    pub tip_min_width: f32,
+    pub fade_ms: u64,
+}
+
+pub const COMPOSER: ComposerMetrics = ComposerMetrics {
+    side_margin: 20.0,
+    height: 135.0,
+    min_height: 62.0,
+    min_width: 217.0,
+    bottom_room: 8.0,
+    inset: 9.0,
+    radius: 6.0,
+    border: Rgba::rgba8(128, 128, 128, 1.0),
+    tint_alpha: 0.85,
+    blur: 20.0,
+    text_inset: 5.0,
+    accessory_height: 19.0,
+    close: 16.0,
+    close_frame: (24.0, 23.0),
+    close_inset: (8.0, 9.0),
+    tip_size: 11.0,
+    tip_min_width: 180.0,
+    fade_ms: 125,
+};

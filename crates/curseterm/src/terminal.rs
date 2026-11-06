@@ -35,6 +35,7 @@ use vow_design::{
 
 use crate::arrangement::{self, Arrangement, TabLayout};
 use crate::clock::local_time;
+use crate::composer_view::ComposerEvent;
 use crate::config::{
     APP_ID, AltKey, ClosePrompt, Defaults, Profile, SessionEnd, WorkingDirectory, change_defaults,
 };
@@ -84,7 +85,7 @@ struct Handles {
     clock_armed: Rc<Cell<bool>>,
     blink_armed: Rc<Cell<bool>>,
     notes_armed: Rc<Cell<bool>>,
-    note_focused: State<bool>,
+    editing: State<bool>,
     replay: State<Option<(SessionId, usize)>>,
     toolbelt: Toolbelt,
     clipboard: ClipboardState,
@@ -277,7 +278,7 @@ impl App for Terminal {
         let sheet = use_state(|| None::<Sheet>);
         let mut held = use_state(Modifiers::empty);
         let transparency = use_state(|| true);
-        let note_focused = use_state(|| false);
+        let editing = use_state(|| false);
         let replay = use_state(|| None::<(SessionId, usize)>);
         let toolbelt = Toolbelt {
             shown: use_state(|| false),
@@ -309,7 +310,7 @@ impl App for Terminal {
             clock_armed: Rc::new(Cell::new(false)),
             blink_armed: Rc::new(Cell::new(false)),
             notes_armed: Rc::new(Cell::new(false)),
-            note_focused,
+            editing,
             replay,
             toolbelt,
             clipboard: consume_root_context(),
@@ -509,7 +510,7 @@ impl App for Terminal {
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
                 let data = event.data();
                 held.set_if_modified(data.modifiers.union(key_modifier(&data.key)));
-                if keyboard.confirm.peek().is_some() || *keyboard.note_focused.peek() {
+                if keyboard.confirm.peek().is_some() || *keyboard.editing.peek() {
                     return;
                 }
                 let replaying = *keyboard.replay.peek();
@@ -660,14 +661,20 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                     blink_off: painting.blink_off && *id == painting.active,
                     annotations: session.extras().annotations.clone(),
                     dark: painting.dark,
+                    composer: session.composer.borrow().clone(),
+                    on_composer: {
+                        let handles = painting.handles.clone();
+                        let session = session.clone();
+                        Callback::new(move |event| composer_event(&handles, &session, event))
+                    },
                     on_note: {
                         let handles = painting.handles.clone();
                         let session = session.clone();
                         Callback::new(move |(note, event)| match event {
                             NoteEvent::Changed(text) => session.set_annotation_text(note, text),
                             NoteEvent::Focused(focused) => {
-                                let mut note_focused = handles.note_focused;
-                                note_focused.set(focused);
+                                let mut editing = handles.editing;
+                                editing.set(focused);
                                 if focused {
                                     session.annotation_focused(note);
                                 }
@@ -1379,6 +1386,43 @@ fn repaint_after(handles: &Handles, revision: State<u64>, armed: &Rc<Cell<bool>>
     }
 }
 
+// iTermComposerManager.m: Escape and the close button keep the text for the next time; a send
+// empties it and dismisses without the fade.
+fn composer_event(handles: &Handles, session: &Rc<Session>, event: ComposerEvent) {
+    let mut composer = session.composer.borrow_mut();
+    match event {
+        ComposerEvent::Changed(text) => composer.text = text,
+        ComposerEvent::Focused(focused) => {
+            let mut editing = handles.editing;
+            editing.set(focused);
+            return;
+        }
+        ComposerEvent::Close => composer.close(),
+        ComposerEvent::SendAll => {
+            if let Some(command) = composer.send_all() {
+                session.send_command(&command);
+            }
+        }
+        ComposerEvent::SendCommandAt(cursor) => {
+            if let Some(command) = composer.take_command(cursor) {
+                session.send_command(&command);
+            }
+        }
+    }
+    let closed = !composer.open;
+    drop(composer);
+    if closed {
+        let editing = handles.editing;
+        // BK-027: the closing key still reaches the global handler, so editing ends one loop later.
+        handles.after(Duration::ZERO, move || {
+            let mut editing = editing;
+            editing.set(false);
+        });
+    }
+    let mut workspace = handles.workspace;
+    workspace.write();
+}
+
 fn animate_notes(handles: &Handles, revision: State<u64>) {
     let animating = handles.sessions.peek().values().any(|session| {
         session
@@ -1386,6 +1430,7 @@ fn animate_notes(handles: &Handles, revision: State<u64>) {
             .annotations
             .iter()
             .any(pane_view::note_animating)
+            || pane_view::composer_animating(&session.composer.borrow())
     });
     if animating {
         repaint_after(
@@ -2164,6 +2209,13 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         menu::NEXT_ANNOTATION | menu::PREVIOUS_ANNOTATION => {
             if let Some(session) = &active {
                 session.step_annotation(id == menu::NEXT_ANNOTATION);
+            }
+        }
+        menu::SHOW_COMPOSER => {
+            if let Some(session) = &active {
+                session.composer.borrow_mut().toggle();
+                let mut editing = handles.editing;
+                editing.set(false);
             }
         }
         _ if id == menu::SHOW_ANNOTATIONS.id => {

@@ -7,11 +7,13 @@ use alacritty_terminal::index::{Column, Line, Point, Side};
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::TermMode;
 use barrier_kit_next::canvas::canvas;
-use barrier_kit_next::tokens::{ANNOTATION, TERMINAL};
+use barrier_kit_next::tokens::{ANNOTATION, COMPOSER, TERMINAL};
 use freya_core::prelude::*;
 use torin::prelude::Size;
 use vow_design::SPACE_2;
 
+use crate::composer::Composer;
+use crate::composer_view::{ComposerEvent, ComposerView};
 use crate::config::Scheme;
 use crate::grid::{self, Fonts};
 use crate::io::{Annotation, AnnotationId};
@@ -40,6 +42,8 @@ pub struct TerminalPane {
     pub annotations: Vec<Annotation>,
     pub dark: bool,
     pub on_note: Callback<(AnnotationId, NoteEvent), ()>,
+    pub composer: Composer,
+    pub on_composer: Callback<ComposerEvent, ()>,
 }
 
 impl PartialEq for TerminalPane {
@@ -58,6 +62,7 @@ impl PartialEq for TerminalPane {
             && self.blink_off == other.blink_off
             && self.annotations == other.annotations
             && self.dark == other.dark
+            && self.composer == other.composer
     }
 }
 
@@ -314,7 +319,44 @@ impl Component for TerminalPane {
                     .child(painter),
             )
             .children(notes)
+            .maybe_child(
+                composer_opacity(&self.composer).map(|opacity| ComposerView {
+                    text: self.composer.text.clone(),
+                    bounds: *size.read(),
+                    family: fonts.family.clone(),
+                    size: fonts.size,
+                    line_height: fonts.cell_height,
+                    ink: rgb(scheme.foreground),
+                    cursor: rgb(scheme.cursor),
+                    opacity,
+                    dark: is_dark(scheme.background),
+                    on_event: self.on_composer.clone(),
+                }),
+            )
     }
+}
+
+fn rgb(color: alacritty_terminal::vte::ansi::Rgb) -> vow_design::Rgba {
+    vow_design::Rgba::rgb8(color.r, color.g, color.b)
+}
+
+// NSColor+iTerm.m -isDark: perceived brightness under one half.
+fn is_dark(color: alacritty_terminal::vte::ansi::Rgb) -> bool {
+    let brightness =
+        0.30 * f32::from(color.r) + 0.59 * f32::from(color.g) + 0.11 * f32::from(color.b);
+    brightness < 0.5 * 255.0
+}
+
+fn composer_opacity(composer: &Composer) -> Option<f32> {
+    if composer.open {
+        return Some(1.0);
+    }
+    let faded = progress(composer.closed, COMPOSER.fade_ms);
+    (faded < 1.0).then_some(1.0 - faded)
+}
+
+pub fn composer_animating(composer: &Composer) -> bool {
+    !composer.open && progress(composer.closed, COMPOSER.fade_ms) < 1.0
 }
 
 fn notes(

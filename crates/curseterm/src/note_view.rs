@@ -137,15 +137,21 @@ impl Component for NoteView {
                         margins.left + ANNOTATION.line_padding,
                     ))
                     .child(
-                        TextView::new(value, ANNOTATION.font, color(colors.ink))
-                            .width(Size::px(
-                                ANNOTATION.text_width - 2.0 * ANNOTATION.line_padding,
-                            ))
-                            .auto_focus(self.focus)
-                            .on_change(move |text| on_change.call(NoteEvent::Changed(text)))
-                            .on_focus_change(move |focused| {
-                                on_focus_change.call(NoteEvent::Focused(focused))
-                            }),
+                        TextView::new(
+                            value,
+                            ANNOTATION.font.family,
+                            ANNOTATION.font.size as f32,
+                            ANNOTATION.font.line_height as f32,
+                            color(colors.ink),
+                        )
+                        .width(Size::px(
+                            ANNOTATION.text_width - 2.0 * ANNOTATION.line_padding,
+                        ))
+                        .auto_focus(self.focus)
+                        .on_change(move |text| on_change.call(NoteEvent::Changed(text)))
+                        .on_focus_change(move |focused| {
+                            on_focus_change.call(NoteEvent::Focused(focused))
+                        }),
                     ),
             )
             .child(

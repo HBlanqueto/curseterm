@@ -1,36 +1,70 @@
 //! Multi-line editable text without a frame, like `NSTextView`: Enter breaks the line and
-//! Escape gives the focus back.
+//! Escape gives the focus back, unless `on_key` takes the key first.
+
+use std::borrow::Cow;
 
 use freya_components::cursor_blink::use_cursor_blink;
 use freya_core::prelude::*;
 use freya_edit::*;
 use torin::prelude::{Area, Size};
-use vow_design::Font;
+
+const EDITING_KEYS: [&str; 6] = ["a", "c", "x", "v", "z", "y"];
+
+#[derive(Clone, PartialEq)]
+pub struct KeyPress {
+    pub key: Key,
+    pub modifiers: Modifiers,
+    pub cursor_utf16: usize,
+}
 
 #[derive(PartialEq)]
 pub struct TextView {
     value: State<String>,
-    font: Font,
+    family: Cow<'static, str>,
+    size: f32,
+    line_height: f32,
     ink: Color,
+    cursor: Color,
     width: Size,
     auto_focus: bool,
     on_change: Option<Callback<String, ()>>,
     on_focus_change: Option<Callback<bool, ()>>,
+    on_key: Option<Callback<KeyPress, bool>>,
     key: DiffKey,
 }
 
 impl TextView {
-    pub fn new(value: State<String>, font: Font, ink: Color) -> Self {
+    pub fn new(
+        value: State<String>,
+        family: impl Into<Cow<'static, str>>,
+        size: f32,
+        line_height: f32,
+        ink: Color,
+    ) -> Self {
         Self {
             value,
-            font,
+            family: family.into(),
+            size,
+            line_height,
             ink,
+            cursor: ink,
             width: Size::fill(),
             auto_focus: false,
             on_change: None,
             on_focus_change: None,
+            on_key: None,
             key: DiffKey::None,
         }
+    }
+
+    pub fn cursor(mut self, cursor: Color) -> Self {
+        self.cursor = cursor;
+        self
+    }
+
+    pub fn on_key(mut self, callback: impl Into<Callback<KeyPress, bool>>) -> Self {
+        self.on_key = Some(callback.into());
+        self
     }
 
     pub fn width(mut self, width: Size) -> Self {
@@ -69,7 +103,7 @@ impl Component for TextView {
         let mut dragging = use_state(|| false);
         let mut value = self.value;
         let mut editable = use_editable(|| value.read().to_string(), EditableConfig::new);
-        let (mut movement, cursor_color) = use_cursor_blink(focus().is_focused(), self.ink);
+        let (mut movement, cursor_color) = use_cursor_blink(focus().is_focused(), self.cursor);
         let on_focus_change = use_reactive(&self.on_focus_change);
         let mut reported = use_state(|| false);
         use_side_effect(move || {
@@ -91,7 +125,27 @@ impl Component for TextView {
         }
 
         let on_change = self.on_change.clone();
+        let on_key = self.on_key.clone();
         let on_key_down = move |event: Event<KeyboardEventData>| {
+            if let Some(on_key) = &on_key {
+                let press = KeyPress {
+                    key: event.key.clone(),
+                    modifiers: event.modifiers,
+                    cursor_utf16: editable.editor().peek().cursor_pos(),
+                };
+                if on_key.call(press) {
+                    return;
+                }
+            }
+            // freya-edit 0.4.3 types any character even with Super or Ctrl held; a key
+            // equivalent never types in an NSTextView.
+            if event
+                .modifiers
+                .intersects(Modifiers::META | Modifiers::CONTROL)
+                && matches!(&event.key, Key::Character(typed) if !EDITING_KEYS.contains(&typed.as_str()))
+            {
+                return;
+            }
             if event.key == Key::Named(NamedKey::Escape) {
                 a11y_id.request_unfocus();
                 return;
@@ -160,9 +214,9 @@ impl Component for TextView {
             .on_sized(move |event: Event<SizedEventData>| area.set(event.visible_area))
             .on_focus_press(on_focus_press)
             .width(self.width.clone())
-            .font_family(self.font.family)
-            .font_size(self.font.size as f32)
-            .line_height(self.font.line_height as f32 / self.font.size as f32)
+            .font_family(self.family.clone())
+            .font_size(self.size)
+            .line_height(self.line_height / self.size)
             .color(self.ink)
             .cursor_index(focused.then(|| editor.cursor_pos()))
             .cursor_color(cursor_color)

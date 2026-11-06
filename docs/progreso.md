@@ -1583,3 +1583,59 @@ líneas que descarta. Se vio con `scrollback_lines = 50`.
 arrastrar; no tiene barra de desplazamiento; sin destello de «vuelta» al dar
 la vuelta Next o Previous; la selección inteligente es la de CurseTerm (URL o
 palabra), no las reglas de iTerm2; las anotaciones no se guardan al cerrar.
+
+## Fase 36 — Composer
+
+### Plan
+
+View › Show Composer (⇧⌘.) de iTerm2, copiado de
+`sources/Composer/iTermComposerManager.m`,
+`iTermMinimalComposerViewController.m` y su `.xib`, `ComposerTextView.swift`,
+`iTermStatusBarLargeComposerViewController.xib` y `PTYSession.m`
+(`frameForDesiredHeight:`, `composerManagerAppearance:`, `sendCommand:`):
+
+1. **Modelo** (`composer.rs`): cada sesión guarda si el Composer está abierto
+   y su texto. ⇧⌘. lo abre o lo cierra conservando el texto.
+2. **Caja:** arriba del panel, a 20 puntos de cada lado (mínimo 217 de ancho),
+   135 de alto y nunca más que el panel menos 8. Dentro, a 9 puntos, un
+   material «sheet»: fondo de ventana translúcido sobre el terminal
+   desenfocado, radio 6 y borde gris de 1 punto. La apariencia sigue al fondo
+   del terminal (brillo percibido 0,30/0,59/0,11 bajo 0,5 = oscuro).
+3. **Texto** con el bloque `views::text_view` (BK-036): fuente, tamaño, color
+   y cursor del perfil; margen de 5 puntos; desplazamiento vertical.
+4. **Fila inferior** de 19 puntos con «Press ⇧↩ to send.» a la derecha, que se
+   oculta por debajo de 180 puntos; botón de cerrar de 24×23 arriba a la
+   derecha.
+5. **Teclas** (`standardActions`): ↩ parte la línea; ⇧↩ envía todo, cada línea
+   con su retorno, y cierra sin fundido; ⌥⇧↩ envía la orden del cursor (su
+   línea y las unidas con `\` al final) y la quita del texto; Escape y el
+   botón cierran con un fundido de 0,125 s y conservan el texto.
+6. **Prueba** en sway sin pantalla en los dos modos del kit y documentación.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla en los dos modos del kit. `./dev.sh check`
+limpio en los dos modos; 45 tests de la app (uno nuevo para la orden del
+cursor).
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| ⇧⌘. (en `wtype`, Super+Mayús+`greater`): se abre arriba con el foco, oscuro sobre el esquema oscuro y lo tecleado no llega a la shell | ✓ | `fase36-composer.png` |
+| Un `for` de cuatro líneas y ⇧↩: la shell lo ejecuta (`uno`, `dos`, `tres`) y la caja se cierra | ✓ | `fase36-composer-enviado.png` |
+| ⌥⇧↩ con el cursor en la primera línea: envía `echo uno` y la quita; la caja sigue abierta | ✓ | — |
+| Escape y el botón de cerrar: se cierra, Escape no llega a la shell y ⇧⌘. vuelve con el texto | ✓ | — |
+| El «>» de ⇧⌘> no entra en el texto | ✓ | — |
+| Kit parcheado, menú D-Bus: View › Show Composer lo abre | ✓ | — |
+
+**No probado:** un esquema claro (material claro), el fundido al cerrar en
+una captura, pegar con ⌘V dentro, el IME y que el desplazamiento siga al
+cursor con mucho texto.
+
+**Difiere de iTerm2:** sin asas para cambiar la altura (siempre 135) ni
+arrastre; sin ⌥↩ (poner en cola), autocompletado, historial, ayuda, IA,
+varios cursores ni enviar solo la selección; sin Auto Composer ni Composer
+en la barra de estado; el texto termina antes del botón de cerrar porque
+Freya da el puntero al desplazamiento que tiene debajo; tras ⌥⇧↩ el cursor
+no vuelve al inicio de la orden quitada.

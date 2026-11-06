@@ -380,8 +380,9 @@ Each gap says how it is solved (CurseTerm ADR 0001):
   US keyboard, the `]` key arrives as `}`.
 - **What is missing**: comparing by physical key (`Code`) or by keysym without Shift.
 - **How CurseTerm solves it**: «Select Next Tab» and «Select Previous
-  Tab» are declared as text as `Super+Shift+}` and `Super+Shift+{`
-  (`crates/curseterm/src/menu.rs`). Tested with `wtype`.
+  Tab» are declared as text as `Super+Shift+}` and `Super+Shift+{`, and
+  «Show Composer» (⇧⌘.) as `Super+Shift+>` (`crates/curseterm/src/menu.rs`).
+  Tested with `wtype`.
 - **Cost of the workaround**: it depends on the keyboard layout; the menu shows `}` instead of `]`.
 - **Proposed kit API**: that `find_menu_shortcut` also receives the `Code` and compares by it when Shift is held.
 - **Severity**: medium
@@ -602,7 +603,9 @@ Each gap says how it is solved (CurseTerm ADR 0001):
   global handler ignores keys and Escape closes the bar. With the alert up
   the handler ignores everything, and the alert is removed with
   `Timers::after(Duration::ZERO)` (`dismiss_later`) so the handler still
-  sees it open when it gets that same key.
+  sees it open when it gets that same key. Notes and the Composer report
+  focus with `on_focus_change` of the `views::text_view` block, and the
+  Composer stops editing one loop after Escape closes it.
 - **Cost of the workaround**: one more piece of state that goes out of sync if the bar
   closes without going through `Find::close`.
 - **Proposed kit API**: `SearchField::on_cancel` and
@@ -778,12 +781,15 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **How CurseTerm solves it**: the `views::text_view::TextView` block in
   `barrier-kit-next`, on `use_editable` from `freya-edit` 0.4.3, with the same
   editing, drag selection, IME and cursor blink as `Input`. It reports text
-  and focus changes through callbacks.
+  and focus changes through callbacks; `on_key` lets the app take a key with
+  the cursor position (the Composer uses ⇧↩ and ⌥⇧↩), and it types no
+  characters with Super or Ctrl held, except the editing commands.
 - **Cost of the workaround**: two more dependencies in the block
   (`freya-components` without default features and `freya-edit`, already in
   the tree through the kit) and no scroll bar: it grows with the text.
-- **Proposed kit API**: `TextView::new(value, font, ink)` with `width`,
-  `auto_focus`, `on_change` and `on_focus_change`, like the block.
+- **Proposed kit API**: `TextView::new(value, family, size, line_height,
+  ink)` with `cursor`, `width`, `auto_focus`, `on_change`, `on_focus_change`
+  and `on_key`, like the block.
 - **Severity**: medium
 - **How to reproduce**: look in `crates/barrier-kit/src/controls.rs` for a
   control that takes Enter as a line break.

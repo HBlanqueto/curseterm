@@ -1,6 +1,8 @@
 mod arrangement;
 mod auxiliary;
 mod clock;
+mod composer;
+mod composer_view;
 mod config;
 mod grid;
 mod integration;

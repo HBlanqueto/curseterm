@@ -107,6 +107,7 @@ pub const ANNOTATE_SELECTION: Action =
     Action::new("annotate-selection", || tr!("annotate-selection"));
 pub const NEXT_ANNOTATION: &str = "next-annotation";
 pub const PREVIOUS_ANNOTATION: &str = "previous-annotation";
+pub const SHOW_COMPOSER: &str = "show-composer";
 pub const SHOW_ANNOTATIONS: Action =
     Action::new("show-annotations", || tr!("show-annotations")).shortcut(super_key('\\'));
 pub const PREVIOUS_MARK: &str = "previous-mark";
@@ -309,6 +310,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 MenuItem::Separator,
                 FIND_CURSOR.item(true),
                 SHOW_ANNOTATIONS.item_with(true, CheckState::Checkbox(false)),
+                keyed(SHOW_COMPOSER, tr!("show-composer"), "Super+Shift+>"),
                 OPEN_QUICKLY.item(true),
                 INSTANT_REPLAY.item(true),
                 TOOLBELT.item_with(true, CheckState::Checkbox(false)),
