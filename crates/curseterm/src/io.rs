@@ -9,14 +9,14 @@ use std::path::PathBuf;
 use std::process::ChildStdin;
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex};
-use std::time::{Instant, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
 use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Line};
 use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::Term;
-use alacritty_terminal::term::cell::Flags;
+use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::tty::{EventedReadWrite, Pty};
 use alacritty_terminal::vte::ansi::{Handler, Processor};
 use freya_engine::prelude::{Data, Image};
@@ -49,6 +49,14 @@ struct Compiled {
     text: String,
 }
 
+const REPLAY_FRAMES: usize = 120;
+const REPLAY_INTERVAL: Duration = Duration::from_millis(500);
+
+pub struct Snapshot {
+    pub at: SystemTime,
+    pub rows: Vec<Vec<Cell>>,
+}
+
 #[derive(Default)]
 pub struct Extras {
     pub directory: Option<PathBuf>,
@@ -62,6 +70,7 @@ pub struct Extras {
     pub stamps: VecDeque<(i64, SystemTime)>,
     pub show_timestamps: bool,
     pub log: Option<File>,
+    pub replay: VecDeque<Snapshot>,
     pub coprocess: Option<ChildStdin>,
     pub cursor_spotlight: Option<Instant>,
     pub triggers_enabled: bool,
@@ -102,6 +111,26 @@ impl Extras {
         }
         while self.stamps.len() > keep {
             self.stamps.pop_front();
+        }
+    }
+
+    fn record(&mut self, term: &Term<Listener>) {
+        let due = self
+            .replay
+            .back()
+            .is_none_or(|last| last.at.elapsed().unwrap_or_default() >= REPLAY_INTERVAL);
+        if !due {
+            return;
+        }
+        let rows = (0..term.screen_lines() as i32)
+            .map(|line| term.grid()[Line(line)].into_iter().cloned().collect())
+            .collect();
+        self.replay.push_back(Snapshot {
+            at: SystemTime::now(),
+            rows,
+        });
+        if self.replay.len() > REPLAY_FRAMES {
+            self.replay.pop_front();
         }
     }
 
@@ -307,6 +336,7 @@ fn read_loop(
             run_triggers(&term, &extras, &mut scanned, &listener);
             if let Ok(mut extras) = extras.lock() {
                 extras.stamp(absolute_line(&term), SystemTime::now(), term.total_lines());
+                extras.record(&term);
             }
         }
         listener.send_event(Event::Wakeup);
@@ -462,8 +492,6 @@ fn place(
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use super::*;
 
     #[test]

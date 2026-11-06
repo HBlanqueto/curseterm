@@ -10,7 +10,7 @@ use alacritty_terminal::grid::Scroll;
 use alacritty_terminal::index::Direction as SearchDirection;
 use barrier_kit::app::use_menu_action;
 use barrier_kit::app_menu::MenuHandle;
-use barrier_kit::controls::{Button, ButtonStyle, SearchField, TextField};
+use barrier_kit::controls::{Button, ButtonStyle, SearchField, Slider, TextField};
 use barrier_kit::platform::{Timers, WakeHandle, WindowControls};
 use barrier_kit::style::{Palette, text};
 use barrier_kit::symbol::Symbol;
@@ -28,6 +28,7 @@ use torin::prelude::{Alignment, Content, Direction, Size};
 
 use vow_design::{CAPTION, DURATION_FAST_MS, DURATION_SLOW_MS, HEADLINE, Rgba, SPACE_1, SPACE_2};
 
+use crate::clock::local_time;
 use crate::config::{
     APP_ID, AltKey, ClosePrompt, Defaults, Profile, SessionEnd, WorkingDirectory, change_defaults,
 };
@@ -71,6 +72,7 @@ struct Handles {
     timers: Timers,
     alive: Rc<Cell<bool>>,
     dark: Rc<Cell<bool>>,
+    replay: State<Option<(SessionId, usize)>>,
     clipboard: ClipboardState,
     broadcast: State<Broadcast>,
     find: Find,
@@ -162,6 +164,13 @@ impl Handles {
         });
     }
 
+    fn replay_frames(&self, id: SessionId) -> usize {
+        self.sessions
+            .peek()
+            .get(&id)
+            .map_or(0, |session| session.extras().replay.len())
+    }
+
     fn active(&self) -> Option<Rc<Session>> {
         let id = self.workspace.peek().active_session()?;
         self.sessions.peek().get(&id).cloned()
@@ -236,6 +245,7 @@ impl App for Terminal {
         let sheet = use_state(|| None::<Sheet>);
         let mut held = use_state(Modifiers::empty);
         let transparency = use_state(|| true);
+        let replay = use_state(|| None::<(SessionId, usize)>);
         let draft = use_state(String::new);
         let picker = PickerState {
             query: use_state(String::new),
@@ -258,6 +268,7 @@ impl App for Terminal {
             timers: Timers::get(),
             alive: Rc::new(Cell::new(true)),
             dark: Rc::new(Cell::new(dark)),
+            replay,
             clipboard: consume_root_context(),
             broadcast,
             find,
@@ -408,6 +419,7 @@ impl App for Terminal {
                 },
                 transparent,
                 preedit: ime_preedit(&handles),
+                replay: *replay.read(),
             };
             pane_tree(&root, Vec::new(), &painting)
         });
@@ -421,6 +433,7 @@ impl App for Terminal {
 
         let keyboard = handles.clone();
         let find_bar = (*find.open.read()).then(|| find_bar(&handles, revision));
+        let replay_bar = (*replay.read()).map(|(id, index)| replay_bar(&handles, id, index));
         let alert = (*closing.read()).map(|pending| close_alert(&handles, pending));
         let sheet_view = (*sheet.read()).map(|open| match open {
             Sheet::Pick(picker) => pick_sheet(&handles, picker, revision),
@@ -448,6 +461,22 @@ impl App for Terminal {
                 let data = event.data();
                 held.set_if_modified(data.modifiers.union(key_modifier(&data.key)));
                 if keyboard.closing.peek().is_some() {
+                    return;
+                }
+                let replaying = *keyboard.replay.peek();
+                if let Some((id, index)) = replaying {
+                    let mut replay = keyboard.replay;
+                    match data.key {
+                        Key::Named(NamedKey::Escape) => replay.set(None),
+                        Key::Named(NamedKey::ArrowLeft) => {
+                            replay.set(Some((id, index.saturating_sub(1))))
+                        }
+                        Key::Named(NamedKey::ArrowRight) => {
+                            let last = keyboard.replay_frames(id).saturating_sub(1);
+                            replay.set(Some((id, (index + 1).min(last))));
+                        }
+                        _ => {}
+                    }
                     return;
                 }
                 if keyboard.sheet.peek().is_some() {
@@ -509,6 +538,7 @@ impl App for Terminal {
                     .height(Size::flex(1.0))
                     .maybe_child(body),
             )
+            .maybe_child(replay_bar)
     }
 }
 
@@ -526,6 +556,7 @@ struct Painting {
     find: Option<Rc<str>>,
     transparent: bool,
     preedit: Option<Rc<str>>,
+    replay: Option<(SessionId, usize)>,
 }
 
 fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
@@ -545,6 +576,10 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                     on_focus: Callback::new(move |id| workspace.write().focus(id)),
                     held: painting.handles.held,
                     preedit: painting.preedit.clone().filter(|_| *id == painting.active),
+                    replay: painting
+                        .replay
+                        .filter(|(replayed, _)| replayed == id)
+                        .map(|(_, index)| index),
                     opacity: if painting.transparent {
                         profile.opacity()
                     } else {
@@ -1081,6 +1116,42 @@ fn copy_command_label(command: CopyCommand) -> &'static str {
         CopyCommand::Copy => tr!("copy-and-leave"),
         CopyCommand::Exit => tr!("copy-leave"),
     }
+}
+
+fn replay_bar(handles: &Handles, id: SessionId, index: usize) -> Element {
+    let session = handles.sessions.read().get(&id).cloned();
+    let (frames, at) = session.map_or((0, None), |session| {
+        let extras = session.extras();
+        (
+            extras.replay.len(),
+            extras.replay.get(index).map(|frame| frame.at),
+        )
+    });
+    let mut replay = handles.replay;
+    let palette = Palette::current();
+    rect()
+        .width(Size::fill())
+        .direction(Direction::Horizontal)
+        .content(Content::flex())
+        .cross_align(Alignment::Center)
+        .padding(SPACE_1)
+        .spacing(SPACE_2)
+        .background(color(palette.window_background))
+        .child(text(
+            tr!("instant-replay-bar"),
+            CAPTION,
+            palette.secondary_label,
+        ))
+        .child(
+            rect().width(Size::flex(1.0)).child(
+                Slider::stepped(frames.max(2))
+                    .value(index)
+                    .on_change(move |step: usize| replay.set(Some((id, step)))),
+            ),
+        )
+        .maybe_child(at.map(|at| text(local_time(at), CAPTION, palette.label)))
+        .child(Button::new(tr!("done")).on_press(move |_| replay.set(None)))
+        .into_element()
 }
 
 fn find_bar(handles: &Handles, mut revision: State<u64>) -> Element {
@@ -1624,6 +1695,14 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         _ if id == menu::RESET_CHARSET.id => {
             if let Some(session) = &active {
                 session.reset_character_set();
+            }
+        }
+        _ if id == menu::INSTANT_REPLAY.id => {
+            if let Some(session) = &active {
+                let frames = session.extras().replay.len();
+                if frames > 0 {
+                    handles.replay.clone().set(Some((session.id, frames - 1)));
+                }
             }
         }
         _ if id == menu::FIND_CURSOR.id => {

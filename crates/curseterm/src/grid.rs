@@ -203,6 +203,7 @@ pub struct Overlay<'a> {
     pub badge: Option<&'a str>,
     pub opacity: f32,
     pub preedit: Option<&'a str>,
+    pub replay: Option<&'a [Vec<Cell>]>,
 }
 
 pub fn draw(
@@ -248,6 +249,15 @@ pub fn draw(
         fonts,
         background,
     };
+    if let Some(rows) = overlay.replay {
+        for (line, row) in rows.iter().enumerate() {
+            for (column, cell) in row.iter().enumerate() {
+                draw_cell(ctx, &frame, cell, column, line as i32, false);
+            }
+        }
+        ctx.canvas.restore();
+        return;
+    }
     for indexed in display_iter {
         let selected = selection.is_some_and(|range| range.contains(indexed.point));
         let line = indexed.point.line.0 + offset;

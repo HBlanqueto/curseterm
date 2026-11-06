@@ -2,7 +2,7 @@
 
 Versión/commit de BarrierKit usado: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Resumen: documento vivo; estado al cerrar la fase 23 (2026-11-06), probado en
+Resumen: documento vivo; estado al cerrar la fase 24 (2026-11-06), probado en
 sway sin pantalla con lavapipe (`progreso.md`). Lo más serio: los handlers de
 `use_menu_action` corren fuera del contexto de Freya y hacen abortar la app si
 tocan el portapapeles o `WindowControls::get()` (BK-017); el menú solo se

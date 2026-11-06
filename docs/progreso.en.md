@@ -1160,3 +1160,24 @@ format Linux apps understand.
    snapshot's time and "Done". ← and → change snapshot; Escape or Done go
    back to the present.
 3. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the kit as is: it needs no patch. `./dev.sh
+check` clean in both kit modes; 40 and 41 app tests and 1 block test.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `clear; echo uno`, `echo dos` and `echo tres` one second apart; ⌥⌘B shows the last snapshot, ← four times reaches the first (just the prompt), with its time | ✓ after fixing a panic: the `if let`'s `peek` was still borrowed when writing the state | `fase24-repeticion.png` |
+| Escape goes back to the present and `echo presente` writes into the shell | ✓ | — |
+
+**Not tested:** the slider with the mouse; a session with more than 120
+snapshots.
+
+**Differs from iTerm2:**
+
+- Screen snapshots are kept every half second, not on every change; memory
+  is capped by snapshot count and there is no setting to change it.
+- Only the visible screen is replayed, without each moment's scrollback.

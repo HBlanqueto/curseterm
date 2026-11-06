@@ -116,6 +116,8 @@ pub const OPEN_QUICKLY: Action =
     Action::new("open-quickly", || tr!("open-quickly")).shortcut(super_with(Modifiers::SHIFT, 'o'));
 pub const OPEN_PROFILES: Action =
     Action::new("open-profiles", || tr!("open-profiles")).shortcut(super_key('o'));
+pub const INSTANT_REPLAY: Action = Action::new("instant-replay", || tr!("instant-replay"))
+    .shortcut(super_with(Modifiers::ALT, 'b'));
 pub const FIND_CURSOR: Action =
     Action::new("find-cursor", || tr!("find-cursor")).shortcut(super_key('/'));
 pub const MAXIMIZE_PANE: &str = "maximize-pane";
@@ -261,6 +263,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 MenuItem::Separator,
                 FIND_CURSOR.item(true),
                 OPEN_QUICKLY.item(true),
+                INSTANT_REPLAY.item(true),
                 SHOW_TIMESTAMPS.item_with(true, CheckState::Checkbox(false)),
                 keyed(MAXIMIZE_PANE, tr!("maximize-pane"), "Super+Shift+Return")
                     .with_enabled(false)

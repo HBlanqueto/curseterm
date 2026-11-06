@@ -235,3 +235,6 @@ stop-coprocess = Detener el coproceso
 coprocess-command = Orden; lee la salida de la sesión y lo que escribe se teclea
 coprocess-confirm = Ejecutar
 copy-styled = Copiar con formato
+instant-replay = Repetición instantánea
+instant-replay = Repetición instantánea
+instant-replay-bar = Repetición

@@ -235,3 +235,6 @@ stop-coprocess = Stop Coprocess
 coprocess-command = Command; it reads the session output and its output is typed in
 coprocess-confirm = Run
 copy-styled = Copy with Styles
+instant-replay = Start Instant Replay
+instant-replay = Start Instant Replay
+instant-replay-bar = Instant Replay

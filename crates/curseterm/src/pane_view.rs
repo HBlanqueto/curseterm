@@ -31,6 +31,7 @@ pub struct TerminalPane {
     pub badge: Option<Rc<str>>,
     pub opacity: f32,
     pub preedit: Option<Rc<str>>,
+    pub replay: Option<usize>,
 }
 
 impl PartialEq for TerminalPane {
@@ -45,6 +46,7 @@ impl PartialEq for TerminalPane {
             && self.badge == other.badge
             && self.opacity == other.opacity
             && self.preedit == other.preedit
+            && self.replay == other.replay
     }
 }
 
@@ -74,6 +76,7 @@ impl Component for TerminalPane {
         let badge = self.badge.clone();
         let opacity = self.opacity;
         let preedit = self.preedit.clone();
+        let replay = self.replay;
 
         let mut look = DefaultHasher::new();
         (
@@ -86,6 +89,7 @@ impl Component for TerminalPane {
             &badge,
             opacity.to_bits(),
             &preedit,
+            replay,
             &scheme.name,
             fonts.cell_width.to_bits(),
         )
@@ -109,6 +113,9 @@ impl Component for TerminalPane {
                     badge: badge.as_deref(),
                     opacity,
                     preedit: preedit.as_deref(),
+                    replay: replay
+                        .and_then(|index| extras.replay.get(index))
+                        .map(|snapshot| snapshot.rows.as_slice()),
                 };
                 grid::draw(ctx, &term, &fonts, &scheme, focused, &overlay);
             })

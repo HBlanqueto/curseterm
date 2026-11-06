@@ -1165,3 +1165,24 @@ con formato que entienden las apps de Linux.
    hora de la foto y «Done». ← y → cambian de foto; Escape o Done vuelven al
    presente.
 3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit tal cual: no necesita parche.
+`./dev.sh check` limpio en los dos modos del kit; 40 y 41 tests de la app y 1
+del bloque.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `clear; echo uno`, `echo dos` y `echo tres` con un segundo entre cada una; ⌥⌘B muestra la última foto, ← cuatro veces llega a la primera (solo el prompt), con la hora | ✓ tras corregir un pánico: el `peek` del `if let` seguía prestado al escribir el estado | `fase24-repeticion.png` |
+| Escape vuelve al presente y `echo presente` escribe en la shell | ✓ | — |
+
+**No probado:** el deslizador con el ratón; una sesión con más de 120 fotos.
+
+**Difiere de iTerm2:**
+
+- Se guardan fotos de la pantalla cada medio segundo, no cada cambio; la
+  memoria se limita por número de fotos y no hay ajuste para cambiarlo.
+- Solo se reproduce la pantalla visible, sin el historial de cada momento.
