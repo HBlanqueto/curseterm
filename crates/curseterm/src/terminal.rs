@@ -39,6 +39,7 @@ use vow_design::{
     TITLEBAR,
 };
 
+use crate::add_trigger::AddTriggerSheet;
 use crate::advanced_paste::{AdvancedPaste, advanced_paste_sheet};
 use crate::arrangement::{self, Arrangement, TabLayout};
 use crate::clock::{local_date_time, local_time};
@@ -46,7 +47,7 @@ use crate::command_history;
 use crate::composer_view::ComposerEvent;
 use crate::config::{
     APP_ID, APP_NAME, AltKey, ClosePrompt, Defaults, MarkAlert, Profile, SessionEnd, Theme,
-    WindowStyle, WorkingDirectory, change_defaults,
+    Trigger, WindowStyle, WorkingDirectory, change_defaults,
 };
 use crate::drop_target::{DropTarget, Half};
 use crate::find_mode::FindMode;
@@ -152,6 +153,7 @@ enum Sheet {
     SaveContents(SessionId),
     Log(SessionId),
     Coprocess(SessionId),
+    AddTrigger(SessionId),
     SaveArrangement,
     NamedMark(SessionId),
     CopyModeKeys,
@@ -680,6 +682,14 @@ impl App for Terminal {
             Sheet::Pick(picker) => pick_sheet(&handles, picker, revision),
             Sheet::CopyModeKeys => copy_mode_keys_sheet(&handles),
             Sheet::PasteWarning(_) | Sheet::PasteTabs => paste_question_sheet(&handles, open),
+            Sheet::AddTrigger(of) => {
+                let adding = handles.clone();
+                AddTriggerSheet {
+                    selection: handles.draft.peek().clone(),
+                    on_done: Callback::new(move |trigger| add_trigger(&adding, of, trigger)),
+                }
+                .into_element()
+            }
             Sheet::AdvancedPaste => {
                 let (pasting, cancelling) = (handles.clone(), handles.clone());
                 advanced_paste_sheet(
@@ -1321,6 +1331,10 @@ fn use_live_menu(handles: &Handles) {
         .active()
         .is_some_and(|session| session.extras().triggers_enabled);
     use_menu_checked(menu::TRIGGERS_ENABLED.id, triggers);
+    let interactive = handles
+        .active()
+        .is_some_and(|session| session.extras().triggers_in_interactive_apps);
+    use_menu_checked(menu::TRIGGERS_IN_INTERACTIVE_APPS.id, interactive);
     use_menu_enabled(menu::JUMP_TO_MARK.id, marks);
     use_menu_enabled(menu::NEXT_MARK, marks);
     use_menu_enabled(menu::PREVIOUS_MARK, marks);
@@ -1869,6 +1883,32 @@ fn open_picker(handles: &Handles, picker: Picker) {
     query.set(String::new());
     selected.set(0);
     open_sheet(handles, Sheet::Pick(picker));
+}
+
+// PTYSession.m -addTriggerDictionary:updateProfile:: into the session's profile.
+fn add_trigger(handles: &Handles, session: SessionId, trigger: Option<Trigger>) {
+    let later = handles.clone();
+    handles.after(Duration::ZERO, move || {
+        let mut sheet = later.sheet;
+        sheet.set(None);
+        let profile = later
+            .sessions
+            .peek()
+            .get(&session)
+            .map(|session| session.profile());
+        if let (Some(trigger), Some(name)) = (trigger.clone(), profile) {
+            change_defaults(|defaults| {
+                defaults.ensure_profiles();
+                if let Some(profile) = defaults
+                    .profiles
+                    .iter_mut()
+                    .find(|profile| profile.name == name)
+                {
+                    profile.triggers.push(trigger);
+                }
+            });
+        }
+    });
 }
 
 fn open_sheet(handles: &Handles, open: Sheet) {
@@ -4026,6 +4066,20 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             }
         }
         _ if id == menu::EDIT_TRIGGERS.id => windows::open(&["--settings"]),
+        // PseudoTerminal.m -addTrigger: the selection, if any, becomes the expression.
+        _ if id == menu::ADD_TRIGGER.id => {
+            if let Some(session) = &active {
+                let mut draft = handles.draft;
+                draft.set(session.selected_text().unwrap_or_default());
+                open_sheet(handles, Sheet::AddTrigger(session.id));
+            }
+        }
+        _ if id == menu::TRIGGERS_IN_INTERACTIVE_APPS.id => {
+            if let Some(session) = &active {
+                let mut extras = session.extras();
+                extras.triggers_in_interactive_apps = !extras.triggers_in_interactive_apps;
+            }
+        }
         _ if id == menu::RESTART_SESSION.id => {
             if let Some(session) = active {
                 restart(handles, events, &session);

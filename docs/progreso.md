@@ -3061,3 +3061,45 @@ etiquetas tras el cambio.
 
 **Difiere de iTerm2:** la lista de perfiles de Ajustes y Open Quickly no
 filtran por etiqueta; sin las etiquetas sugeridas al escribir.
+
+## Fase 68 — Add Trigger…, triggers en apps interactivas y resaltado en las celdas
+
+### Plan
+
+El resto de Session › Triggers de iTerm2 (`PseudoTerminal.m -addTrigger:`,
+`iTermAddTriggerViewController`, `PTYSession.m
+-triggerEvaluatorShouldUseTriggers:` y `HighlightTrigger.m`):
+
+1. **Add Trigger…:** una hoja con la selección como expresión literal
+   (escapada), la acción, su parámetro e Instant; OK la añade al perfil de la
+   sesión.
+2. **Enable Triggers in Interactive Apps:** casilla del submenú, marcada por
+   omisión; desmarcada, los triggers no miran la pantalla alternativa.
+3. **Highlight Text y Highlight Line** cambian los colores de las propias
+   celdas, como iTerm2: el resaltado se va con el texto que lo tenía.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado y el menú por D-Bus.
+`./dev.sh check` limpio en los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Seleccionar «alla (x2) aqui» y Add Trigger…: la expresión `alla \(x2\) aqui` y Highlight Text | ✓ | `fase68-anadir-trigger.png` |
+| OK: el trigger entra en el perfil y la siguiente línea con ese texto sale en rojo | ✓ | — |
+| `less` con la casilla marcada: la línea resaltada; desmarcada: sin resaltar, y al salir la pantalla normal sigue resaltando | ✓ | — |
+
+**Fallos encontrados y corregidos en la prueba:**
+- Al volver a `less` quedaba un resaltado viejo en otra línea: los resaltados
+  eran una capa anclada a números de línea. Ahora se pintan en las celdas.
+- Con la casilla desmarcada `less` seguía resaltado: se decidía si mirar las
+  líneas al empezar cada bloque, antes de su `\e[?1049h`. Ahora se decide en
+  cada salto de línea.
+- La hoja pedía texto para Highlight Text; ahora no pide parámetro y el
+  resaltado sale con su fondo rojo de serie.
+
+**No probado:** con el kit tal cual; Cancel en la hoja.
+
+**Difiere de iTerm2:** la hoja no tiene nombre ni los dos colores (se cambian
+luego en Ajustes) ni la opción de añadirlo solo a la sesión; sin Enable All y
+Disable All, que aquí es la casilla Enable Triggers.

@@ -3038,3 +3038,46 @@ change.
 
 **Differs from iTerm2:** the Settings profile list and Open Quickly do not
 filter by tag; no tag suggestions while typing.
+
+## Phase 68 — Add Trigger…, triggers in interactive apps and highlights in the cells
+
+### Plan
+
+The rest of iTerm2's Session › Triggers (`PseudoTerminal.m -addTrigger:`,
+`iTermAddTriggerViewController`, `PTYSession.m
+-triggerEvaluatorShouldUseTriggers:` and `HighlightTrigger.m`):
+
+1. **Add Trigger…:** a sheet with the selection as a literal (escaped)
+   expression, the action, its parameter and Instant; OK adds it to the
+   session's profile.
+2. **Enable Triggers in Interactive Apps:** a submenu checkbox, on by
+   default; off, triggers do not look at the alternate screen.
+3. **Highlight Text and Highlight Line** change the colours of the cells
+   themselves, as iTerm2 does: the highlight goes with the text that had it.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit and the D-Bus menu.
+`./dev.sh check` clean in both modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Selecting «alla (x2) aqui» and Add Trigger…: the expression `alla \(x2\) aqui` and Highlight Text | ✓ | `fase68-anadir-trigger.png` |
+| OK: the trigger goes into the profile and the next line with that text is red | ✓ | — |
+| `less` with the checkbox on: the line highlighted; off: not highlighted, and after quitting the normal screen still highlights | ✓ | — |
+
+**Bugs found and fixed while testing:**
+- Going back into `less` left an old highlight on another line: highlights
+  were an overlay anchored to line numbers. Now they are painted in the
+  cells.
+- With the checkbox off `less` was still highlighted: whether to look at the
+  lines was decided at the start of each chunk, before its `\e[?1049h`. Now it
+  is decided at each line feed.
+- The sheet asked for text for Highlight Text; now it asks for no parameter
+  and the highlight gets its default red background.
+
+**Not tested:** the kit as is; Cancel in the sheet.
+
+**Differs from iTerm2:** the sheet has no name nor the two colours (they are
+changed later in Settings) nor the option to add it to the session only; no
+Enable All and Disable All, which here is the Enable Triggers checkbox.

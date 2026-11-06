@@ -229,6 +229,7 @@ impl Session {
         {
             let mut extras = self.extras();
             extras.set_triggers(&profile.triggers);
+            extras.triggers_in_interactive_apps = profile.triggers_in_interactive_apps;
             extras.set_smart_selection_rules(&profile.smart_selection_rules);
             *self.semantic_history.borrow_mut() = profile.semantic_history.clone();
             extras.apps_change_key_mode = profile.apps_change_key_reporting;

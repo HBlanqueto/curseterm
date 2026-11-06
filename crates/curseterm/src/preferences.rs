@@ -1243,7 +1243,7 @@ fn edit_trigger(index: usize, position: usize, change: impl FnOnce(&mut Trigger)
     });
 }
 
-fn trigger_action_title(action: TriggerAction) -> &'static str {
+pub fn trigger_action_title(action: TriggerAction) -> &'static str {
     match action {
         TriggerAction::Annotate => tr!("trigger-annotate"),
         TriggerAction::HighlightLine => tr!("trigger-highlight-line"),
@@ -1264,7 +1264,7 @@ fn trigger_action_title(action: TriggerAction) -> &'static str {
 }
 
 // Each trigger's -triggerOptionalParameterPlaceholderWithInterpolation:.
-fn trigger_placeholder(action: TriggerAction) -> &'static str {
+pub fn trigger_placeholder(action: TriggerAction) -> &'static str {
     match action {
         TriggerAction::Alert => tr!("trigger-alert-placeholder"),
         TriggerAction::Annotate => tr!("trigger-annotate-placeholder"),

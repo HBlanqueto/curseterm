@@ -139,6 +139,7 @@ pub struct Profile {
     pub initial_text: String,
     pub working_directory: WorkingDirectory,
     pub triggers: Vec<Trigger>,
+    pub triggers_in_interactive_apps: bool,
     pub smart_selection_rules: Vec<Rule>,
     pub bound_hosts: Vec<String>,
     pub tags: Vec<String>,
@@ -354,6 +355,8 @@ impl Default for Profile {
             initial_text: String::new(),
             working_directory: WorkingDirectory::Home,
             triggers: Vec::new(),
+            // iTermProfilePreferences.m KEY_ENABLE_TRIGGERS_IN_INTERACTIVE_APPS: YES.
+            triggers_in_interactive_apps: true,
             smart_selection_rules: smart_selection::default_rules(),
             bound_hosts: Vec::new(),
             tags: Vec::new(),

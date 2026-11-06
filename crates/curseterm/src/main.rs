@@ -1,4 +1,5 @@
 mod activity;
+mod add_trigger;
 mod advanced_paste;
 mod arrangement;
 mod arrangements_pane;

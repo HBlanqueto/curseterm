@@ -77,6 +77,11 @@ pub const RESTART_SESSION: Action = Action::new("restart-session", || tr!("resta
 pub const TRIGGERS_MENU: &str = "triggers-menu";
 pub const TRIGGERS_ENABLED: Action = Action::new("triggers-enabled", || tr!("triggers-enabled"));
 pub const EDIT_TRIGGERS: Action = Action::new("edit-triggers", || tr!("edit-triggers"));
+pub const ADD_TRIGGER: Action = Action::new("add-trigger", || tr!("add-trigger"));
+pub const TRIGGERS_IN_INTERACTIVE_APPS: Action =
+    Action::new("triggers-in-interactive-apps", || {
+        tr!("triggers-in-interactive-apps")
+    });
 pub const RESET: Action = Action::new("reset", || tr!("reset")).shortcut(super_key('r'));
 pub const PASTE_SPECIAL_MENU: &str = "paste-special-menu";
 pub const WARN_MULTI_LINE_PASTE: &str = "warn-multi-line-paste";
@@ -506,8 +511,10 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
                     TRIGGERS_MENU,
                     tr!("triggers-menu"),
                     vec![
-                        TRIGGERS_ENABLED.item_with(true, CheckState::Checkbox(true)),
+                        ADD_TRIGGER.item(true),
                         EDIT_TRIGGERS.item(true),
+                        TRIGGERS_IN_INTERACTIVE_APPS.item_with(true, CheckState::Checkbox(true)),
+                        TRIGGERS_ENABLED.item_with(true, CheckState::Checkbox(true)),
                     ],
                 ),
                 MenuItem::Separator,

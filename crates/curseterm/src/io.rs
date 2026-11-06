@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::ops::{Range, RangeInclusive};
+use std::ops::Range;
 use std::path::PathBuf;
 use std::process::ChildStdin;
 use std::sync::mpsc::{Sender, channel};
@@ -15,10 +15,10 @@ use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Line, Point};
 use alacritty_terminal::sync::FairMutex;
-use alacritty_terminal::term::Term;
 use alacritty_terminal::term::cell::{Cell, Flags, Hyperlink};
+use alacritty_terminal::term::{Term, TermMode};
 use alacritty_terminal::tty::{EventedReadWrite, Pty};
-use alacritty_terminal::vte::ansi::{Handler, Processor, Rgb};
+use alacritty_terminal::vte::ansi::{Color, Handler, Processor};
 use freya_engine::prelude::{Data, Image};
 use regex::Regex;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
@@ -39,14 +39,6 @@ pub struct Placed {
     pub width: f32,
     pub height: f32,
     pub image: Image,
-}
-
-#[derive(PartialEq)]
-pub struct Highlight {
-    pub line: i64,
-    pub columns: RangeInclusive<usize>,
-    pub text: Option<Rgb>,
-    pub background: Option<Rgb>,
 }
 
 // The trigger effects that need the window: PTYSession.m -triggerSideEffect….
@@ -87,7 +79,6 @@ pub struct Extras {
     pub output: Option<[i64; 2]>,
     output_start: Option<i64>,
     pub images: Vec<Placed>,
-    pub highlights: Vec<Highlight>,
     pub annotations: Vec<Annotation>,
     next_annotation: AnnotationId,
     pub current_annotation: Option<AnnotationId>,
@@ -101,6 +92,7 @@ pub struct Extras {
     pub coprocess: Option<ChildStdin>,
     pub cursor_spotlight: Option<Instant>,
     pub triggers_enabled: bool,
+    pub triggers_in_interactive_apps: bool,
     pub mark_reported: bool,
     pub last_status: Option<i32>,
     pub command_start: Option<(i64, usize)>,
@@ -224,8 +216,14 @@ impl Extras {
         }
     }
 
-    fn watching_lines(&self) -> bool {
+    fn has_triggers(&self) -> bool {
         self.triggers_enabled && !self.compiled.is_empty()
+    }
+
+    // PTYSession.m -triggerEvaluatorShouldUseTriggers: maybe not in the alternate screen.
+    fn watching_lines(&self, term: &Term<Listener>) -> bool {
+        self.has_triggers()
+            && (self.triggers_in_interactive_apps || !term.mode().contains(TermMode::ALT_SCREEN))
     }
 
     pub fn forget_everything(&mut self) {
@@ -235,17 +233,12 @@ impl Extras {
         self.output_start = None;
         self.stamps.clear();
         self.images.clear();
-        self.highlights.clear();
         self.annotations.clear();
         self.sub_selections.clear();
     }
 
     fn anchored_lines(&mut self) -> impl Iterator<Item = &mut i64> {
         let images = self.images.iter_mut().map(|image| &mut image.line);
-        let highlights = self
-            .highlights
-            .iter_mut()
-            .map(|highlight| &mut highlight.line);
         let output = self.output.iter_mut().flatten();
         let annotations = self
             .annotations
@@ -257,7 +250,6 @@ impl Extras {
             .chain(output)
             .chain(self.output_start.iter_mut())
             .chain(images)
-            .chain(highlights)
             .chain(annotations)
             .chain(self.stamps.iter_mut().map(|(line, _)| line))
     }
@@ -281,7 +273,6 @@ impl Extras {
         self.output_start = self.output_start.filter(|start| kept(*start));
         self.stamps.retain(|(stamped, _)| kept(*stamped));
         self.images.retain(|image| kept(image.line));
-        self.highlights.retain(|highlight| kept(highlight.line));
         self.annotations
             .retain(|annotation| kept(annotation.start.0) && kept(annotation.end.0));
         self.sub_selections.clear();
@@ -510,21 +501,23 @@ fn feed(
     listener: &Listener,
     line_has_text: &mut bool,
 ) {
-    let watching = extras.lock().is_ok_and(|extras| extras.watching_lines());
+    let has_triggers = extras.lock().is_ok_and(|extras| extras.has_triggers());
     for piece in bytes.split_inclusive(|byte| is_line_feed(*byte)) {
         let (body, line_feed) = match piece.split_last() {
             Some((last, body)) if is_line_feed(*last) => (body, Some(*last)),
             _ => (piece, None),
         };
         processor.advance(term, body);
-        if watching {
+        if has_triggers {
             *line_has_text |= body.iter().any(|byte| *byte >= b' ' && *byte != 0x7f);
         }
         let Some(line_feed) = line_feed else {
             continue;
         };
+        // The line's own bytes may have just switched to the alternate screen.
         if std::mem::take(line_has_text)
             && let Ok(mut extras) = extras.lock()
+            && extras.watching_lines(term)
         {
             check_line(term, &mut extras, listener, false);
         }
@@ -563,7 +556,10 @@ fn check_partial_line(term: &mut Term<Listener>, extras: &Mutex<Extras>, listene
     let due = extras
         .last_partial_check
         .is_none_or(|last| now.duration_since(last) >= PARTIAL_LINE_INTERVAL);
-    if !extras.watching_lines() || !due || !extras.compiled.iter().any(|trigger| trigger.instant) {
+    if !extras.watching_lines(term)
+        || !due
+        || !extras.compiled.iter().any(|trigger| trigger.instant)
+    {
         return;
     }
     extras.last_partial_check = Some(now);
@@ -677,26 +673,22 @@ fn perform(
         TriggerAction::Alert | TriggerAction::Notification
     ) && trigger.popup_allowed(Instant::now());
     match trigger.action {
+        // HighlightTrigger.m: the matched cells take the colours, so they go when the text does.
         TriggerAction::Highlight | TriggerAction::HighlightLine => {
             let (text, background) = triggers::colors(&trigger.parameter);
-            let (start, end) = if trigger.action == TriggerAction::Highlight {
+            let span = if trigger.action == TriggerAction::Highlight {
                 (start, end)
             } else {
                 ((rows.start, 0), (rows.end - 1, last_column))
             };
-            for line in start.0..=end.0 {
-                let first = if line == start.0 { start.1 } else { 0 };
-                let last = if line == end.0 { end.1 } else { last_column };
-                let highlight = Highlight {
-                    line,
-                    columns: first..=last,
-                    text,
-                    background,
-                };
-                if !extras.highlights.contains(&highlight) {
-                    extras.highlights.push(highlight);
+            for_each_cell(term, span, |cell| {
+                if let Some(text) = text {
+                    cell.fg = Color::Spec(text);
                 }
-            }
+                if let Some(background) = background {
+                    cell.bg = Color::Spec(background);
+                }
+            });
         }
         TriggerAction::Bell => listener.send_event(Event::Bell),
         TriggerAction::SendText => listener.send_event(Event::PtyWrite(parameter)),
@@ -727,16 +719,10 @@ fn perform(
             }
         }
         TriggerAction::Hyperlink => {
-            let history = term.history_size() as i64;
             let link = Hyperlink::new(None::<String>, parameter);
-            for line in start.0..=end.0 {
-                let first = if line == start.0 { start.1 } else { 0 };
-                let last = if line == end.0 { end.1 } else { last_column };
-                for column in first..=last {
-                    term.grid_mut()[Line((line - history) as i32)][Column(column)]
-                        .set_hyperlink(Some(link.clone()));
-                }
-            }
+            for_each_cell(term, (start, end), |cell| {
+                cell.set_hyperlink(Some(link.clone()))
+            });
         }
         TriggerAction::RunCommand => run_command(&parameter),
         TriggerAction::Coprocess => extras.fired.push(Fired::Coprocess(parameter)),
@@ -753,6 +739,22 @@ fn perform(
         TriggerAction::Stop => return true,
     }
     false
+}
+
+fn for_each_cell(
+    term: &mut Term<Listener>,
+    (start, end): ((i64, usize), (i64, usize)),
+    mut change: impl FnMut(&mut Cell),
+) {
+    let history = term.history_size() as i64;
+    let last_column = term.columns() - 1;
+    for line in start.0..=end.0 {
+        let first = if line == start.0 { start.1 } else { 0 };
+        let last = if line == end.0 { end.1 } else { last_column };
+        for column in first..=last {
+            change(&mut term.grid_mut()[Line((line - history) as i32)][Column(column)]);
+        }
+    }
 }
 
 // PTYSession.m -triggerSideEffectRunBackgroundCommand:pool:: the user's shell runs it unattended.
