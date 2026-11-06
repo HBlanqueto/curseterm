@@ -265,6 +265,12 @@ impl Session {
         self.extras().key_mode
     }
 
+    // PTYSession.m -naggingControllerResetKeyReportingMode: no kitty flags, standard keys.
+    pub fn reset_key_reporting(&self) {
+        self.feed(b"\x1b[=0;1u");
+        self.set_key_mode(KeyMode::Standard);
+    }
+
     pub fn set_key_mode(&self, mode: KeyMode) {
         self.extras().key_mode = mode;
     }

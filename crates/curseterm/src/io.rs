@@ -25,7 +25,7 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 
 use crate::config::{Trigger, TriggerAction};
 use crate::integration::{self, Dimension, InlineImage, Notification, Report};
-use crate::key_report::{KeyMode, ModifyOtherKeysWatch};
+use crate::key_report::{KeyMode, ModifyOtherKeysWatch, StuckKeyReporting};
 use crate::osc::{Piece, Splitter};
 use crate::session::Listener;
 use crate::smart_selection::{self, Precision, Rule};
@@ -93,6 +93,8 @@ pub struct Extras {
     pub cursor_spotlight: Option<Instant>,
     pub triggers_enabled: bool,
     pub triggers_in_interactive_apps: bool,
+    stuck_keys: StuckKeyReporting,
+    pub key_reporting_stuck: bool,
     pub mark_reported: bool,
     pub last_status: Option<i32>,
     pub command_start: Option<(i64, usize)>,
@@ -461,6 +463,7 @@ fn read_loop(
                 check_partial_line(&mut term, &extras, &listener);
             }
             if let Ok(mut extras) = extras.lock() {
+                extras.stuck_keys.flags_seen(*term.mode());
                 extras.stamp(absolute_line(&term), SystemTime::now(), term.total_lines());
                 extras.record(&term);
             }
@@ -805,6 +808,7 @@ fn apply(term: &mut Term<Listener>, extras: &Mutex<Extras>, report: Report) {
         }
         Report::CommandStart => extras.command_start = Some(cursor_point(term)),
         Report::OutputStart => {
+            extras.stuck_keys.command_started(*term.mode());
             let line = absolute_line(term);
             if let Some(start) = extras.command_start.take() {
                 let end = cursor_point(term);
@@ -822,6 +826,7 @@ fn apply(term: &mut Term<Listener>, extras: &Mutex<Extras>, report: Report) {
             extras.output_start = Some(line);
         }
         Report::CommandEnd(status) => {
+            extras.key_reporting_stuck |= extras.stuck_keys.command_ended(*term.mode());
             extras.last_status = status;
             extras.end_output(absolute_line(term), term.grid().cursor.point.column.0)
         }

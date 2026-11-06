@@ -3114,3 +3114,41 @@ Tested in headless sway with the patched kit and the D-Bus menu.
 indices the cell had; Copy with Control Sequences is its own item, not Copy
 with Styles' ⌥ alternate; the file is read from a path written to the
 clipboard, not from a file copied in the file manager (`text/uri-list`).
+
+## Phase 70 — Stuck key reporting offer
+
+### Plan
+
+`iTermStuckKeyReportingDetector.swift` and `iTermNaggingController.m
+-shouldResetKeyReportingMode`:
+
+1. With shell integration, the kitty flags are noted when each command
+   starts (`OSC 133;C`) and ends (`OSC 133;D`).
+2. If the command ends with flags it did not start with, and the shell does
+   not manage them itself between commands, it asks whether to restore the
+   mode, with Yes, Always and Never; the last two are remembered.
+3. Restoring clears the kitty flags and goes back to standard reporting.
+4. The question sheet is the same as the trigger alert's, and its text now
+   wraps, as the paste warnings' does.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit and bash with `PS0`, `PS1` and
+`PROMPT_COMMAND` sending `OSC 133`. `./dev.sh check` clean in both modes; a
+new test for the detector.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `printf '\033[>1u'`: iTerm2's question with Yes, Always and Never | ✓ | `fase70-informe-de-teclas.png` |
+| Yes: Terminal State › Disambiguate Escape goes from checked to unchecked | ✓ | — |
+| `true` afterwards: no question | ✓ | — |
+| A trigger alert still shows with its three buttons and Disable This Alert turns it off | ✓ | — |
+
+**Bug found and fixed while testing:** the question's long text ran out of
+the sheet on a single line; now it wraps.
+
+**Not tested:** the kit as is; Always and Never; a shell that manages the
+flags (fish).
+
+**Differs from iTerm2:** it is a sheet, not the announcement bar over the
+session; it only looks at the kitty flags, not modifyOtherKeys.

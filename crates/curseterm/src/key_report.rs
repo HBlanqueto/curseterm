@@ -42,6 +42,43 @@ pub const KITTY_FLAGS: [TermMode; 5] = [
     TermMode::REPORT_ASSOCIATED_TEXT,
 ];
 
+// iTermStuckKeyReportingDetector.swift: a command that ends with kitty flags it did not start
+// with left them behind, unless the shell sets its own between commands.
+#[derive(Default)]
+pub struct StuckKeyReporting {
+    changed_in_shell: bool,
+    shell_manages: bool,
+    in_command: bool,
+    at_start: TermMode,
+    last: TermMode,
+}
+
+impl StuckKeyReporting {
+    pub fn flags_seen(&mut self, mode: TermMode) {
+        let flags = mode & TermMode::KITTY_KEYBOARD_PROTOCOL;
+        if !self.in_command && flags != self.last {
+            self.changed_in_shell = true;
+        }
+        self.last = flags;
+    }
+
+    pub fn command_started(&mut self, mode: TermMode) {
+        let flags = mode & TermMode::KITTY_KEYBOARD_PROTOCOL;
+        self.shell_manages = self.changed_in_shell && flags.is_empty();
+        self.in_command = true;
+        self.at_start = flags;
+        self.last = flags;
+    }
+
+    pub fn command_ended(&mut self, mode: TermMode) -> bool {
+        let flags = mode & TermMode::KITTY_KEYBOARD_PROTOCOL;
+        let started = std::mem::take(&mut self.in_command);
+        self.changed_in_shell = false;
+        self.last = flags;
+        started && !flags.is_empty() && self.at_start.is_empty() && !self.shell_manages
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Phase {
     Press,
@@ -504,6 +541,19 @@ mod tests {
         );
         assert_eq!(mapped(csi, character(" "), Modifiers::CONTROL), [0]);
         assert_eq!(mapped(csi, character("x"), Modifiers::ALT), b"\x1bx");
+    }
+
+    #[test]
+    fn flags_a_command_leaves_on_are_stuck_unless_the_shell_owns_them() {
+        let on = TermMode::DISAMBIGUATE_ESC_CODES;
+        let mut detector = StuckKeyReporting::default();
+        detector.command_started(TermMode::empty());
+        detector.flags_seen(on);
+        assert!(detector.command_ended(on));
+        let mut shell = StuckKeyReporting::default();
+        shell.flags_seen(on);
+        shell.command_started(TermMode::empty());
+        assert!(!shell.command_ended(on));
     }
 
     #[test]

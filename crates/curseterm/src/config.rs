@@ -43,6 +43,7 @@ pub struct Defaults {
     pub key_bindings: Vec<Binding>,
     pub actions: Vec<NamedAction>,
     pub show_tabs_in_fullscreen: bool,
+    pub reset_key_reporting: Option<bool>,
 }
 
 impl Default for Defaults {
@@ -71,6 +72,7 @@ impl Default for Defaults {
             actions: Vec::new(),
             // iTermPreferences.m: ShowFullScreenTabBar YES.
             show_tabs_in_fullscreen: true,
+            reset_key_reporting: None,
         }
     }
 }

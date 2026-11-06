@@ -3136,3 +3136,41 @@ paleta que tenía la celda; Copy with Control Sequences es un elemento propio,
 no la alternativa de Copy with Styles al pulsar ⌥; el archivo se lee de una
 ruta escrita en el portapapeles, no de un archivo copiado en el gestor de
 archivos (`text/uri-list`).
+
+## Fase 70 — Aviso de informe de teclas atascado
+
+### Plan
+
+`iTermStuckKeyReportingDetector.swift` y `iTermNaggingController.m
+-shouldResetKeyReportingMode`:
+
+1. Con la integración con la shell, se anotan las banderas kitty al empezar
+   cada orden (`OSC 133;C`) y al acabar (`OSC 133;D`).
+2. Si la orden acaba con banderas que no tenía al empezar, y la shell no las
+   gestiona por su cuenta entre órdenes, se pregunta si restaurar el modo,
+   con Yes, Always y Never; las dos últimas se recuerdan.
+3. Restaurar quita las banderas kitty y vuelve al informe estándar.
+4. La hoja de pregunta es la misma que la del aviso de los triggers, y su
+   texto ya se parte en varias líneas, como el de los avisos de pegado.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado y bash con `PS0`, `PS1` y
+`PROMPT_COMMAND` emitiendo `OSC 133`. `./dev.sh check` limpio en los dos
+modos; un test nuevo del detector.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `printf '\033[>1u'`: la pregunta de iTerm2 con Yes, Always y Never | ✓ | `fase70-informe-de-teclas.png` |
+| Yes: Terminal State › Disambiguate Escape pasa de marcada a desmarcada | ✓ | — |
+| `true` después: sin pregunta | ✓ | — |
+| El aviso de un trigger sigue saliendo con sus tres botones y Disable This Alert lo apaga | ✓ | — |
+
+**Fallo encontrado y corregido en la prueba:** el texto largo de la pregunta
+se salía de la hoja por una sola línea; ahora se parte.
+
+**No probado:** con el kit tal cual; Always y Never; una shell que gestiona
+las banderas (fish).
+
+**Difiere de iTerm2:** es una hoja, no la barra de avisos sobre la sesión;
+solo mira las banderas kitty, no modifyOtherKeys.

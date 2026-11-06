@@ -137,7 +137,13 @@ struct Handles {
     draft: State<String>,
     held: State<Modifiers>,
     transparency: State<bool>,
-    trigger_alert: State<Option<TriggerAlert>>,
+    question: State<Option<Question>>,
+}
+
+#[derive(Clone, PartialEq)]
+enum Question {
+    TriggerAlert(TriggerAlert),
+    StuckKeys(SessionId),
 }
 
 #[derive(Clone, PartialEq)]
@@ -366,7 +372,7 @@ impl App for Terminal {
         let mut held = use_state(Modifiers::empty);
         let pressed = use_hook(|| Rc::new(RefCell::new(Vec::<Code>::new())));
         let transparency = use_state(|| true);
-        let trigger_alert = use_state(|| None);
+        let question = use_state(|| None);
         let editing = use_state(|| false);
         let hints = use_state(|| None::<Hints>);
         let replay = use_state(|| None::<(SessionId, usize)>);
@@ -435,7 +441,7 @@ impl App for Terminal {
             draft,
             held,
             transparency,
-            trigger_alert,
+            question,
         });
         handles.dark.set(dark);
         use_drop({
@@ -667,11 +673,11 @@ impl App for Terminal {
             .then(|| filter_bar(handles.filter, &handles.defaults.read()));
         let replay_bar = (*replay.read()).map(|(id, index)| replay_bar(&handles, id, index));
         let alert = (*confirm.read()).map(|pending| confirm_alert(&handles, pending));
-        let trigger_alert = handles
-            .trigger_alert
+        let question = handles
+            .question
             .read()
             .clone()
-            .map(|pending| trigger_alert_sheet(&handles, pending));
+            .map(|asked| question_sheet(&handles, asked));
         let global_panel = (*handles.global.open.read()).then(|| {
             let (revealing, mode) = (handles.clone(), handles.defaults.read().global_search_mode);
             global_search_panel(
@@ -894,7 +900,7 @@ impl App for Terminal {
             .maybe_child(find_bar)
             .maybe_child(filter_bar)
             .maybe_child(alert)
-            .maybe_child(trigger_alert)
+            .maybe_child(question)
             .maybe_child(sheet_view)
             .child(
                 rect()
@@ -1678,7 +1684,11 @@ fn paste_question_sheet(handles: &Handles, question: Sheet) -> Element {
             .direction(Direction::Vertical)
             .spacing(SPACE_2)
             .maybe_child(heading.map(|heading| text(heading, HEADLINE, palette.label)))
-            .child(text(message, CAPTION, palette.secondary_label))
+            .child(
+                text(message, CAPTION, palette.secondary_label)
+                    .width(Size::fill())
+                    .max_lines(None),
+            )
             .maybe_child(spaces)
             .child(
                 rect()
@@ -2804,15 +2814,19 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
             }
         }
         TermEvent::Wakeup => {
-            let (reported, posted, entered, fired) = {
+            let (reported, posted, entered, fired, stuck) = {
                 let mut extras = session.extras();
                 (
                     std::mem::take(&mut extras.mark_reported),
                     std::mem::take(&mut extras.notifications),
                     std::mem::take(&mut extras.entered),
                     std::mem::take(&mut extras.fired),
+                    std::mem::take(&mut extras.key_reporting_stuck),
                 )
             };
+            if stuck {
+                key_reporting_left_on(handles, &session);
+            }
             for fired in fired {
                 trigger_fired(handles, &session, fired);
             }
@@ -3377,6 +3391,22 @@ fn confirm_alert(handles: &Handles, pending: Confirm) -> Alert {
         .cancel(dismiss, move |_| dismiss_later(&cancel, || {}))
 }
 
+fn ask(handles: &Handles, question: Question) {
+    let mut shown = handles.question;
+    if shown.peek().is_none() {
+        shown.set(Some(question));
+    }
+}
+
+// PTYSession.m -maybeOfferToResetKeyReportingModeWithFlags:
+fn key_reporting_left_on(handles: &Handles, session: &Session) {
+    match handles.defaults.peek().reset_key_reporting {
+        Some(true) => session.reset_key_reporting(),
+        Some(false) => {}
+        None => ask(handles, Question::StuckKeys(session.id)),
+    }
+}
+
 fn trigger_fired(handles: &Handles, session: &Session, fired: Fired) {
     match fired {
         // CoprocessTrigger.m: only when the session has no coprocess yet.
@@ -3397,49 +3427,50 @@ fn trigger_fired(handles: &Handles, session: &Session, fired: Fired) {
                 tr!("trigger-fired-notification", name = name, tab = tab),
             );
         }
-        Fired::Alert { trigger, message } => {
-            let mut shown = handles.trigger_alert;
-            if shown.peek().is_none() {
-                shown.set(Some(TriggerAlert {
-                    session: session.id,
-                    trigger,
-                    message,
-                }));
-            }
-        }
+        Fired::Alert { trigger, message } => ask(
+            handles,
+            Question::TriggerAlert(TriggerAlert {
+                session: session.id,
+                trigger,
+                message,
+            }),
+        ),
     }
 }
 
-// PTYSession.m -reallyShowTriggerAlertWithMessage:rateLimit:disable:
-fn trigger_alert_sheet(handles: &Handles, pending: TriggerAlert) -> Element {
+// PTYSession.m -reallyShowTriggerAlertWithMessage:rateLimit:disable: and
+// iTermNaggingController.m -shouldResetKeyReportingMode: a message and its answers.
+fn question_sheet(handles: &Handles, question: Question) -> Element {
     let palette = Palette::current();
-    let answers = [
-        (tr!("mark-alert-ok"), TriggerAnswer::Ok),
-        (
-            tr!("trigger-alert-show-session"),
-            TriggerAnswer::ShowSession,
+    let (message, answers) = match &question {
+        Question::TriggerAlert(alert) => (
+            alert.message.clone(),
+            vec![
+                (tr!("mark-alert-ok"), Answer::Dismiss),
+                (tr!("trigger-alert-show-session"), Answer::ShowSession),
+                (tr!("trigger-alert-disable"), Answer::DisableTrigger),
+            ],
         ),
-        (tr!("trigger-alert-disable"), TriggerAnswer::Disable),
-    ];
+        Question::StuckKeys(_) => (
+            tr!("key-reporting-stuck").to_string(),
+            vec![
+                (tr!("key-reporting-yes"), Answer::ResetKeys),
+                (tr!("key-reporting-always"), Answer::AlwaysResetKeys),
+                (tr!("key-reporting-never"), Answer::NeverResetKeys),
+            ],
+        ),
+    };
     let buttons = answers
         .into_iter()
         .enumerate()
         .map(|(index, (label, answer))| {
-            let (answering, pending) = (handles.clone(), pending.clone());
+            let (answering, question) = (handles.clone(), question.clone());
             let button = Button::new(label).on_press(move |_| {
-                let (handles, pending) = (answering.clone(), pending.clone());
+                let (handles, question) = (answering.clone(), question.clone());
                 answering.after(Duration::ZERO, move || {
-                    let mut shown = handles.trigger_alert;
+                    let mut shown = handles.question;
                     shown.set(None);
-                    match answer {
-                        TriggerAnswer::Ok => {}
-                        TriggerAnswer::ShowSession => reveal(&handles, pending.session, None),
-                        TriggerAnswer::Disable => {
-                            if let Some(session) = handles.sessions.peek().get(&pending.session) {
-                                session.extras().disable_trigger(pending.trigger);
-                            }
-                        }
-                    }
+                    answer_question(&handles, &question, answer);
                 });
             });
             if index == 0 {
@@ -3453,7 +3484,11 @@ fn trigger_alert_sheet(handles: &Handles, pending: TriggerAlert) -> Element {
             .width(Size::px(PASTE_QUESTION_WIDTH))
             .direction(Direction::Vertical)
             .spacing(SPACE_2)
-            .child(text(pending.message.clone(), HEADLINE, palette.label))
+            .child(
+                text(message, HEADLINE, palette.label)
+                    .width(Size::fill())
+                    .max_lines(None),
+            )
             .child(
                 rect()
                     .width(Size::fill())
@@ -3466,11 +3501,40 @@ fn trigger_alert_sheet(handles: &Handles, pending: TriggerAlert) -> Element {
     .into_element()
 }
 
-#[derive(Clone, Copy)]
-enum TriggerAnswer {
-    Ok,
+fn answer_question(handles: &Handles, question: &Question, answer: Answer) {
+    let session = |id: SessionId| handles.sessions.peek().get(&id).cloned();
+    match (question, answer) {
+        (Question::TriggerAlert(alert), Answer::ShowSession) => {
+            reveal(handles, alert.session, None)
+        }
+        (Question::TriggerAlert(alert), Answer::DisableTrigger) => {
+            if let Some(session) = session(alert.session) {
+                session.extras().disable_trigger(alert.trigger);
+            }
+        }
+        (Question::StuckKeys(id), Answer::ResetKeys | Answer::AlwaysResetKeys) => {
+            if answer == Answer::AlwaysResetKeys {
+                change_defaults(|defaults| defaults.reset_key_reporting = Some(true));
+            }
+            if let Some(session) = session(*id) {
+                session.reset_key_reporting();
+            }
+        }
+        (Question::StuckKeys(_), Answer::NeverResetKeys) => {
+            change_defaults(|defaults| defaults.reset_key_reporting = Some(false))
+        }
+        _ => {}
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Answer {
+    Dismiss,
     ShowSession,
-    Disable,
+    DisableTrigger,
+    ResetKeys,
+    AlwaysResetKeys,
+    NeverResetKeys,
 }
 
 // MovePaneController.m -dropInSession:half:atPoint:; a click on the moving pane cancels.
