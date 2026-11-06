@@ -5,7 +5,7 @@ use barrier_kit::theme::color;
 use barrier_kit_next::tokens::GLOBAL_SEARCH;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Position, Size};
-use vow_design::{CAPTION, DIALOG_PADDING, HEADLINE, SPACE_1, SPACE_2, TEXT};
+use vow_design::{CAPTION, DIALOG, DIALOG_PADDING, HEADLINE, SPACE_1, SPACE_2, TEXT};
 
 use crate::find_mode::FindMode;
 use crate::localize::tr;
@@ -115,6 +115,7 @@ pub fn global_search_panel(
         .height(Size::px(GLOBAL_SEARCH.height))
         .max_height(Size::percent(90.0))
         .padding(Gaps::new_all(DIALOG_PADDING))
+        .corner_radius(DIALOG.corner_radius as f32)
         .background(color(palette.raised_background))
         .border(
             Border::new()

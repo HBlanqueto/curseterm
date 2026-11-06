@@ -3286,26 +3286,9 @@ arrangement sheet said “Name”; it now uses `save-arrangement-name`.
 Next/Previous, Move Session, Send Text without Broadcasting with broadcast on,
 Compose, Find Regex, Paste… and Paste or Send.
 
-## Phase 75 — Dialogs without rounded corners
+## Decision — Dialog corners (2026-11-06)
 
-### Plan
-
-On macOS the window server rounds sheets; here the Malaysia compositor will.
-CurseTerm rounds no dialog:
-
-1. `barrier_kit_next::views::feedback` provides `sheet` and `Alert` without a
-   radius (BK-042). Every sheet and alert uses them.
-2. Find Globally, a window of its own in iTerm2, has no radius either.
-3. The Composer and Session Note stay rounded: in iTerm2 they are views
-   inside the window, not dialogs.
-
-### Result (2026-11-06)
-
-Tested in headless sway with the patched kit. `./dev.sh check` clean in both
-modes.
-
-| Test | Result | Screenshot |
-|---|---|---|
-| Show Alert trigger: the sheet comes out with square corners | ✓ | `fase75-hoja-sin-radio.png` |
-
-**Not tested:** the kit as is; Find Globally and the other sheets.
+CurseTerm's sheets and alerts are born inside the window, like macOS sheets,
+so they carry their own rounded border (the kit's `sheet` and `Alert`, radius
+`DIALOG.corner_radius`). The Malaysia compositor only rounds dialogs that are
+surfaces of their own; if a dialog becomes one, the app stops rounding it.

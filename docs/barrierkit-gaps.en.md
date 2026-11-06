@@ -71,7 +71,6 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-039 | controls / windows | No outline view nor floating panel | medium | Tested workaround: a panel inside the window |
 | BK-040 | controls | `PopUpButton` neither scrolls nor searches | medium | Tested workaround: groups and a filter |
 | BK-041 | windows | An acked configure goes out with the old geometry | high | Patch 0012 tested |
-| BK-042 | dialogs | `sheet` and `Alert` round their corners | medium | Block tested: `views::feedback` without a radius |
 
 ## Gaps
 
@@ -928,25 +927,6 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **How to reproduce**: weston 16 with `window_style = "maximized"` in the
   profile: «xdg_surface geometry (656 x 470) does not match the configured
   maximized state (1100 x 668)».
-
-### BK-042 — `sheet` and `Alert` round their corners
-- **Area**: dialogs
-- **What CurseTerm needed**: sheets and alerts (close, trigger alert, stuck
-  keys, Add Trigger, Advanced Paste…) without rounded corners. Rounding a
-  dialog is the Malaysia compositor's job, as the macOS window server does
-  with sheets.
-- **What BarrierKit offers today**: `views::feedback::sheet` paints the
-  dialog with `corner_radius(DIALOG.corner_radius)` and `Alert` uses it
-  (`views/feedback.rs:47`).
-- **What is missing**: a square-cornered dialog; in the long run, the dialog
-  as a surface of its own that the compositor rounds.
-- **How I solved it in CurseTerm**: `barrier_kit_next::views::feedback`
-  copies `sheet` and `Alert` without the radius. Find Globally does not set
-  one either.
-- **Cost of the workaround**: two duplicated kit components.
-- **Proposed kit API**: drop `corner_radius` from `sheet`.
-- **Severity**: medium
-- **How to reproduce**: a Show Alert trigger; the sheet comes out with rounded corners.
 
 ## Things that worked well
 
