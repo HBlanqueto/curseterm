@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::panes::{Axis, Pane};
 use crate::session::SessionId;
+use crate::workspace::TabGroup;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Arrangement {
@@ -17,6 +18,8 @@ pub struct Arrangement {
 pub struct TabLayout {
     pub title: Option<String>,
     pub root: Layout,
+    #[serde(default)]
+    pub group: Option<TabGroup>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -113,6 +116,7 @@ mod tests {
         let text = toml::to_string(&TabLayout {
             title: None,
             root: layout,
+            group: None,
         })
         .expect("serialize");
         let back: TabLayout = toml::from_str(&text).expect("deserialize");

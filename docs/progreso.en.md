@@ -3471,3 +3471,42 @@ modes.
 session with the gateway's pause mode (`tmuxController.gateway
 .pauseModeEnabled`). Without tmux integration there is nothing to pause; it
 comes with it.
+
+## Phase 81 — Tab groups
+
+### Plan
+
+`PseudoTerminal.m`, `iTermTabGroupOrdering.swift` and `PSMYosemiteTabStyle.m`:
+
+1. Each tab may belong to a group (id, name, colour and collapsed), like
+   `PTYTab.tabGroupID/Name/Color/Collapsed`.
+2. Window › Tab › Add Tab to New Group… asks for the name (the starting tab's
+   title) and takes the next colour of `-nextTabGroupColor`. Remove Tab from
+   Group leaves it just after the group.
+3. Select Next/Previous Tab Group (⌃⇧⌘] and ⌃⇧⌘[) skips the rest of the
+   group.
+4. Move Tab Left/Right follows `singleTabMove`: a member leaves the group at
+   its edge, an ungrouped tab joins the group it bumps into, a one-tab group
+   jumps the next unit, and the ends wrap.
+5. The bar paints the name on a block of the group's colour, a 1 pt outline
+   round the group and, collapsed, a “Name  N” chip with a chevron. Pressing
+   the chip collapses or expands it; the active tab is never hidden.
+6. Arrangements keep each tab's group.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes. Tests for the logic in `tab_groups.rs`.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| B into a new group; C joins it with Move Tab Left | ✓ | `fase81-grupos.png` |
+| Pressing the chip collapses the group to “Name  2” and leaves A active | ✓ | `fase81-grupos.png` |
+| Remove Tab from Group on B leaves it after the group | ✓ | `fase81-grupos.png` |
+| Saving and opening an arrangement keeps the group | ✓ | — |
+
+**Not tested:** the kit as is; Select Next/Previous Tab Group in the window;
+⌃A in the name field.
+
+**Differs from iTerm2:** no tab context menu (add to an existing group,
+rename the group) nor tab dragging; the name does not show selected (BK-043).

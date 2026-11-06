@@ -72,6 +72,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-040 | controles | `PopUpButton` no se desplaza ni busca | media | Workaround probado: grupos y filtro |
 | BK-041 | ventanas | Un configure confirmado sale con la geometría vieja | alta | Parche 0012 probado |
 | BK-042 | controles | `PopUpButton` no tiene modo desplegable (pull-down) | baja | Workaround probado: remontar con `key` |
+| BK-043 | controles | `TextField` no puede abrirse con el texto seleccionado | baja | Sin workaround: ⌃A lo selecciona |
 
 ## Gaps
 
@@ -951,6 +952,23 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Gravedad**: baja
 - **Cómo reproducirlo**: un `PopUpButton` con `.selected(0)` fijo; tras
   elegir la segunda opción sigue mostrándola.
+
+### BK-043 — `TextField` no puede abrirse con el texto seleccionado
+- **Área**: controles
+- **Qué necesitaba CurseTerm**: la hoja «Grupo de pestañas nuevo», que en
+  iTerm2 trae el título de la pestaña seleccionado (`[field selectText:nil]`)
+  para que escribir lo reemplace.
+- **Qué ofrece hoy BarrierKit**: `TextField` envuelve el `Input` de Freya,
+  que limpia la selección cuando el valor cambia por fuera
+  (`freya-components` 0.4.3 `input.rs:407`).
+- **Qué falta**: una opción para abrir el campo con todo seleccionado.
+- **Cómo lo resolví en CurseTerm**: no lo resolví; el campo trae el título y
+  ⌃A (`freya-edit` `text_editor.rs:627`) lo selecciona.
+- **Coste del workaround**: un atajo más para renombrar.
+- **API propuesta para el kit**: `TextField::select_on_focus(true)`.
+- **Gravedad**: baja
+- **Cómo reproducirlo**: Window › Tab › Add Tab to New Group… y escribir: el
+  texto se añade al título en vez de reemplazarlo.
 
 ## Cosas que funcionaron bien
 

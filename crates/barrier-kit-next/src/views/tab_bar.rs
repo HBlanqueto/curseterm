@@ -7,9 +7,9 @@ use barrier_kit::symbol::{Symbol, symbol};
 use barrier_kit::theme::color;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Position, Size};
-use vow_design::{CAPTION, Font, Rgba};
+use vow_design::{CAPTION, Font, HEADLINE, Rgba};
 
-use crate::tokens::{TAB_BAR, TAB_STRIP, TabStyle};
+use crate::tokens::{TAB_BAR, TAB_GROUP, TAB_STRIP, TabStyle};
 
 #[derive(Clone, Copy, PartialEq)]
 pub struct Badge {
@@ -17,11 +17,21 @@ pub struct Badge {
     pub label: &'static str,
 }
 
+// PSMTabGroup: the group a run of tabs belongs to.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TabGroupMark {
+    pub id: u64,
+    pub name: String,
+    pub color: Rgba,
+    pub collapsed: bool,
+}
+
 #[derive(PartialEq)]
 pub struct TabBar {
     label: &'static str,
     close_label: &'static str,
-    tabs: Vec<(String, Option<Badge>)>,
+    tabs: Vec<(String, Option<Badge>, Option<TabGroupMark>)>,
+    on_group_press: Option<Callback<u64, ()>>,
     selected: usize,
     style: TabStyle,
     active: bool,
@@ -38,6 +48,7 @@ impl TabBar {
             label,
             close_label,
             tabs: Vec::new(),
+            on_group_press: None,
             selected: 0,
             style,
             active: true,
@@ -55,12 +66,25 @@ impl TabBar {
     }
 
     pub fn tab(mut self, title: impl Into<String>) -> Self {
-        self.tabs.push((title.into(), None));
+        self.tabs.push((title.into(), None, None));
         self
     }
 
     pub fn badged_tab(mut self, title: impl Into<String>, badge: Badge) -> Self {
-        self.tabs.push((title.into(), Some(badge)));
+        self.tabs.push((title.into(), Some(badge), None));
+        self
+    }
+
+    // The last tab added belongs to `group`; a group's tabs are consecutive.
+    pub fn in_group(mut self, group: TabGroupMark) -> Self {
+        if let Some(tab) = self.tabs.last_mut() {
+            tab.2 = Some(group);
+        }
+        self
+    }
+
+    pub fn on_group_press(mut self, callback: impl Into<Callback<u64, ()>>) -> Self {
+        self.on_group_press = Some(callback.into());
         self
     }
 
@@ -147,21 +171,7 @@ impl Component for TabBar {
                     .direction(Direction::Horizontal)
                     .content(Content::flex())
                     .maybe_child((self.leading > 0.0).then(|| empty(Size::px(self.leading))))
-                    .children(self.tabs.iter().enumerate().map(|(index, (title, badge))| {
-                        Tab {
-                            title: title.clone(),
-                            badge: *badge,
-                            close_label: self.close_label,
-                            selected: index == self.selected,
-                            last: index + 1 == self.tabs.len(),
-                            style,
-                            active: self.active,
-                            index,
-                            on_select: self.on_select.clone(),
-                            on_close: self.on_close.clone(),
-                        }
-                        .into_element()
-                    }))
+                    .children(self.runs(style))
                     .maybe_child(add),
             )
             .child(
@@ -170,6 +180,107 @@ impl Component for TabBar {
                     .height(Size::px(1.0))
                     .background(color(style.bottom_line)),
             )
+    }
+}
+
+impl TabBar {
+    fn tab_element(&self, index: usize, style: TabStyle) -> Element {
+        let (title, badge, _) = &self.tabs[index];
+        Tab {
+            title: title.clone(),
+            badge: *badge,
+            close_label: self.close_label,
+            selected: index == self.selected,
+            last: index + 1 == self.tabs.len(),
+            style,
+            active: self.active,
+            index,
+            on_select: self.on_select.clone(),
+            on_close: self.on_close.clone(),
+        }
+        .into_element()
+    }
+
+    // PSMYosemiteTabStyle.m -drawSquaredTabGroupRunHorizontal:… and
+    // -drawSquaredCollapsedTabGroupChip:…: the name on a block of the group's colour before its
+    // tabs, a 1 pt outline round the run, and a collapsed run as one “Name  N” chip.
+    fn runs(&self, style: TabStyle) -> Vec<Element> {
+        let mut runs = Vec::new();
+        let mut index = 0;
+        while index < self.tabs.len() {
+            let Some(group) = self.tabs[index].2.clone() else {
+                runs.push(self.tab_element(index, style));
+                index += 1;
+                continue;
+            };
+            let end = (index..self.tabs.len())
+                .find(|other| self.tabs[*other].2.as_ref().map(|mark| mark.id) != Some(group.id))
+                .unwrap_or(self.tabs.len());
+            let members = end - index;
+            let chip = self.chip(&group, members, style);
+            let run = rect()
+                .height(Size::fill())
+                .direction(Direction::Horizontal)
+                .border(
+                    Border::new()
+                        .width(TAB_GROUP.outline)
+                        .alignment(BorderAlignment::Inner)
+                        .fill(color(group.color)),
+                )
+                .child(chip);
+            runs.push(if group.collapsed {
+                run.into_element()
+            } else {
+                run.width(Size::flex(members as f32))
+                    .content(Content::flex())
+                    .children((index..end).map(|member| self.tab_element(member, style)))
+                    .into_element()
+            });
+            index = end;
+        }
+        runs
+    }
+
+    fn chip(&self, group: &TabGroupMark, members: usize, style: TabStyle) -> Rect {
+        let ink = contrasting(group.color);
+        let font = Font {
+            size: style.font_size as u32,
+            weight: 700,
+            ..HEADLINE
+        };
+        let label = match (group.collapsed, group.name.is_empty()) {
+            (false, _) => group.name.clone(),
+            (true, true) => members.to_string(),
+            (true, false) => format!("{}  {members}", group.name),
+        };
+        let trailing = if group.collapsed {
+            TAB_GROUP.name_pad
+        } else {
+            TAB_GROUP.name_pad + TAB_GROUP.colored_area
+        };
+        let id = group.id;
+        let on_group_press = self.on_group_press.clone();
+        rect()
+            .height(Size::fill())
+            .padding(Gaps::new(0.0, trailing, 0.0, TAB_GROUP.name_pad))
+            .direction(Direction::Horizontal)
+            .cross_align(Alignment::Center)
+            .background(color(group.color))
+            .a11y_role(AccessibilityRole::Button)
+            .a11y_alt(label.clone())
+            .on_press(move |event: Event<PressEventData>| {
+                event.stop_propagation();
+                if let Some(on_group_press) = &on_group_press {
+                    on_group_press.call(id);
+                }
+            })
+            .child(text(label, font, ink))
+            .maybe_child(group.collapsed.then(|| {
+                rect()
+                    .width(Size::px(TAB_GROUP.chevron))
+                    .main_align(Alignment::End)
+                    .child(symbol(Symbol::ChevronDown, TAB_BAR.badge, ink))
+            }))
     }
 }
 

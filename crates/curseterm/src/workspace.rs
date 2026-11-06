@@ -1,9 +1,13 @@
 use std::collections::{HashMap, HashSet};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde::{Deserialize, Serialize};
 
 use crate::advanced;
 use crate::config::APP_NAME;
 use crate::panes::{Axis, Pane, Toward};
 use crate::session::SessionId;
+use crate::tab_groups::{self, TabMove};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tab {
@@ -11,6 +15,16 @@ pub struct Tab {
     pub active: SessionId,
     pub zoomed: bool,
     pub title: Option<String>,
+    pub group: Option<TabGroup>,
+}
+
+// iTermTabGroup.swift: every member carries the group's name, colour and collapsed state.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TabGroup {
+    pub id: u64,
+    pub name: String,
+    pub color: usize,
+    pub collapsed: bool,
 }
 
 impl Tab {
@@ -20,6 +34,7 @@ impl Tab {
             active: id,
             zoomed: false,
             title: None,
+            group: None,
         }
     }
 }
@@ -118,9 +133,11 @@ impl Workspace {
         self.restore(Tab::single(id));
     }
 
+    // -tabsDidReorder: a restored or duplicated member joins its group's run.
     pub fn restore(&mut self, tab: Tab) {
         self.tabs.push(tab);
         self.active = self.tabs.len() - 1;
+        self.reorder(&tab_groups::contiguous_order(&self.group_ids()));
     }
 
     pub fn split(&mut self, id: SessionId, axis: Axis) -> bool {
@@ -255,8 +272,21 @@ impl Workspace {
         }
     }
 
+    // PSMTabBarControl.m: selecting a member of a collapsed group expands it.
     pub fn select_tab(&mut self, index: usize) {
         if index < self.tabs.len() {
+            if let Some(id) = self.tabs[index]
+                .group
+                .as_ref()
+                .filter(|group| group.collapsed)
+                .map(|group| group.id)
+            {
+                for group in self.tabs.iter_mut().filter_map(|tab| tab.group.as_mut()) {
+                    if group.id == id {
+                        group.collapsed = false;
+                    }
+                }
+            }
             self.active = index;
             self.hear_active_tab();
         }
@@ -270,11 +300,113 @@ impl Workspace {
         }
     }
 
+    // PseudoTerminal.m -moveCurrentTabByOffset:.
     pub fn move_tab(&mut self, step: isize) {
-        let target = self.active as isize + step;
-        if (0..self.tabs.len() as isize).contains(&target) {
-            self.tabs.swap(self.active, target as usize);
-            self.active = target as usize;
+        match tab_groups::single_tab_move(&self.group_ids(), self.active, step) {
+            TabMove::Reorder(order) => self.reorder(&order),
+            TabMove::Leave => self.tabs[self.active].group = None,
+            TabMove::Join(id) => {
+                let joined = self
+                    .tabs
+                    .iter()
+                    .find_map(|tab| tab.group.clone().filter(|group| group.id == id));
+                self.tabs[self.active].group = joined;
+            }
+        }
+    }
+
+    fn group_ids(&self) -> Vec<Option<u64>> {
+        self.tabs
+            .iter()
+            .map(|tab| tab.group.as_ref().map(|group| group.id))
+            .collect()
+    }
+
+    fn reorder(&mut self, order: &[usize]) {
+        let active = self.active;
+        let mut tabs: Vec<Option<Tab>> = self.tabs.drain(..).map(Some).collect();
+        self.tabs = order
+            .iter()
+            .filter_map(|index| tabs[*index].take())
+            .collect();
+        self.active = order.iter().position(|index| *index == active).unwrap_or(0);
+    }
+
+    // PseudoTerminal.m -addTab:toNewGroupWithDefaultName: and -nextTabGroupColor.
+    pub fn add_active_to_new_group(&mut self, name: String) {
+        let ids = self.group_ids();
+        // PseudoTerminal.m names a group by a UUID, so a restored one never meets another's id.
+        let id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |since| since.as_nanos() as u64);
+        let mut distinct: Vec<u64> = ids.into_iter().flatten().collect();
+        distinct.dedup();
+        if let Some(tab) = self.tabs.get_mut(self.active) {
+            tab.group = Some(TabGroup {
+                id,
+                name,
+                color: distinct.len(),
+                collapsed: false,
+            });
+        }
+    }
+
+    // -removeTabFromGroup:label: then -tabsDidReorder, so the tab lands just after its old group.
+    pub fn remove_active_from_group(&mut self) {
+        let Some(group) = self.tabs.get(self.active).and_then(|tab| tab.group.clone()) else {
+            return;
+        };
+        self.tabs[self.active].group = None;
+        let mut ids = self.group_ids();
+        let last = ids.iter().rposition(|id| *id == Some(group.id));
+        if let Some(last) = last.filter(|last| *last > self.active) {
+            let mut order: Vec<usize> = (0..ids.len()).collect();
+            order.remove(self.active);
+            order.insert(last, self.active);
+            self.reorder(&order);
+            ids = self.group_ids();
+        }
+        self.reorder(&tab_groups::contiguous_order(&ids));
+    }
+
+    pub fn active_group(&self) -> Option<&TabGroup> {
+        self.tabs
+            .get(self.active)
+            .and_then(|tab| tab.group.as_ref())
+    }
+
+    pub fn step_tab_group(&mut self, offset: isize) {
+        if let Some(index) = tab_groups::tab_group_step(&self.group_ids(), self.active, offset) {
+            self.select_tab(index);
+        }
+    }
+
+    // PSMTabBarControl: pressing a group's chip collapses or expands it; the active tab never
+    // stays hidden.
+    pub fn toggle_group(&mut self, id: u64) {
+        let Some(collapsed) = self.tabs.iter().find_map(|tab| {
+            tab.group
+                .as_ref()
+                .filter(|group| group.id == id)
+                .map(|group| group.collapsed)
+        }) else {
+            return;
+        };
+        if !collapsed && self.group_ids()[self.active] == Some(id) {
+            let hidden: Vec<bool> = self
+                .tabs
+                .iter()
+                .map(|tab| tab.group.as_ref().is_some_and(|group| group.collapsed))
+                .collect();
+            let Some(outside) = tab_groups::nearest_outside(&self.group_ids(), &hidden, id) else {
+                return;
+            };
+            self.select_tab(outside);
+        }
+        for group in self.tabs.iter_mut().filter_map(|tab| tab.group.as_mut()) {
+            if group.id == id {
+                group.collapsed = !collapsed;
+            }
         }
     }
 
@@ -383,18 +515,18 @@ mod tests {
     }
 
     #[test]
-    fn moving_a_tab_keeps_it_selected_and_stops_at_the_ends() {
+    fn moving_a_tab_keeps_it_selected_and_wraps_at_the_ends() {
         let mut workspace = Workspace::default();
         for id in 1..=3 {
             workspace.open_tab(id);
         }
         workspace.move_tab(-1);
         workspace.move_tab(-1);
-        workspace.move_tab(-1);
         assert_eq!(workspace.active, 0);
         assert_eq!(workspace.active_session(), Some(3));
-        workspace.step_tab(-1);
+        workspace.move_tab(-1);
         assert_eq!(workspace.active, 2);
+        assert_eq!(workspace.active_session(), Some(3));
     }
 
     #[test]

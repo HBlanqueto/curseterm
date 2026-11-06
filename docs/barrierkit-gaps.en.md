@@ -72,6 +72,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-040 | controls | `PopUpButton` neither scrolls nor searches | medium | Tested workaround: groups and a filter |
 | BK-041 | windows | An acked configure goes out with the old geometry | high | Patch 0012 tested |
 | BK-042 | controls | `PopUpButton` has no pull-down mode | low | Workaround tested: remount with `key` |
+| BK-043 | controls | `TextField` cannot open with its text selected | low | No workaround: ⌃A selects it |
 
 ## Gaps
 
@@ -946,6 +947,22 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Severity**: low
 - **How to reproduce**: a `PopUpButton` with a fixed `.selected(0)`; after
   choosing the second option it keeps showing it.
+
+### BK-043 — `TextField` cannot open with its text selected
+- **Area**: controls
+- **What CurseTerm needed**: the “New Tab Group” sheet, which in iTerm2 shows
+  the tab's title selected (`[field selectText:nil]`) so typing replaces it.
+- **What BarrierKit offers today**: `TextField` wraps Freya's `Input`, which
+  clears the selection when the value changes from outside
+  (`freya-components` 0.4.3 `input.rs:407`).
+- **What is missing**: an option to open the field with everything selected.
+- **How I solved it in CurseTerm**: I did not; the field shows the title and
+  ⌃A (`freya-edit` `text_editor.rs:627`) selects it.
+- **Cost of the workaround**: one more shortcut to rename.
+- **Proposed kit API**: `TextField::select_on_focus(true)`.
+- **Severity**: low
+- **How to reproduce**: Window › Tab › Add Tab to New Group… and type: the
+  text is added to the title instead of replacing it.
 
 ## Things that worked well
 

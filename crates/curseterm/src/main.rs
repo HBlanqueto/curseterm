@@ -48,6 +48,7 @@ mod snippets;
 mod snippets_pane;
 mod status;
 mod styled;
+mod tab_groups;
 mod terminal;
 mod theme;
 mod triggers;

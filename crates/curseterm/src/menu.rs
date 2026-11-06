@@ -233,6 +233,12 @@ pub const TAB_MENU: &str = "tab-menu";
 // BK-016: with Shift the kit matches the produced character, so ⇧] is declared as `}` and ⇧0 as `)`.
 pub const NEXT_TAB: &str = "next-tab";
 pub const PREVIOUS_TAB: &str = "previous-tab";
+pub const NEXT_TAB_GROUP: &str = "next-tab-group";
+pub const PREVIOUS_TAB_GROUP: &str = "previous-tab-group";
+pub const ADD_TAB_TO_NEW_GROUP: Action =
+    Action::new("add-tab-to-new-group", || tr!("add-tab-to-new-group"));
+pub const REMOVE_TAB_FROM_GROUP: Action =
+    Action::new("remove-tab-from-group", || tr!("remove-tab-from-group"));
 pub const MOVE_TAB_LEFT: Action = Action::new("move-tab-left", || tr!("move-tab-left"));
 pub const MOVE_TAB_RIGHT: Action = Action::new("move-tab-right", || tr!("move-tab-right"));
 pub const SELECT_TAB: &str = "select-tab";
@@ -589,9 +595,19 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
                         keyed(NEXT_TAB, tr!("next-tab"), "Super+Shift+}").with_enabled(false),
                         keyed(PREVIOUS_TAB, tr!("previous-tab"), "Super+Shift+{")
                             .with_enabled(false),
+                        keyed(NEXT_TAB_GROUP, tr!("next-tab-group"), "Ctrl+Super+Shift+}")
+                            .with_enabled(false),
+                        keyed(
+                            PREVIOUS_TAB_GROUP,
+                            tr!("previous-tab-group"),
+                            "Ctrl+Super+Shift+{",
+                        )
+                        .with_enabled(false),
                         MenuItem::Separator,
                         MOVE_TAB_LEFT.item(false),
                         MOVE_TAB_RIGHT.item(false),
+                        ADD_TAB_TO_NEW_GROUP.item(true),
+                        REMOVE_TAB_FROM_GROUP.item(false),
                         MenuItem::Separator,
                         submenu(SELECT_TAB, tr!("select-tab"), Vec::new()),
                     ],

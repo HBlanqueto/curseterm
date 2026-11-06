@@ -24,11 +24,11 @@ use barrier_kit::views::table::Table;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
 use barrier_kit_next::notifications::{self, Notice};
 use barrier_kit_next::tokens::{
-    ANNOTATION, PASTE_HISTORY_SIZE, PASTE_QUESTION_WIDTH, RENAME_WIDTH, SHORTCUT_LABEL, TAB_STRIP,
-    TITLE_BAR, TOOLBELT_WIDTH, TabStyle, TitleBarColors,
+    ANNOTATION, PASTE_HISTORY_SIZE, PASTE_QUESTION_WIDTH, RENAME_WIDTH, SHORTCUT_LABEL, TAB_GROUP,
+    TAB_STRIP, TITLE_BAR, TOOLBELT_WIDTH, TabStyle, TitleBarColors,
 };
 use barrier_kit_next::views::split_panes::SplitPanes;
-use barrier_kit_next::views::tab_bar::{Badge, TabBar};
+use barrier_kit_next::views::tab_bar::{Badge, TabBar, TabGroupMark};
 use freya_clipboard::copypasta::ClipboardProvider;
 use freya_core::prelude::*;
 use rustix::process::{Pid, Signal, kill_process};
@@ -164,6 +164,7 @@ enum Sheet {
     Coprocess(SessionId),
     AddTrigger(SessionId),
     SaveArrangement,
+    NewTabGroup,
     NamedMark(SessionId),
     CopyModeKeys,
     AdvancedPaste,
@@ -588,10 +589,19 @@ impl App for Terminal {
                 symbol: Symbol::SpeakerWave,
                 label: tr!("tab-bell"),
             };
+            let groups = state.tabs.iter().map(|tab| {
+                tab.group.as_ref().map(|group| TabGroupMark {
+                    id: group.id,
+                    name: group.name.clone(),
+                    color: TAB_GROUP.colors[group.color % TAB_GROUP.colors.len()],
+                    collapsed: group.collapsed,
+                })
+            });
             state
                 .tab_titles()
                 .into_iter()
                 .zip(state.rang_tabs())
+                .zip(groups)
                 .fold(
                     TabBar::new(tr!("tabs"), tr!("close-tab"), tab_style)
                         .active(window_focused)
@@ -604,14 +614,22 @@ impl App for Terminal {
                             let drag = drag.clone();
                             move |event| drag(event)
                         }),
-                    |bar, (title, rang)| {
-                        if rang {
+                    |bar, ((title, rang), group)| {
+                        let bar = if rang {
                             bar.badged_tab(title, bell)
                         } else {
                             bar.tab(title)
+                        };
+                        match group {
+                            Some(group) => bar.in_group(group),
+                            None => bar,
                         }
                     },
                 )
+                .on_group_press(move |id| {
+                    let mut workspace = workspace;
+                    workspace.write().toggle_group(id);
+                })
                 .selected(state.active)
                 .on_select(move |index| {
                     let mut workspace = workspace;
@@ -1287,6 +1305,7 @@ fn use_live_menu(handles: &Handles) {
     let tabs = state.tabs.len();
     let split = state.active_tab().is_some_and(|tab| tab.root.is_split());
     let zoomed = state.active_tab().is_some_and(|tab| tab.zoomed);
+    let grouped = state.active_group().is_some();
     let titles = state.tab_titles();
     let active = state.active;
     drop(state);
@@ -1492,9 +1511,12 @@ fn use_live_menu(handles: &Handles) {
         handles.defaults.read().show_tabs_in_fullscreen,
     );
     use_menu_enabled(menu::NEXT_TAB, tabs > 1);
+    use_menu_enabled(menu::NEXT_TAB_GROUP, tabs > 1);
+    use_menu_enabled(menu::PREVIOUS_TAB_GROUP, tabs > 1);
+    use_menu_enabled(menu::REMOVE_TAB_FROM_GROUP.id, grouped);
     use_menu_enabled(menu::PREVIOUS_TAB, tabs > 1);
-    use_menu_enabled(menu::MOVE_TAB_LEFT.id, active > 0 && unlocked);
-    use_menu_enabled(menu::MOVE_TAB_RIGHT.id, active + 1 < tabs && unlocked);
+    use_menu_enabled(menu::MOVE_TAB_LEFT.id, tabs > 1 && unlocked);
+    use_menu_enabled(menu::MOVE_TAB_RIGHT.id, tabs > 1 && unlocked);
     use_menu_enabled(menu::SPLIT_PANE, split);
     use_submenu_items(menu::SELECT_TAB, menu::select_tab_items(&titles, active));
     let profiles = handles.defaults.read().profiles();
@@ -1987,6 +2009,12 @@ fn field_sheet(handles: &Handles, target: Sheet) -> Element {
             tr!("save-arrangement-name"),
             tr!("save-confirm"),
         ),
+        // PseudoTerminal.m -promptForTabGroupName:title:.
+        Sheet::NewTabGroup => (
+            tr!("new-tab-group"),
+            tr!("tab-group-name"),
+            tr!("mark-alert-ok"),
+        ),
         Sheet::NamedMark(_) => (
             tr!("enter-mark-name"),
             tr!("mark-name"),
@@ -2058,6 +2086,9 @@ fn confirm_later(handles: &Handles, target: Sheet) {
             Sheet::Log(of) => start_log(&later, of, &typed),
             Sheet::Coprocess(of) => start_coprocess(&later, of, &typed),
             Sheet::SaveArrangement => save_arrangement(&later, &typed),
+            Sheet::NewTabGroup => workspace
+                .write()
+                .add_active_to_new_group(typed.trim().to_string()),
             Sheet::NamedMark(of) => {
                 if let Some(session) = later.sessions.peek().get(&of).filter(|_| !typed.is_empty())
                 {
@@ -3284,6 +3315,7 @@ fn tab_layout(handles: &Handles, tab: &Tab) -> Option<TabLayout> {
     Some(TabLayout {
         title: tab.title.clone(),
         root: arrangement::capture(&tab.root, &describe)?,
+        group: tab.group.clone(),
     })
 }
 
@@ -3305,6 +3337,7 @@ fn open_layout(handles: &Handles, events: &Events, tab: TabLayout) -> bool {
         active,
         zoomed: false,
         title: tab.title,
+        group: tab.group,
     });
     true
 }
@@ -3906,6 +3939,21 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
                 open_sheet(handles, Sheet::NamedMark(session.id));
             }
         }
+        _ if id == menu::ADD_TAB_TO_NEW_GROUP.id => {
+            let label = workspace
+                .peek()
+                .tab_titles()
+                .get(workspace.peek().active)
+                .cloned();
+            handles
+                .draft
+                .clone()
+                .set(label.unwrap_or_else(|| tr!("tab-group-default").to_string()));
+            open_sheet(handles, Sheet::NewTabGroup);
+        }
+        _ if id == menu::REMOVE_TAB_FROM_GROUP.id => workspace.write().remove_active_from_group(),
+        menu::NEXT_TAB_GROUP => workspace.write().step_tab_group(1),
+        menu::PREVIOUS_TAB_GROUP => workspace.write().step_tab_group(-1),
         _ if id == menu::SAVE_ARRANGEMENT.id => {
             handles.draft.clone().set(String::new());
             open_sheet(handles, Sheet::SaveArrangement);

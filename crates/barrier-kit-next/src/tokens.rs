@@ -21,6 +21,33 @@ pub const TAB_BAR: TabBarMetrics = TabBarMetrics {
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TabGroupMetrics {
+    pub name_pad: f32,
+    pub colored_area: f32,
+    pub outline: f32,
+    pub chevron: f32,
+    pub colors: [Rgba; 7],
+}
+
+// PSMYosemiteTabStyle.m kPSMSquaredGroup… and PseudoTerminal.m -nextTabGroupColor: AppKit's
+// system blue, green, orange, purple, red, #50afbc and pink in the light appearance.
+pub const TAB_GROUP: TabGroupMetrics = TabGroupMetrics {
+    name_pad: 10.0,
+    colored_area: 6.0,
+    outline: 1.0,
+    chevron: 14.0,
+    colors: [
+        Rgba::rgb8(0, 122, 255),
+        Rgba::rgb8(52, 199, 89),
+        Rgba::rgb8(255, 149, 0),
+        Rgba::rgb8(175, 82, 222),
+        Rgba::rgb8(255, 59, 48),
+        Rgba::rgb8(0x50, 0xaf, 0xbc),
+        Rgba::rgb8(255, 45, 85),
+    ],
+};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SplitPanesMetrics {
     pub divider: f32,
     pub pane_min: f32,

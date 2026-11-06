@@ -3495,3 +3495,42 @@ ventana bloqueada.
 de tmux con el modo pausa de la pasarela (`tmuxController.gateway
 .pauseModeEnabled`). Sin la integración de tmux no hay nada que pausar; queda
 con ella.
+
+## Fase 81 — Grupos de pestañas
+
+### Plan
+
+`PseudoTerminal.m`, `iTermTabGroupOrdering.swift` y `PSMYosemiteTabStyle.m`:
+
+1. Cada pestaña puede llevar un grupo (id, nombre, color y plegado), como
+   `PTYTab.tabGroupID/Name/Color/Collapsed`.
+2. Window › Tab › Add Tab to New Group… pide el nombre (el título de la
+   pestaña de partida) y toma el siguiente color de `-nextTabGroupColor`.
+   Remove Tab from Group la deja justo detrás del grupo.
+3. Select Next/Previous Tab Group (⌃⇧⌘] y ⌃⇧⌘[) salta el resto del grupo.
+4. Move Tab Left/Right sigue `singleTabMove`: un miembro sale del grupo en su
+   borde, una pestaña suelta entra en el grupo que toca, un grupo de una
+   pestaña salta la unidad vecina y en los extremos se da la vuelta.
+5. La barra pinta el nombre sobre un bloque del color del grupo, un contorno
+   de 1 pt alrededor del grupo y, plegado, un chip «Nombre  N» con chevron.
+   Pulsar el chip pliega o despliega; la pestaña activa nunca queda oculta.
+6. Las disposiciones guardan el grupo de cada pestaña.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos. Tests de la lógica en `tab_groups.rs`.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| B a un grupo nuevo; C con Move Tab Left entra en él | ✓ | `fase81-grupos.png` |
+| Pulsar el chip pliega el grupo en «Nombre  2» y deja A activa | ✓ | `fase81-grupos.png` |
+| Remove Tab from Group en B la deja detrás del grupo | ✓ | `fase81-grupos.png` |
+| Guardar y abrir una disposición conserva el grupo | ✓ | — |
+
+**No probado:** con el kit tal cual; Select Next/Previous Tab Group en la
+ventana; ⌃A en el campo del nombre.
+
+**Difiere de iTerm2:** sin menú contextual de la pestaña (añadir a un grupo
+existente, renombrar el grupo) ni arrastre de pestañas; el nombre no aparece
+seleccionado (BK-043).
