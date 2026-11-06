@@ -39,15 +39,6 @@ pub fn word_span(text: &str, columns: &[usize], column: usize) -> Option<Range<u
     None
 }
 
-pub fn word_at(text: &str, columns: &[usize], column: usize) -> Option<String> {
-    let word = &text[word_span(text, columns, column)?];
-    let word = match word.split_once(':') {
-        Some((path, line)) if line.starts_with(|c: char| c.is_ascii_digit()) => path,
-        _ => word,
-    };
-    Some(word.to_string())
-}
-
 pub fn open(target: &str) {
     match Command::new("xdg-open").arg(target).spawn() {
         Ok(mut child) => {
@@ -87,20 +78,6 @@ mod tests {
         assert_eq!(
             word_span(text, &columns, 30).map(|span| &text[span]),
             Some("src/b.rs:9")
-        );
-    }
-
-    #[test]
-    fn the_word_under_the_column_loses_its_line_number_and_quotes() {
-        let text = "error en src/main.rs:42:7, ver 'notas.txt'";
-        let columns: Vec<usize> = (0..text.len()).collect();
-        assert_eq!(word_at(text, &columns, 12), Some("src/main.rs".to_string()));
-        assert_eq!(word_at(text, &columns, 36), Some("notas.txt".to_string()));
-        assert_eq!(word_at(text, &columns, 6), Some("en".to_string()));
-        assert_eq!(word_at(text, &columns, 5), None);
-        assert_eq!(
-            word_at("file2", &[0, 1, 2, 3, 4], 4),
-            Some("file2".to_string())
         );
     }
 }

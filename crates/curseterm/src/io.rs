@@ -756,7 +756,7 @@ fn perform(
 }
 
 // PTYSession.m -triggerSideEffectRunBackgroundCommand:pool:: the user's shell runs it unattended.
-fn run_command(command: &str) {
+pub fn run_command(command: &str) {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
     match std::process::Command::new(shell)
         .args(["-c", command])

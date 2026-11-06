@@ -20,7 +20,6 @@ use crate::hint_view::{self, HintLabel};
 use crate::hints::Hints;
 use crate::indicators::{self, Indicator};
 use crate::io::{Annotation, AnnotationId};
-use crate::links;
 use crate::mouse::{self, Pointer};
 use crate::note_view::{NoteEvent, NoteView};
 use crate::session::{self, Session, SessionId};
@@ -267,10 +266,7 @@ impl Component for TerminalPane {
                                 return;
                             }
                             on_focus.call(session.id);
-                            if held.peek().contains(Modifiers::META)
-                                && let Some(link) = session.link_at(point)
-                            {
-                                links::open(&link);
+                            if held.peek().contains(Modifiers::META) && session.open_at(point) {
                                 return;
                             }
                             let click = next_click(*last_click.read(), point);

@@ -2994,3 +2994,41 @@ equipo; una regla pegajosa; editar las reglas en Ajustes.
 nombre del perfil, no los cambios de Edit Session; no se guarda al cerrar;
 sin la casilla «Prevent Automatic Profile Switching» ni el registro de
 depuración.
+
+## Fase 66 — Semantic History
+
+### Plan
+
+Lo que hace Super+clic sobre un nombre de archivo en iTerm2
+(`iTermSemanticHistoryController.m -openPath:…`,
+`iTermSemanticHistoryPrefsController.m` e `iTermPathCleaner.m`):
+
+1. Un enlace OSC 8 o una URL se abren como antes; si no, la palabra pulsada es
+   un archivo, relativo a la carpeta de la sesión, y un `:línea[:columna]`
+   final es la posición.
+2. **Acciones** del perfil: Open with default app (`xdg-open`), Open URL…,
+   Run command…, Always run command… (también si el archivo no existe),
+   Run coprocess… y Send text….
+3. **Sustituciones:** `\1` archivo, `\2` línea, `\3` texto antes del clic,
+   `\4` texto después y `\5` carpeta de trabajo; escapadas para la shell en
+   las órdenes y con codificación por ciento en la URL.
+4. **Ajustes › Profiles › Advanced › Semantic History:** la acción y su texto.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado y un `xdg-open` falso.
+`./dev.sh check` limpio en los dos modos; tests nuevos de la posición y de las
+sustituciones.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Run command `echo \1 \2 \5 >> sem.log` y Super+clic en `sem.rs:42:3` dentro de `/tmp/semdir`: `/tmp/semdir/sem.rs 42 /tmp/semdir` | ✓ | — |
+| Open with default app: `xdg-open /tmp/semdir/sem.rs` | ✓ | — |
+
+**No probado:** con el kit tal cual; Open URL, Always run command, Run
+coprocess y Send text; la fila de Ajustes.
+
+**Difiere de iTerm2:** sin Open with editor… (las opciones son apps de
+macOS); la aplicación por omisión no recibe la línea; el archivo es la
+palabra pulsada, no la búsqueda de rutas de `iTermPathFinder.m` con espacios;
+las sustituciones son las numéricas, no las expresiones `\(…)`.

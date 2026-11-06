@@ -9,6 +9,7 @@ use crate::arrangement::Arrangement;
 use crate::find_mode::FindMode;
 use crate::key_bindings::{Binding, NamedAction};
 use crate::paste_warning::PasteWarnings;
+use crate::semantic_history::SemanticHistory;
 use crate::smart_selection::{self, Rule};
 use crate::snippets::Snippet;
 
@@ -140,6 +141,7 @@ pub struct Profile {
     pub triggers: Vec<Trigger>,
     pub smart_selection_rules: Vec<Rule>,
     pub bound_hosts: Vec<String>,
+    pub semantic_history: SemanticHistory,
     pub scrollback_lines: u32,
     pub flash_visual_bell: bool,
     pub bell_icon_in_tabs: bool,
@@ -353,6 +355,7 @@ impl Default for Profile {
             triggers: Vec::new(),
             smart_selection_rules: smart_selection::default_rules(),
             bound_hosts: Vec::new(),
+            semantic_history: SemanticHistory::default(),
             scrollback_lines: 1000,
             flash_visual_bell: true,
             bell_icon_in_tabs: true,

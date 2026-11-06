@@ -37,6 +37,7 @@ use crate::key_bindings::NamedAction;
 use crate::key_bindings_pane::{KeyBindingsEditor, Owner};
 use crate::localize::tr;
 use crate::menu;
+use crate::semantic_history::Action as SemanticAction;
 use crate::smart_selection::{self, Precision, Rule};
 use crate::snippets_pane::SnippetsPane;
 use crate::triggers;
@@ -396,6 +397,10 @@ impl Component for ProfilesPane {
                                 .maybe_child(
                                     (*section.read() == 7)
                                         .then(|| profile_switching_list(index, &profile)),
+                                )
+                                .maybe_child(
+                                    (*section.read() == 7)
+                                        .then(|| semantic_history_row(index, &profile)),
                                 ),
                         ),
                     ),
@@ -1107,6 +1112,66 @@ fn smart_selection_table(index: usize, profile: &Profile) -> Rect {
         )
 }
 
+// iTermSemanticHistoryPrefsController.m: what ⌘-click on a file does, and its text with \1 path,
+// \2 line, \3 text before, \4 text after and \5 working directory.
+fn semantic_history_row(index: usize, profile: &Profile) -> Rect {
+    let history = &profile.semantic_history;
+    let chosen = SemanticAction::ALL
+        .iter()
+        .position(|action| *action == history.action)
+        .unwrap_or_default();
+    let action = [
+        tr!("semantic-default-app"),
+        tr!("semantic-url"),
+        tr!("semantic-command"),
+        tr!("semantic-raw-command"),
+        tr!("semantic-coprocess"),
+        tr!("semantic-send-text"),
+    ]
+    .into_iter()
+    .fold(
+        PopUpButton::new(tr!("section-semantic-history")),
+        |popup, name| popup.item(name),
+    )
+    .selected(chosen)
+    .on_change(move |choice: usize| {
+        edit(index, |profile| {
+            profile.semantic_history.action = SemanticAction::ALL[choice];
+        })
+    });
+    let parameter = (history.action != SemanticAction::DefaultApp).then(|| {
+        rect().width(Size::flex(1.0)).child(ProfileText {
+            index,
+            field: Field::SemanticText(history.action),
+            value: history.text.clone(),
+        })
+    });
+    rect()
+        .width(Size::fill())
+        .direction(Direction::Vertical)
+        .spacing(SPACE_1)
+        .child(text(
+            tr!("section-semantic-history"),
+            HEADLINE,
+            Palette::current().label,
+        ))
+        .child(text(
+            tr!("semantic-history-help"),
+            CAPTION,
+            Palette::current().secondary_label,
+        ))
+        .child(
+            rect()
+                .width(Size::fill())
+                .direction(Direction::Horizontal)
+                .content(Content::flex())
+                .cross_align(Alignment::Center)
+                .spacing(SPACE_1)
+                .child(action)
+                .maybe_child(parameter),
+        )
+}
+
 // ProfilesAdvancedPreferencesViewController.m Automatic Profile Switching: one rule per row,
 // [user@][host][:path][&job], with + and −.
 fn profile_switching_list(index: usize, profile: &Profile) -> Rect {
@@ -1273,6 +1338,7 @@ enum Field {
     SmartNotes(usize),
     SmartRegex(usize),
     BoundHost(usize),
+    SemanticText(SemanticAction),
     TriggerParameter(usize, TriggerAction),
     Scrollback,
     Columns,
@@ -1295,6 +1361,9 @@ impl Field {
             Self::TriggerRegex(_) | Self::SmartRegex(_) => tr!("trigger-regex"),
             Self::SmartNotes(_) => tr!("smart-selection-notes"),
             Self::BoundHost(_) => tr!("profile-switching-placeholder"),
+            Self::SemanticText(SemanticAction::Url) => tr!("semantic-url-placeholder"),
+            Self::SemanticText(SemanticAction::SendText) => tr!("semantic-text-placeholder"),
+            Self::SemanticText(_) => tr!("semantic-command-placeholder"),
             Self::TriggerParameter(_, action) => trigger_placeholder(action),
             Self::Scrollback => tr!("scrollback-lines"),
             Self::Columns => tr!("window-columns"),
@@ -1307,7 +1376,11 @@ impl Field {
         if value.is_empty()
             && !matches!(
                 self,
-                Self::Command | Self::InitialText | Self::Badge | Self::TriggerParameter(..)
+                Self::Command
+                    | Self::InitialText
+                    | Self::Badge
+                    | Self::TriggerParameter(..)
+                    | Self::SemanticText(_)
             )
         {
             return;
@@ -1351,6 +1424,7 @@ impl Field {
                         }
                     }
                 }
+                Self::SemanticText(_) => profile.semantic_history.text = value.clone(),
                 Self::BoundHost(position) => {
                     if let Some(rule) = profile.bound_hosts.get_mut(position) {
                         *rule = value.clone();

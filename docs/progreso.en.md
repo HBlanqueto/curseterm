@@ -2970,3 +2970,42 @@ sticky rule; editing the rules in Settings.
 **Differs from iTerm2:** no `{expression}` rules; the stack keeps only the
 profile's name, not Edit Session changes; it is not saved on quit; no
 «Prevent Automatic Profile Switching» checkbox nor the debug log.
+
+## Phase 66 — Semantic History
+
+### Plan
+
+What Super+click on a file name does in iTerm2
+(`iTermSemanticHistoryController.m -openPath:…`,
+`iTermSemanticHistoryPrefsController.m` and `iTermPathCleaner.m`):
+
+1. An OSC 8 link or a URL opens as before; otherwise the clicked word is a
+   file, relative to the session's folder, and a trailing `:line[:column]` is
+   the position.
+2. **Actions** in the profile: Open with default app (`xdg-open`), Open URL…,
+   Run command…, Always run command… (also when the file does not exist),
+   Run coprocess… and Send text….
+3. **Substitutions:** `\1` file, `\2` line, `\3` text before the click, `\4`
+   text after and `\5` working directory; shell-escaped in commands and
+   percent-encoded in the URL.
+4. **Settings › Profiles › Advanced › Semantic History:** the action and its
+   text.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit and a fake `xdg-open`.
+`./dev.sh check` clean in both modes; new tests for the position and the
+substitutions.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Run command `echo \1 \2 \5 >> sem.log` and Super+click on `sem.rs:42:3` inside `/tmp/semdir`: `/tmp/semdir/sem.rs 42 /tmp/semdir` | ✓ | — |
+| Open with default app: `xdg-open /tmp/semdir/sem.rs` | ✓ | — |
+
+**Not tested:** the kit as is; Open URL, Always run command, Run coprocess and
+Send text; the Settings row.
+
+**Differs from iTerm2:** no Open with editor… (its choices are macOS apps);
+the default app does not get the line; the file is the clicked word, not
+`iTermPathFinder.m`'s path search with spaces; the substitutions are the
+numeric ones, not `\(…)` expressions.

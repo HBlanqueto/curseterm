@@ -38,6 +38,7 @@ use crate::key_report::{KITTY_FLAGS, KeyMode};
 use crate::keys::CopyCommand;
 use crate::links;
 use crate::profile_switching::{Place, Switcher};
+use crate::semantic_history::{self, Action, SemanticHistory, Target};
 use crate::session_note::SessionNote;
 use crate::smart_selection::{self, Precision};
 use crate::status;
@@ -128,6 +129,7 @@ pub struct Session {
     options: Cell<(usize, CursorStyle, bool)>,
     coprocess: RefCell<Option<Child>>,
     switcher: RefCell<Switcher>,
+    semantic_history: RefCell<SemanticHistory>,
     place_checked: Cell<Instant>,
     pub place_check_queued: Cell<bool>,
     pub composer: RefCell<Composer>,
@@ -203,6 +205,7 @@ impl Session {
             )),
             coprocess: RefCell::new(None),
             switcher: RefCell::default(),
+            semantic_history: RefCell::default(),
             place_checked: Cell::new(Instant::now() - PLACE_CHECK_INTERVAL),
             place_check_queued: Cell::new(false),
             composer: RefCell::default(),
@@ -227,6 +230,7 @@ impl Session {
             let mut extras = self.extras();
             extras.set_triggers(&profile.triggers);
             extras.set_smart_selection_rules(&profile.smart_selection_rules);
+            *self.semantic_history.borrow_mut() = profile.semantic_history.clone();
             extras.apps_change_key_mode = profile.apps_change_key_reporting;
             // PTYSession.m -setProfile: a profile asking for CSI u sets the session's mode.
             match (profile.report_keys_csi_u, extras.key_mode) {
@@ -601,18 +605,58 @@ impl Session {
         }
     }
 
-    pub fn link_at(&self, point: Point) -> Option<String> {
+    // PTYTextView ⌘-click → iTermSemanticHistoryController.m -openPath:…: a link opens; a file
+    // under the pointer does what the profile's Semantic History says.
+    pub fn open_at(&self, point: Point) -> bool {
         let term = self.term.lock();
-        if let Some(link) = term.grid()[point].hyperlink() {
-            return Some(link.uri().to_string());
-        }
+        let link = term.grid()[point]
+            .hyperlink()
+            .map(|link| link.uri().to_string());
         let (text, columns) = pty_io::trimmed_text_and_byte_columns(&term, point.line);
-        if let Some(url) = links::url_at(&text, &columns, point.column.0) {
-            return Some(url);
+        drop(term);
+        if let Some(url) = link.or_else(|| links::url_at(&text, &columns, point.column.0)) {
+            links::open(&url);
+            return true;
         }
-        let word = links::word_at(&text, &columns, point.column.0)?;
-        let path = self.working_directory()?.join(word);
-        path.exists().then(|| path.display().to_string())
+        let Some(span) = links::word_span(&text, &columns, point.column.0) else {
+            return false;
+        };
+        let raw = &text[span.clone()];
+        let (file, line, column) = semantic_history::split_position(raw);
+        let directory = self.working_directory().unwrap_or_default();
+        let path = directory.join(file);
+        let history = self.semantic_history.borrow().clone();
+        let target = Target {
+            path: if history.action == Action::RawCommand {
+                raw.to_string()
+            } else {
+                path.display().to_string()
+            },
+            line: line.to_string(),
+            column: column.to_string(),
+            prefix: text[..span.start].to_string(),
+            suffix: text[span.end..].to_string(),
+            directory: directory.display().to_string(),
+        };
+        let command = || semantic_history::substitute(&history.text, &target, shell_escaped);
+        match history.action {
+            Action::RawCommand => pty_io::run_command(&command()),
+            _ if !path.exists() => return false,
+            Action::Command => pty_io::run_command(&command()),
+            Action::Coprocess => {
+                if let Err(error) = self.start_coprocess(&command()) {
+                    tracing::warn!(%error, "the Semantic History coprocess could not start");
+                }
+            }
+            Action::SendText => self.write(command().into_bytes()),
+            Action::Url if !path.is_dir() => links::open(&semantic_history::substitute(
+                &history.text,
+                &target,
+                semantic_history::percent_encoded,
+            )),
+            Action::Url | Action::DefaultApp => links::open(&target.path),
+        }
+        true
     }
 
     pub fn smart_select(&self, point: Point) {
