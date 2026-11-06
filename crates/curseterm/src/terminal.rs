@@ -19,11 +19,12 @@ use barrier_kit::titlebar::Titlebar;
 use barrier_kit::views::feedback::{Alert, sheet};
 use barrier_kit::views::table::Table;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
-use barrier_kit_next::tokens::{PASTE_HISTORY_SIZE, RENAME_WIDTH};
+use barrier_kit_next::tokens::{PASTE_HISTORY_SIZE, RENAME_WIDTH, TOOLBELT_WIDTH};
 use barrier_kit_next::views::split_panes::SplitPanes;
 use barrier_kit_next::views::tab_bar::{Badge, TabBar};
 use freya_clipboard::copypasta::ClipboardProvider;
 use freya_core::prelude::*;
+use rustix::process::{Pid, Signal, kill_process};
 use torin::prelude::{Alignment, Content, Direction, Size};
 
 use vow_design::{CAPTION, DURATION_FAST_MS, DURATION_SLOW_MS, HEADLINE, Rgba, SPACE_1, SPACE_2};
@@ -73,6 +74,7 @@ struct Handles {
     alive: Rc<Cell<bool>>,
     dark: Rc<Cell<bool>>,
     replay: State<Option<(SessionId, usize)>>,
+    toolbelt: Toolbelt,
     clipboard: ClipboardState,
     broadcast: State<Broadcast>,
     find: Find,
@@ -103,6 +105,13 @@ struct Buried {
     sessions: Vec<Rc<Session>>,
     titles: Vec<(SessionId, String)>,
     at: Instant,
+}
+
+#[derive(Clone, Copy)]
+struct Toolbelt {
+    shown: State<bool>,
+    directories: State<Vec<String>>,
+    job: State<Option<u32>>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -246,6 +255,11 @@ impl App for Terminal {
         let mut held = use_state(Modifiers::empty);
         let transparency = use_state(|| true);
         let replay = use_state(|| None::<(SessionId, usize)>);
+        let toolbelt = Toolbelt {
+            shown: use_state(|| false),
+            directories: use_state(Vec::new),
+            job: use_state(|| None),
+        };
         let draft = use_state(String::new);
         let picker = PickerState {
             query: use_state(String::new),
@@ -269,6 +283,7 @@ impl App for Terminal {
             alive: Rc::new(Cell::new(true)),
             dark: Rc::new(Cell::new(dark)),
             replay,
+            toolbelt,
             clipboard: consume_root_context(),
             broadcast,
             find,
@@ -536,7 +551,17 @@ impl App for Terminal {
                 rect()
                     .width(Size::fill())
                     .height(Size::flex(1.0))
-                    .maybe_child(body),
+                    .direction(Direction::Horizontal)
+                    .content(Content::flex())
+                    .child(
+                        rect()
+                            .width(Size::flex(1.0))
+                            .height(Size::fill())
+                            .maybe_child(body),
+                    )
+                    .maybe_child(
+                        (*toolbelt.shown.read()).then(|| toolbelt_view(&handles, revision)),
+                    ),
             )
             .maybe_child(replay_bar)
     }
@@ -661,6 +686,7 @@ fn use_live_menu(handles: &Handles) {
         .active()
         .is_some_and(|session| session.extras().show_timestamps);
     use_menu_checked(menu::SHOW_TIMESTAMPS.id, timestamps);
+    use_menu_checked(menu::TOOLBELT.id, *handles.toolbelt.shown.read());
     for state in TerminalState::ALL {
         let on = handles
             .active()
@@ -1118,6 +1144,93 @@ fn copy_command_label(command: CopyCommand) -> &'static str {
     }
 }
 
+fn toolbelt_view(handles: &Handles, mut revision: State<u64>) -> Element {
+    let palette = Palette::current();
+    let toolbelt = handles.toolbelt;
+    let jobs = handles
+        .active()
+        .map(|session| session.jobs())
+        .unwrap_or_default();
+    let chosen = *toolbelt.job.read();
+    let job_rows = jobs
+        .iter()
+        .map(|job| vec![job.pid.to_string(), job.name.clone()])
+        .collect();
+    let selected_job = jobs.iter().position(|job| Some(job.pid) == chosen);
+    let pids: Vec<u32> = jobs.iter().map(|job| job.pid).collect();
+    let pastes = handles.pastes.read().clone();
+    let paste_rows = pastes
+        .iter()
+        .map(|text| vec![paste_history::one_line(text)])
+        .collect();
+    let directories = toolbelt.directories.read().clone();
+    let directory_rows = directories.iter().map(|path| vec![path.clone()]).collect();
+    let (paster, typer) = (handles.clone(), handles.clone());
+    let heading = |title: &'static str| text(title, CAPTION, palette.secondary_label);
+    rect()
+        .width(Size::px(TOOLBELT_WIDTH))
+        .height(Size::fill())
+        .direction(Direction::Vertical)
+        .content(Content::flex())
+        .padding(SPACE_2)
+        .spacing(SPACE_2)
+        .background(color(palette.window_background))
+        .child(heading(tr!("toolbelt-jobs")))
+        .child(
+            rect().width(Size::fill()).height(Size::flex(1.0)).child(
+                Table::new(
+                    tr!("toolbelt-jobs"),
+                    vec![tr!("toolbelt-pid"), tr!("toolbelt-command")],
+                )
+                .rows(job_rows)
+                .selected(selected_job)
+                .on_select(move |index: usize| {
+                    let mut job = toolbelt.job;
+                    job.set(pids.get(index).copied());
+                }),
+            ),
+        )
+        .child(
+            Button::new(tr!("toolbelt-terminate"))
+                .disabled(selected_job.is_none())
+                .on_press(move |_| {
+                    if let Some(pid) = chosen.and_then(|pid| Pid::from_raw(pid as i32)) {
+                        let _ = kill_process(pid, Signal::TERM);
+                    }
+                    *revision.write() += 1;
+                }),
+        )
+        .child(heading(tr!("paste-history")))
+        .child(
+            rect().width(Size::fill()).height(Size::flex(1.0)).child(
+                Table::new(tr!("paste-history"), vec![tr!("paste-history-text")])
+                    .rows(paste_rows)
+                    .on_select(move |index: usize| {
+                        if let Some(text) = pastes.get(index) {
+                            paste_text(&paster, text.clone());
+                        }
+                    }),
+            ),
+        )
+        .child(heading(tr!("toolbelt-directories")))
+        .child(
+            rect().width(Size::fill()).height(Size::flex(1.0)).child(
+                Table::new(tr!("toolbelt-directories"), vec![tr!("toolbelt-path")])
+                    .rows(directory_rows)
+                    .on_select(move |index: usize| {
+                        if let (Some(path), Some(session)) =
+                            (directories.get(index), typer.active())
+                        {
+                            session.write(
+                                format!("cd {}\r", session::shell_escaped(path)).into_bytes(),
+                            );
+                        }
+                    }),
+            ),
+        )
+        .into_element()
+}
+
 fn replay_bar(handles: &Handles, id: SessionId, index: usize) -> Element {
     let session = handles.sessions.read().get(&id).cloned();
     let (frames, at) = session.map_or((0, None), |session| {
@@ -1223,7 +1336,13 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
     };
     let mut workspace = handles.workspace;
     match event {
-        TermEvent::Title(title) => workspace.write().set_title(id, Some(title)),
+        TermEvent::Title(title) => {
+            workspace.write().set_title(id, Some(title));
+            if let Some(directory) = session.working_directory() {
+                let mut directories = handles.toolbelt.directories;
+                paste_history::remember(&mut directories.write(), directory.display().to_string());
+            }
+        }
         TermEvent::ResetTitle => workspace.write().set_title(id, None),
         TermEvent::PtyWrite(text) => session.write(text.into_bytes()),
         TermEvent::ClipboardStore(_, text) => set_clipboard(handles.clipboard, text),
@@ -1696,6 +1815,11 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             if let Some(session) = &active {
                 session.reset_character_set();
             }
+        }
+        _ if id == menu::TOOLBELT.id => {
+            let mut shown = handles.toolbelt.shown;
+            let next = !*shown.peek();
+            shown.set(next);
         }
         _ if id == menu::INSTANT_REPLAY.id => {
             if let Some(session) = &active {

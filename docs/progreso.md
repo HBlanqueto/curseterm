@@ -1200,3 +1200,27 @@ del bloque.
    - **Recent Directories:** los directorios por los que pasaron las
      sesiones de la ventana; pulsar uno escribe `cd` con la ruta escapada.
 2. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit tal cual: no necesita parche.
+`./dev.sh check` limpio en los dos modos del kit; 41 y 42 tests de la app y 1
+del bloque.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `sleep 300 &`, `cd /tmp`, `cd /root` y pegar `echo pegado`; ⇧⌘B: Jobs lista `sleep` con su PID, Paste History la entrada y Recent Directories `/root` y `/tmp` | ✓ tras repartir el alto entre las tres tablas; con alto fijo la última quedaba cortada | `fase25-toolbelt.png` |
+| Elegir `sleep` y Terminate: el proceso termina y la shell avisa «Terminated» | ✓ | — |
+| Pulsar `/tmp`: se teclea `cd /tmp`; pulsar `echo pegado`: se pega | ✓ | — |
+
+Los clics de prueba sin pausa entre bajar y subir el botón no seleccionaban
+filas de `Table`; con 150 ms sí. Es un límite del ratón virtual del
+laboratorio, no se nota con un ratón real.
+
+**No probado:** procesos de otra pestaña (Jobs sigue a la sesión activa);
+rutas con espacios en Recent Directories.
+
+**Difiere de iTerm2:** no hay notas, ni la herramienta de capturas, ni la de
+órdenes recientes; las herramientas no se pueden reordenar.

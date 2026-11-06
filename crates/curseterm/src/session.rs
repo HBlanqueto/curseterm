@@ -26,6 +26,7 @@ use rustix::process::{Pid, Signal, kill_process_group};
 
 use crate::config::{APP_NAME, Profile, SCROLLBACK_LIMIT};
 use crate::io::{self as pty_io, Extras};
+use crate::jobs;
 use crate::keys::CopyCommand;
 use crate::links;
 
@@ -417,6 +418,10 @@ impl Session {
             cursor.column.0,
             cursor.line.0 + term.grid().display_offset() as i32,
         )
+    }
+
+    pub fn jobs(&self) -> Vec<jobs::Job> {
+        jobs::of_session(self.shell_pid)
     }
 
     pub fn has_output(&self) -> bool {

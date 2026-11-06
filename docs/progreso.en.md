@@ -1195,3 +1195,26 @@ snapshots.
    - **Recent Directories:** the directories the window's sessions went
      through; clicking one types `cd` with the escaped path.
 2. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the kit as is: it needs no patch. `./dev.sh
+check` clean in both kit modes; 41 and 42 app tests and 1 block test.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `sleep 300 &`, `cd /tmp`, `cd /root` and pasting `echo pegado`; ⇧⌘B: Jobs lists `sleep` with its PID, Paste History the entry and Recent Directories `/root` and `/tmp` | ✓ after sharing the height among the three tables; with a fixed height the last one was cut off | `fase25-toolbelt.png` |
+| Choosing `sleep` and Terminate: the process ends and the shell says "Terminated" | ✓ | — |
+| Clicking `/tmp`: `cd /tmp` is typed; clicking `echo pegado`: it is pasted | ✓ | — |
+
+Test clicks with no pause between pressing and releasing did not select
+`Table` rows; with 150 ms they did. It is a limit of the lab's virtual
+mouse, not noticeable with a real mouse.
+
+**Not tested:** processes of another tab (Jobs follows the active session);
+paths with spaces in Recent Directories.
+
+**Differs from iTerm2:** there are no notes, no captured output tool and no
+recent commands tool; the tools cannot be reordered.

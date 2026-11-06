@@ -5,6 +5,7 @@ mod grid;
 mod integration;
 mod io;
 mod itermcolors;
+mod jobs;
 mod keys;
 mod links;
 mod localize;
