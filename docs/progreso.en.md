@@ -1726,3 +1726,48 @@ and the patched kit.
 screenshot; the expression cannot be changed in Settings. The capsule and
 its text are drawn on a canvas because Freya paints the terminal canvas,
 deeper in the tree, over them.
+
+## Phase 39 — Smart selections and picking a result
+
+### Plan
+
+iTerm2's Edit › Find › Find All Smart Selection Matches (⌥⇧⌘U) and Pick Result
+to Open (⌥⇧⌘O) (`PTYSession.swift -smartSelectAllVisible`,
+`PTYSession.m -regularExpressonForNonLowPrecisionSmartSelectionRulesCombined`,
+`SmartSelectionRules.plist` and `PTYTextView.m -revealContentNavigationShortcuts:`),
+on the labels of phase 38:
+
+1. **Smart selections:** the rules of normal precision or more joined in one
+   expression: `a::b`, paths, quoted text, dotted names, `mailto:`,
+   `@selector(...)`, email addresses, HTTP URLs, `ssh:` and `telnet:`. The
+   action is copy; with ⌥ the text goes to the shell.
+2. **Picking a result:** with a search in progress, the visible results get
+   labels; the action is open (a relative path from the shell's folder); with
+   ⌥ it copies. The find field gives up focus and the Find highlight stays on
+   exit. It is only enabled with a search.
+3. **Test** on headless sway and documentation.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the patched kit. `./dev.sh check` clean in both
+modes; a new test checks that both expressions compile in the
+`alacritty_terminal` search.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| A line with `/etc/hosts`, `foo::bar`, an email, `"entre comillas"` and `com.example.App` and ⌥⇧⌘U: five labels | ✓ | `fase39-selecciones-inteligentes.png` |
+| `2` copies `foo::bar` (`wl-paste`) | ✓ | — |
+| ⌥3 types `yo@ejemplo.org` into the shell | ✓ | — |
+| ⌘F `conf` and ⌥⇧⌘O: label 1 on `conf`; the field gives up focus | ✓ | `fase39-elegir-resultado.png` |
+| `1` runs `xdg-open` (the lab lacks it: a warning is logged) and the Find highlight stays | ✓ | — |
+| D-Bus menu: Pick Result to Open enabled only with a search | ✓ | — |
+
+**Not tested:** with the kit as is; actually opening a path or a URL.
+
+**Differs from iTerm2:** the rules cannot be edited in Settings; the search
+engine has no look-behind, so the HTTP URL rule is the branch that does not
+take a trailing `)`, `[[:letter:]]` and `[[:number:]]` become `\p{L}` and
+`\p{N}`, and word boundaries are ASCII; copying neither selects the text nor
+shows «Copied». No Select Matches (several selections at once).

@@ -1732,3 +1732,48 @@ el kit parcheado.
 la expresión no se puede cambiar en Ajustes. La cápsula y su texto se
 dibujan en un lienzo porque Freya pinta encima de ellos el lienzo del
 terminal, que está más hondo en el árbol.
+
+## Fase 39 — Selecciones inteligentes y elegir un resultado
+
+### Plan
+
+Edit › Find › Find All Smart Selection Matches (⌥⇧⌘U) y Pick Result to Open
+(⌥⇧⌘O) de iTerm2 (`PTYSession.swift -smartSelectAllVisible`,
+`PTYSession.m -regularExpressonForNonLowPrecisionSmartSelectionRulesCombined`,
+`SmartSelectionRules.plist` y `PTYTextView.m -revealContentNavigationShortcuts:`),
+sobre las etiquetas de la fase 38:
+
+1. **Selecciones inteligentes:** las reglas de precisión normal o más unidas
+   en una expresión: `a::b`, rutas, texto entre comillas, nombres con puntos,
+   `mailto:`, `@selector(...)`, correos, URL HTTP, `ssh:` y `telnet:`. La acción
+   es copiar; con ⌥ el texto va a la shell.
+2. **Elegir un resultado:** con una búsqueda en curso, los resultados visibles
+   reciben etiquetas; la acción es abrir (una ruta relativa, desde la carpeta
+   de la shell); con ⌥ se copia. El campo de búsqueda suelta el foco y el
+   resaltado de Find se queda al salir. Solo está activo con una búsqueda.
+3. **Prueba** en sway sin pantalla y documentación.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos; un test nuevo comprueba que las dos expresiones compilan en la
+búsqueda de `alacritty_terminal`.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Una línea con `/etc/hosts`, `foo::bar`, un correo, `"entre comillas"` y `com.example.App` y ⌥⇧⌘U: cinco etiquetas | ✓ | `fase39-selecciones-inteligentes.png` |
+| `2` copia `foo::bar` (`wl-paste`) | ✓ | — |
+| ⌥3 escribe `yo@ejemplo.org` en la shell | ✓ | — |
+| ⌘F `conf` y ⌥⇧⌘O: etiqueta 1 sobre `conf`; el campo suelta el foco | ✓ | `fase39-elegir-resultado.png` |
+| `1` llama a `xdg-open` (el laboratorio no lo tiene: queda un aviso) y el resaltado de Find sigue | ✓ | — |
+| Menú D-Bus: Pick Result to Open activo solo con búsqueda | ✓ | — |
+
+**No probado:** con el kit tal cual; abrir de verdad una ruta o una URL.
+
+**Difiere de iTerm2:** las reglas no se editan en Ajustes; el motor de
+búsqueda no tiene mirada atrás, así que la regla de URL HTTP es la rama que
+no admite `)` al final, `[[:letter:]]` y `[[:number:]]` pasan a `\p{L}` y
+`\p{N}`, y los límites de palabra son ASCII; al copiar no se selecciona el
+texto ni sale «Copied». Sin Select Matches (varias selecciones a la vez).

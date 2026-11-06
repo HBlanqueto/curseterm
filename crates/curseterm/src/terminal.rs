@@ -41,7 +41,7 @@ use crate::config::{
 };
 use crate::grid::Fonts;
 use crate::hint_view;
-use crate::hints::{Hints, Typed};
+use crate::hints::{self, HintAction, Hints, Typed};
 use crate::io::AnnotationId;
 use crate::keys::{COPY_KEYS, CopyCommand, KeyAction, copy_command, encode};
 use crate::links;
@@ -174,6 +174,7 @@ struct Find {
     query: State<String>,
     focused: State<bool>,
     position: State<Option<(usize, usize)>>,
+    field: AccessibilityId,
 }
 
 impl Find {
@@ -300,6 +301,7 @@ impl App for Terminal {
             query: use_state(String::new),
             focused: use_state(|| false),
             position: use_state(|| None),
+            field: use_hook(AccessibilityId::new_unique),
         };
         let handles = use_hook(move || Handles {
             workspace,
@@ -399,6 +401,17 @@ impl App for Terminal {
             }
         });
         use_live_menu(&handles);
+        // PTYTextView+ARC.m: the shortcuts take the keys, so the find field gives up focus; it runs
+        // here because menu handlers have no Freya context (BK-017).
+        if *find.focused.peek()
+            && handles
+                .hints
+                .read()
+                .as_ref()
+                .is_some_and(|hints| hints.ended.is_none())
+        {
+            find.field.request_unfocus();
+        }
 
         let window_focused = handles.controls.status.read().activated;
         use_focus_report(&handles, window_focused);
@@ -798,6 +811,8 @@ fn use_live_menu(handles: &Handles) {
         .is_some_and(|session| session.has_annotations());
     use_menu_checked(menu::SHOW_ANNOTATIONS.id, annotated);
     use_menu_enabled(menu::ANNOTATE_SELECTION.id, selection);
+    let searching = *handles.find.open.read() && !handles.find.query.read().is_empty();
+    use_menu_enabled(menu::PICK_RESULT.id, searching);
     use_menu_checked(menu::TOOLBELT.id, *handles.toolbelt.shown.read());
     for state in TerminalState::ALL {
         let on = handles
@@ -1468,6 +1483,13 @@ fn composer_event(handles: &Handles, session: &Rc<Session>, event: ComposerEvent
     workspace.write();
 }
 
+fn show_hints(handles: &Handles, session: &Session, found: Vec<hints::Found>, action: HintAction) {
+    if !found.is_empty() {
+        let mut hints = handles.hints;
+        hints.set(Some(Hints::new(session.id, found, action)));
+    }
+}
+
 // iTermCopyModeHandler.m iTermShortcutNavigationModeHandler: Command and Control keys pass
 // through, Escape leaves, and an unknown key goes on to the terminal.
 fn navigate_hints(handles: &Handles, session: &Rc<Session>, key: &Key, held: Modifiers) -> bool {
@@ -1488,14 +1510,18 @@ fn navigate_hints(handles: &Handles, session: &Rc<Session>, key: &Key, held: Mod
             true
         }
         Key::Character(typed) => match hints.type_key(typed) {
+            // PTYTextView+ARC.m: ⌥ swaps open for copy, and copy for typing into the shell.
             Typed::Chosen(index) => {
-                let url = hints.items[index].url.clone();
+                let text = hints.items[index].text.clone();
+                let action = hints.action;
                 hints.end(Some(index));
                 drop(state);
-                if held.contains(Modifiers::ALT) {
-                    copy_text(handles, url);
-                } else {
-                    links::open(&url);
+                match (action, held.contains(Modifiers::ALT)) {
+                    (HintAction::Open, false) => links::open(&session.open_target(&text)),
+                    (HintAction::Open, true) | (HintAction::Copy, false) => {
+                        copy_text(handles, text)
+                    }
+                    (HintAction::Copy, true) => session.write(text.into_bytes()),
                 }
                 true
             }
@@ -1641,6 +1667,7 @@ fn find_bar(handles: &Handles, mut revision: State<u64>) -> Element {
         .spacing(SPACE_1)
         .child(
             SearchField::new(find.query, tr!("find-placeholder"))
+                .a11y_id(find.field)
                 .width(Size::flex(1.0))
                 .auto_focus(true)
                 .on_focus_change(move |focused| {
@@ -2311,11 +2338,21 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         }
         _ if id == menu::FIND_URLS.id => {
             if let Some(session) = &active {
-                let found = session::visible_urls(&session.term.lock());
-                if !found.is_empty() {
-                    let mut hints = handles.hints;
-                    hints.set(Some(Hints::new(session.id, found)));
-                }
+                let found = session::visible_found(&session.term.lock(), hints::URL_PATTERN);
+                show_hints(handles, session, found, HintAction::Open);
+            }
+        }
+        _ if id == menu::SMART_SELECT_ALL.id => {
+            if let Some(session) = &active {
+                let found = session::visible_found(&session.term.lock(), &hints::smart_pattern());
+                show_hints(handles, session, found, HintAction::Copy);
+            }
+        }
+        _ if id == menu::PICK_RESULT.id => {
+            let query = handles.find.query.peek().clone();
+            if let Some(session) = active.as_ref().filter(|_| !query.is_empty()) {
+                let found = session::visible_find_results(&session.term.lock(), &query);
+                show_hints(handles, session, found, HintAction::Open);
             }
         }
         _ if id == menu::ADD_ANNOTATION.id => {

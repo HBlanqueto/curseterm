@@ -94,6 +94,10 @@ pub const FIND_PREVIOUS: Action = Action::new("find-previous", || tr!("find-prev
     .shortcut(super_with(Modifiers::SHIFT, 'g'));
 pub const FIND_URLS: Action =
     Action::new("find-urls", || tr!("find-urls")).shortcut(super_with(Modifiers::ALT, 'u'));
+pub const SMART_SELECT_ALL: Action = Action::new("smart-select-all", || tr!("smart-select-all"))
+    .shortcut(super_with(Modifiers::ALT.union(Modifiers::SHIFT), 'u'));
+pub const PICK_RESULT: Action = Action::new("pick-result", || tr!("pick-result"))
+    .shortcut(super_with(Modifiers::ALT.union(Modifiers::SHIFT), 'o'));
 pub const USE_SELECTION_FOR_FIND: Action =
     Action::new("use-selection-for-find", || tr!("use-selection-for-find"))
         .shortcut(super_key('e'));
@@ -275,6 +279,8 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                         FIND_PREVIOUS.item(true),
                         USE_SELECTION_FOR_FIND.item(false),
                         FIND_URLS.item(true),
+                        SMART_SELECT_ALL.item(true),
+                        PICK_RESULT.item(false),
                     ],
                 ),
                 submenu(

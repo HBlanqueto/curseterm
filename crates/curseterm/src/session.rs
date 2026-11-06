@@ -226,6 +226,14 @@ impl Session {
         reported.or_else(|| std::fs::read_link(format!("/proc/{}/cwd", self.shell_pid)).ok())
     }
 
+    // PTYTextView -textViewOpen:workingDirectory: a relative path opens from the shell's folder.
+    pub fn open_target(&self, text: &str) -> String {
+        self.working_directory()
+            .map(|folder| folder.join(text))
+            .filter(|path| path.exists())
+            .map_or_else(|| text.to_string(), |path| path.display().to_string())
+    }
+
     pub fn extras(&self) -> MutexGuard<'_, Extras> {
         self.extras
             .lock()
@@ -815,8 +823,8 @@ impl Drop for Session {
     }
 }
 
-pub fn visible_urls(term: &Term<Listener>) -> Vec<hints::Found> {
-    let Ok(mut regex) = RegexSearch::new(hints::URL_PATTERN) else {
+pub fn visible_found(term: &Term<Listener>, pattern: &str) -> Vec<hints::Found> {
+    let Ok(mut regex) = RegexSearch::new(pattern) else {
         return Vec::new();
     };
     let offset = term.grid().display_offset() as i32;
@@ -834,6 +842,10 @@ pub fn visible_urls(term: &Term<Listener>) -> Vec<hints::Found> {
             (absolute(found.start()), absolute(found.end()), text)
         })
         .collect()
+}
+
+pub fn visible_find_results(term: &Term<Listener>, query: &str) -> Vec<hints::Found> {
+    visible_found(term, &literal_pattern(query))
 }
 
 pub fn visible_matches(term: &Term<Listener>, query: &str) -> Vec<Match> {
