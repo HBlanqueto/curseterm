@@ -68,6 +68,7 @@ use crate::pick;
 use crate::session::{
     self, GridSize, Launch, Listener, MarkJump, Session, SessionId, TerminalState,
 };
+use crate::session_note::NoteChange;
 use crate::snippets::{self, Snippet};
 use crate::status;
 use crate::theme;
@@ -978,6 +979,12 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                         let session = session.clone();
                         Callback::new(move |event| composer_event(&handles, &session, event))
                     },
+                    note: session.note.borrow().clone(),
+                    on_session_note: {
+                        let handles = painting.handles.clone();
+                        let session = session.clone();
+                        Callback::new(move |change| session_note_event(&handles, &session, change))
+                    },
                     on_note: {
                         let handles = painting.handles.clone();
                         let session = session.clone();
@@ -1087,6 +1094,10 @@ fn use_live_menu(handles: &Handles) {
         .active()
         .is_some_and(|session| session.extras().cursor_guide);
     use_menu_checked(menu::CURSOR_GUIDE.id, guide);
+    let noted = handles
+        .active()
+        .is_some_and(|session| session.note.borrow().visible);
+    use_menu_checked(menu::SHOW_SESSION_NOTE.id, noted);
     let annotated = handles
         .active()
         .is_some_and(|session| session.has_annotations());
@@ -1964,6 +1975,40 @@ fn composer_event(handles: &Handles, session: &Rc<Session>, event: ComposerEvent
             editing.set(false);
         });
     }
+    let mut workspace = handles.workspace;
+    workspace.write();
+}
+
+fn session_note_event(handles: &Handles, session: &Session, change: NoteChange) {
+    let mut note = session.note.borrow_mut();
+    match change {
+        NoteChange::Text(text) => {
+            note.text = text;
+            return;
+        }
+        NoteChange::Focused(focused) => {
+            let mut editing = handles.editing;
+            editing.set(focused);
+            // SessionView.m -hideSessionNoteIfEmpty: an emptied note goes away when it loses focus.
+            if focused || !note.text.is_empty() {
+                return;
+            }
+            note.visible = false;
+        }
+        NoteChange::Moved(frame) => note.frame = Some(frame),
+        NoteChange::Collapsed(collapsed) => {
+            note.collapsed = collapsed;
+            if collapsed {
+                let editing = handles.editing;
+                // BK-027: ⇧↩ still reaches the global handler, so editing ends one loop later.
+                handles.after(Duration::ZERO, move || {
+                    let mut editing = editing;
+                    editing.set(false);
+                });
+            }
+        }
+    }
+    drop(note);
     let mut workspace = handles.workspace;
     workspace.write();
 }
@@ -3287,6 +3332,16 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         menu::NEXT_ANNOTATION | menu::PREVIOUS_ANNOTATION => {
             if let Some(session) = &active {
                 session.step_annotation(id == menu::NEXT_ANNOTATION);
+            }
+        }
+        _ if id == menu::SHOW_SESSION_NOTE.id => {
+            if let Some(session) = &active {
+                let mut note = session.note.borrow_mut();
+                note.toggle();
+                if !note.visible {
+                    let mut editing = handles.editing;
+                    editing.set(false);
+                }
             }
         }
         menu::SHOW_COMPOSER => {

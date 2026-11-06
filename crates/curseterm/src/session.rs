@@ -35,6 +35,7 @@ use crate::io::{self as pty_io, Extras};
 use crate::jobs;
 use crate::keys::CopyCommand;
 use crate::links;
+use crate::session_note::SessionNote;
 
 pub type SessionId = u64;
 
@@ -120,6 +121,7 @@ pub struct Session {
     options: Cell<(usize, CursorStyle)>,
     coprocess: RefCell<Option<Child>>,
     pub composer: RefCell<Composer>,
+    pub note: RefCell<SessionNote>,
     pub activity: Cell<Activity>,
     pub idle_armed: Cell<bool>,
 }
@@ -184,6 +186,7 @@ impl Session {
             options: Cell::new((Config::default().scrolling_history, CursorStyle::default())),
             coprocess: RefCell::new(None),
             composer: RefCell::default(),
+            note: RefCell::default(),
             activity: Cell::default(),
             idle_armed: Cell::new(false),
         })

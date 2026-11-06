@@ -2424,3 +2424,51 @@ los dos modos.
 `x?`) en los modos regex no cuelga la búsqueda; un test nuevo lo cubre.
 
 **No probado:** con el kit tal cual.
+
+## Fase 55 — Session Note
+
+### Plan
+
+View › Show Session Note (⌥⌘G) de iTerm2 (`SessionNoteModel.swift`,
+`SessionNoteView.swift`, `SessionView.m -ensureSessionNoteViewWithModel:` y
+`PTYSession.swift -textViewEditSessionNote`):
+
+1. **Una nota por sesión:** el texto, el marco, si está plegada y si se ve. La
+   casilla del menú la muestra (desplegada y con el foco) o la oculta.
+2. **Aspecto:** 280 × 180 a 20 puntos de la esquina superior derecha, barra de
+   título de 28 con «Session Note» y un chevrón, radio 8, sombra negra al
+   0,3 y, en oscuro, borde gris. El texto usa la fuente del terminal.
+3. **Mover y redimensionar:** la barra de título la mueve; los bordes, con una
+   franja de 5, la redimensionan hasta 150 × 80 como mínimo.
+4. **Plegar:** el chevrón o ⇧↩ la dejan en la barra de título, con la primera
+   línea como título, y devuelven el foco al terminal.
+5. **Vacía:** si pierde el foco sin texto, se oculta.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos; un test nuevo comprueba el arrastre, los mínimos y la posición
+inicial.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| ⌥⌘G y dos líneas: la nota arriba a la derecha, con sombra | ✓ | `fase55-nota.png` |
+| Arrastrar la barra de título: se mueve −300 y +242 | ✓ | — |
+| Bordes inferior, izquierdo y derecho: cambia el tamaño | ✓ | `fase55-redimensionar.png` |
+| El chevrón la pliega con `Recordar:` de título | ✓ | `fase55-plegada.png` |
+| ⇧↩ la pliega y lo siguiente que se escribe va a la shell | ✓ | — |
+| ⌥⌘G la oculta y otra vez la muestra con su texto y su marco | ✓ | — |
+| Una nota vacía desaparece al hacer clic en el terminal | ✓ | — |
+
+**Fallos encontrados y corregidos en la prueba:** el fondo y la sombra no se
+veían, porque Freya pinta el lienzo del terminal encima de los fondos, y
+ahora se dibujan en un lienzo propio; los bordes laterales no respondían
+porque `Size::fill()` daba alto 0 a una franja absoluta, y ahora usan
+`Size::percent(100.0)`; ⇧↩ también llegaba a la shell (BK-027), y ahora la
+edición acaba una vuelta después.
+
+**No probado:** con el kit tal cual; el tema oscuro.
+
+**Difiere de iTerm2:** sin el desenfoque del material, sin animación al
+plegar, no se guarda en las disposiciones de ventana ni hay API; las
+esquinas no redimensionan en dos ejes a la vez.

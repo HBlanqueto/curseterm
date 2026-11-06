@@ -156,6 +156,8 @@ pub const FULL_SCREEN: Action =
     Action::new("full-screen", || tr!("full-screen")).shortcut(super_with(Modifiers::CONTROL, 'f'));
 pub const SHOW_TIMESTAMPS: Action = Action::new("show-timestamps", || tr!("show-timestamps"))
     .shortcut(super_with(Modifiers::SHIFT, 'e'));
+pub const SHOW_SESSION_NOTE: Action = Action::new("show-session-note", || tr!("show-session-note"))
+    .shortcut(super_with(Modifiers::ALT, 'g'));
 pub const CURSOR_GUIDE: Action =
     Action::new("cursor-guide", || tr!("cursor-guide")).shortcut(super_with(Modifiers::ALT, ';'));
 pub const EDIT_SESSION: Action =
@@ -373,6 +375,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 TOOLBELT.item_with(true, CheckState::Checkbox(false)),
                 SHOW_TIMESTAMPS.item_with(true, CheckState::Checkbox(false)),
                 CURSOR_GUIDE.item_with(true, CheckState::Checkbox(false)),
+                SHOW_SESSION_NOTE.item_with(true, CheckState::Checkbox(false)),
                 keyed(MAXIMIZE_PANE, tr!("maximize-pane"), "Super+Shift+Return")
                     .with_enabled(false)
                     .with_check(CheckState::Checkbox(false)),

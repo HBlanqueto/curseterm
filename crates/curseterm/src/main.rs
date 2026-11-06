@@ -31,6 +31,7 @@ mod paste_warning;
 mod pick;
 mod preferences;
 mod session;
+mod session_note;
 mod snippets;
 mod snippets_pane;
 mod status;

@@ -494,6 +494,49 @@ pub struct AdvancedPasteMetrics {
 
 pub const PASTE_QUESTION_WIDTH: f32 = 480.0;
 
+// SessionNoteView.swift and SessionView.m -ensureSessionNoteViewWithModel:: 280 × 180, 20 from
+// the top-right corner, a 28-point title bar, radius 8 and a black shadow at 0.3.
+pub const SESSION_NOTE: SessionNoteMetrics = SessionNoteMetrics {
+    width: 280.0,
+    height: 180.0,
+    margin: 20.0,
+    title_height: 28.0,
+    min_width: 150.0,
+    min_height: 80.0,
+    drag_area: 5.0,
+    radius: 8.0,
+    tint_alpha: 0.85,
+    shadow: Shadow {
+        color: Rgba::rgba8(0, 0, 0, 0.3),
+        offset_y: 2.0,
+        blur: 6.0,
+    },
+    dark_border: Rgba::rgba8(128, 128, 128, 0.5),
+    inset: 8.0,
+    button: 20.0,
+    button_inset: 8.0,
+    chevron: 12.0,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SessionNoteMetrics {
+    pub width: f32,
+    pub height: f32,
+    pub margin: f32,
+    pub title_height: f32,
+    pub min_width: f32,
+    pub min_height: f32,
+    pub drag_area: f32,
+    pub radius: f32,
+    pub tint_alpha: f32,
+    pub shadow: Shadow,
+    pub dark_border: Rgba,
+    pub inset: f32,
+    pub button: f32,
+    pub button_inset: f32,
+    pub chevron: f32,
+}
+
 // iTermEditSnippetWindowController.xib: the Edit Snippet window and its Value box.
 pub const SNIPPET_EDITOR: SnippetEditorMetrics = SnippetEditorMetrics {
     width: 637.0,

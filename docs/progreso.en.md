@@ -2409,3 +2409,51 @@ modes.
 the regex modes does not hang the search; a new test covers it.
 
 **Not tested:** the kit as is.
+
+## Phase 55 — Session Note
+
+### Plan
+
+iTerm2's View › Show Session Note (⌥⌘G) (`SessionNoteModel.swift`,
+`SessionNoteView.swift`, `SessionView.m -ensureSessionNoteViewWithModel:` and
+`PTYSession.swift -textViewEditSessionNote`):
+
+1. **One note per session:** the text, the frame, whether it is collapsed and
+   whether it shows. The menu checkbox shows it (expanded and focused) or
+   hides it.
+2. **Look:** 280 × 180, 20 points from the top-right corner, a 28-point title
+   bar with «Session Note» and a chevron, radius 8, a black shadow at 0.3 and,
+   in dark mode, a grey border. The text uses the terminal font.
+3. **Move and resize:** the title bar moves it; the edges, with a 5-point
+   strip, resize it down to 150 × 80.
+4. **Collapse:** the chevron or ⇧↩ leave only the title bar, with the first
+   line as title, and give focus back to the terminal.
+5. **Empty:** if it loses focus without text, it hides.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes; a new test checks dragging, the minimums and the initial position.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| ⌥⌘G and two lines: the note at the top right, with a shadow | ✓ | `fase55-nota.png` |
+| Dragging the title bar: it moves −300 and +242 | ✓ | — |
+| Bottom, left and right edges: the size changes | ✓ | `fase55-redimensionar.png` |
+| The chevron collapses it with `Recordar:` as title | ✓ | `fase55-plegada.png` |
+| ⇧↩ collapses it and what is typed next goes to the shell | ✓ | — |
+| ⌥⌘G hides it and again shows it with its text and frame | ✓ | — |
+| An empty note goes away when the terminal is clicked | ✓ | — |
+
+**Bugs found and fixed while testing:** the background and shadow did not
+show, because Freya paints the terminal canvas over backgrounds, and they are
+now drawn on a canvas of their own; the side edges did not respond because
+`Size::fill()` gave an absolute strip a height of 0, and they now use
+`Size::percent(100.0)`; ⇧↩ also reached the shell (BK-027), and editing now
+ends one loop later.
+
+**Not tested:** the kit as is; the dark theme.
+
+**Differs from iTerm2:** no material blur, no collapse animation, not saved
+in window arrangements and no API; corners do not resize on both axes at
+once.

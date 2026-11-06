@@ -24,6 +24,7 @@ use crate::links;
 use crate::mouse::{self, Pointer};
 use crate::note_view::{NoteEvent, NoteView};
 use crate::session::{self, Session, SessionId};
+use crate::session_note::{NoteChange, SessionNote, SessionNoteView};
 
 pub struct TerminalPane {
     pub session: Rc<Session>,
@@ -50,6 +51,8 @@ pub struct TerminalPane {
     pub composer: Composer,
     pub hints: Option<Hints>,
     pub on_composer: Callback<ComposerEvent, ()>,
+    pub note: SessionNote,
+    pub on_session_note: Callback<NoteChange, ()>,
 }
 
 impl PartialEq for TerminalPane {
@@ -72,6 +75,7 @@ impl PartialEq for TerminalPane {
             && self.dark == other.dark
             && self.composer == other.composer
             && self.hints == other.hints
+            && self.note == other.note
     }
 }
 
@@ -369,6 +373,16 @@ impl Component for TerminalPane {
                     on_event: self.on_composer.clone(),
                 }),
             )
+            .maybe_child(self.note.visible.then(|| SessionNoteView {
+                note: self.note.clone(),
+                bounds: *size.read(),
+                family: fonts.family.clone(),
+                size: fonts.size,
+                line_height: fonts.cell_height,
+                ink: rgb(scheme.foreground),
+                dark: is_dark(scheme.background),
+                on_event: self.on_session_note.clone(),
+            }))
     }
 }
 
