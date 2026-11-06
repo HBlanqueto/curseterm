@@ -3561,3 +3561,57 @@ Send to Back with two floats; Lock Layout with floats.
 resizing; the frame does not snap to cells while dragging; when the window
 resizes the float is only clipped and does not remember its desired size; no
 maximizing a float, no menu in its title bar and no tmux integration.
+
+## Phase 83 — Fold and Replace Selection
+
+### Plan
+
+iTerm2 edits the buffer: `VT100ScreenMutableState -replaceRange:withLines:`
+swaps a range of lines for others, and the marks follow their lines. In
+CurseTerm `buffer_edit::replace_lines` does it on alacritty's grid, which
+cannot insert or delete rows in the history:
+
+1. **Insert** k rows: the visible region rises k rows (`scroll_up`) and what
+   came after comes back down to its place.
+2. **Remove** k rows: what came before moves down k rows, the k oldest, now
+   blank, leave the history (`update_history`), and what the history cannot
+   absorb leaves the screen by moving what follows, and the cursor, up.
+3. Marks, annotations, timestamps, images and folds are remapped by one
+   function, `Extras::remap_lines`, which `forget_lines` also uses.
+
+On top of that:
+
+4. **Edit › Fold Selected Lines** (⇧⌘L, `PTYTextView.swift -toggleFold`): the
+   selected lines (two or more) become one faint italic line with the start of
+   the first, “ …N lines… ” and the end of the last (`-firstEllipsisLast`). If
+   the selection holds folds, the title becomes “Unfold in Selection” and it
+   unfolds them. Nothing folds on the alternate screen.
+5. **Edit › Fold All** (⌥⇧⌘L, `-foldAllAboveCursor`): folds from the first
+   line that is not a fold to the one above the cursor, with the first line's
+   date and “…N lines…”.
+6. **Edit › Replace Selection › Replace with Pretty-Printed JSON**
+   (`SelectionReplacement.swift`, `JSONPrettyPrinter.swift`): with a selection
+   of whole lines, more than one, that is a JSON object or array. Four-space
+   indent; strings green, numbers red, booleans yellow, punctuation and `null`
+   inverted; long lines wrap onto the next row. It uses `serde_json`, already
+   in `Cargo.lock`.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes. Tests for `json_rows` and `fold_placeholder`.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Select 5–12 of `seq 30` and ⇧⌘L: “5 …6 lines… 12” | ✓ | `fase83-plegar-json.png` |
+| What follows and the cursor move up; `echo` stays in place | ✓ | `fase83-plegar-json.png` |
+| Select the fold and ⇧⌘L: the eight lines come back | ✓ | — |
+| ⌥⇧⌘L folds everything above the cursor with the date | ✓ | — |
+| Two lines of JSON → pretty JSON with its colours | ✓ | `fase83-plegar-json.png` |
+
+**Not tested:** the kit as is; folding with a full history.
+
+**Differs from iTerm2:** no fold mark in the margin nor click to unfold; Fold
+All shows no commands; the JSON sorts keys alphabetically and creates no
+foldable blocks; no Render Selection Natively nor Base64, which in iTerm2
+belong to the context menu.

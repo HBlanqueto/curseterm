@@ -21,7 +21,9 @@ use barrier_kit::theme::color;
 use barrier_kit::titlebar::{window_drag_handler, window_traffic_lights};
 use barrier_kit::views::feedback::{Alert, sheet};
 use barrier_kit::views::table::Table;
-use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
+use barrier_kit_next::app_menu::{
+    use_menu_checked, use_menu_enabled, use_menu_label, use_submenu_items,
+};
 use barrier_kit_next::notifications::{self, Notice};
 use barrier_kit_next::tokens::{
     ANNOTATION, FLOATING_PANE, PASTE_HISTORY_SIZE, PASTE_QUESTION_WIDTH, RENAME_WIDTH,
@@ -1446,6 +1448,25 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::JUMP_TO_SELECTION.id, selection);
     let replaying = handles.replay.read().is_some();
     use_menu_enabled(menu::ZOOM_IN_ON_SELECTION.id, selection && !replaying);
+    use_menu_enabled(menu::FOLD_SELECTION.id, selection);
+    let unfolding = handles
+        .active()
+        .is_some_and(|session| session.selection_has_fold());
+    use_menu_label(
+        menu::FOLD_SELECTION.id,
+        if unfolding {
+            tr!("unfold-in-selection")
+        } else {
+            tr!("fold-selected-lines")
+        },
+    );
+    use_menu_enabled(
+        menu::REPLACE_WITH_JSON.id,
+        selection
+            && handles
+                .active()
+                .is_some_and(|session| session.json_replacement().is_some()),
+    );
     let zoomed_in = handles
         .active()
         .is_some_and(|session| session.extras().zoomed.is_some());
@@ -4239,6 +4260,21 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             }
         }
         _ if id == menu::PASTE.id => paste(handles),
+        _ if id == menu::FOLD_SELECTION.id => {
+            if let Some(session) = &active {
+                session.toggle_fold();
+            }
+        }
+        _ if id == menu::FOLD_ALL.id => {
+            if let Some(session) = &active {
+                session.fold_all();
+            }
+        }
+        _ if id == menu::REPLACE_WITH_JSON.id => {
+            if let Some(session) = &active {
+                session.replace_selection_with_json();
+            }
+        }
         _ if id == menu::ZOOM_IN_ON_SELECTION.id => {
             if let Some(session) = &active {
                 session.zoom_on_selection();

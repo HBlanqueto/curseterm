@@ -30,6 +30,14 @@ pub fn use_menu_enabled(id: &'static str, enabled: bool) {
     });
 }
 
+pub fn use_menu_label(id: &'static str, label: &'static str) {
+    use_menu_update(id, label, |item, label| {
+        if let MenuItem::Action { label: shown, .. } = item {
+            *shown = label.to_string();
+        }
+    });
+}
+
 pub fn use_menu_checked(id: &'static str, checked: bool) {
     use_menu_update(id, checked, |item, checked| {
         if let MenuItem::Action { check, .. } = item {

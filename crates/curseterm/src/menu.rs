@@ -166,6 +166,12 @@ pub const PREVIOUS_ANNOTATION: &str = "previous-annotation";
 pub const SET_NAMED_MARK: Action = Action::new("set-named-mark", || tr!("set-named-mark"))
     .shortcut(super_with(Modifiers::ALT.union(Modifiers::SHIFT), 'm'));
 pub const NAMED_MARKS_MENU: &str = "named-marks-menu";
+pub const FOLD_SELECTION: Action = Action::new("fold-selection", || tr!("fold-selected-lines"))
+    .shortcut(super_with(Modifiers::SHIFT, 'l'));
+pub const FOLD_ALL: Action = Action::new("fold-all", || tr!("fold-all"))
+    .shortcut(super_with(Modifiers::ALT.union(Modifiers::SHIFT), 'l'));
+pub const REPLACE_SELECTION_MENU: &str = "replace-selection-menu";
+pub const REPLACE_WITH_JSON: Action = Action::new("replace-with-json", || tr!("replace-with-json"));
 pub const ALERTS_MENU: &str = "alerts-menu";
 pub const ALERT_ON_NEXT_MARK: &str = "alert-on-next-mark";
 pub const ALERT_OFFSCREEN_MARKS: &str = "alert-offscreen-marks";
@@ -449,6 +455,11 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
                             .with_check(CheckState::Checkbox(true)),
                     ],
                 ),
+                submenu(
+                    REPLACE_SELECTION_MENU,
+                    tr!("replace-selection-menu"),
+                    vec![REPLACE_WITH_JSON.item(false)],
+                ),
                 MenuItem::Separator,
                 submenu(ACTIONS_MENU, tr!("actions-menu"), Vec::new()),
                 submenu(SNIPPETS_MENU, tr!("snippets-menu"), Vec::new()),
@@ -505,6 +516,8 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
                 ),
                 SET_NAMED_MARK.item(true),
                 submenu(NAMED_MARKS_MENU, tr!("named-marks-menu"), Vec::new()),
+                FOLD_SELECTION.item(false),
+                FOLD_ALL.item(true),
                 MenuItem::Separator,
                 CLEAR_BUFFER.item(true),
                 CLEAR_REPLAY.item(true),

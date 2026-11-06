@@ -6,6 +6,7 @@ mod advanced_paste;
 mod arrangement;
 mod arrangements_pane;
 mod auxiliary;
+mod buffer_edit;
 mod clock;
 mod command_history;
 mod composer;

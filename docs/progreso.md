@@ -3587,3 +3587,58 @@ tamaño al redimensionar; el marco no se ajusta a celdas al arrastrar; al
 cambiar el tamaño de la ventana el flotante solo se recorta, no recuerda el
 tamaño deseado; sin maximizar un flotante, sin menú en su barra de título y
 sin integración con tmux.
+
+## Fase 83 — Fold y Replace Selection
+
+### Plan
+
+iTerm2 edita el búfer: `VT100ScreenMutableState -replaceRange:withLines:`
+cambia un rango de líneas por otras, y las marcas siguen a sus líneas. En
+CurseTerm lo hace `buffer_edit::replace_lines` sobre la rejilla de alacritty,
+que no inserta ni borra filas en el historial:
+
+1. **Insertar** k filas: la región visible sube k filas (`scroll_up`) y lo que
+   iba detrás baja de nuevo a su sitio.
+2. **Quitar** k filas: lo de antes baja k filas, las k más antiguas, ya en
+   blanco, salen del historial (`update_history`), y lo que el historial no
+   absorbe sale de la pantalla subiendo lo de detrás y el cursor.
+3. Marcas, anotaciones, sellos de hora, imágenes y pliegues se reasignan con
+   una sola función, `Extras::remap_lines`, que también usa `forget_lines`.
+
+Sobre esa base:
+
+4. **Edit › Fold Selected Lines** (⇧⌘L, `PTYTextView.swift -toggleFold`): las
+   líneas seleccionadas (dos o más) se cambian por una línea en cursiva tenue
+   con el principio de la primera, « …N lines… » y el final de la última
+   (`-firstEllipsisLast`). Si la selección contiene pliegues, el título pasa a
+   «Unfold in Selection» y los despliega. No se pliega en la pantalla
+   alternativa.
+5. **Edit › Fold All** (⌥⇧⌘L, `-foldAllAboveCursor`): pliega desde la primera
+   línea que no es un pliegue hasta la anterior al cursor, con la fecha de la
+   primera línea y «…N lines…».
+6. **Edit › Replace Selection › Replace with Pretty-Printed JSON**
+   (`SelectionReplacement.swift`, `JSONPrettyPrinter.swift`): con una
+   selección de líneas enteras, más de una, que sea un objeto o un array JSON.
+   Sangría de cuatro espacios; cadenas en verde, números en rojo, booleanos en
+   amarillo, y puntuación y `null` en inverso; las líneas largas pasan a la
+   siguiente fila. Usa `serde_json`, que ya estaba en `Cargo.lock`.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos. Tests de `json_rows` y `fold_placeholder`.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Seleccionar 5–12 de `seq 30` y ⇧⌘L: «5 …6 lines… 12» | ✓ | `fase83-plegar-json.png` |
+| Lo de debajo y el cursor suben; `echo` sigue en su sitio | ✓ | `fase83-plegar-json.png` |
+| Seleccionar el pliegue y ⇧⌘L: vuelven las ocho líneas | ✓ | — |
+| ⌥⇧⌘L pliega todo lo de encima del cursor con la fecha | ✓ | — |
+| Dos líneas de JSON → JSON formateado con sus colores | ✓ | `fase83-plegar-json.png` |
+
+**No probado:** con el kit tal cual; plegar con el historial lleno.
+
+**Difiere de iTerm2:** sin marca de pliegue en el margen ni clic para
+desplegar; Fold All no muestra los comandos; el JSON pone las claves en orden
+alfabético y no crea bloques plegables; sin Render Selection Natively ni
+Base64, que en iTerm2 son del menú contextual.

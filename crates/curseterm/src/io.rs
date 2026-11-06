@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
 use alacritty_terminal::event::{Event, EventListener};
-use alacritty_terminal::grid::Dimensions;
+use alacritty_terminal::grid::{Dimensions, Row};
 use alacritty_terminal::index::{Column, Line, Point};
 use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::cell::{Cell, Flags, Hyperlink};
@@ -70,6 +70,12 @@ pub struct Snapshot {
     pub rows: Vec<Vec<Cell>>,
 }
 
+// FoldMark.swift: the placeholder line and the rows it stands for.
+pub struct Fold {
+    pub line: i64,
+    pub rows: Vec<Row<Cell>>,
+}
+
 #[derive(Default)]
 pub struct Extras {
     pub directory: Option<PathBuf>,
@@ -90,6 +96,7 @@ pub struct Extras {
     pub log: Option<File>,
     pub replay: VecDeque<Snapshot>,
     pub zoomed: Option<Vec<Vec<Cell>>>,
+    pub folds: Vec<Fold>,
     pub coprocess: Option<ChildStdin>,
     pub cursor_spotlight: Option<Instant>,
     pub triggers_enabled: bool,
@@ -255,6 +262,7 @@ impl Extras {
             .chain(images)
             .chain(annotations)
             .chain(self.stamps.iter_mut().map(|(line, _)| line))
+            .chain(self.folds.iter_mut().map(|fold| &mut fold.line))
     }
 
     // A full scrollback dropped its oldest line: what was anchored below it moves up one.
@@ -269,7 +277,17 @@ impl Extras {
     }
 
     pub fn forget_lines(&mut self, lines: Range<i64>) {
-        let kept = |line: i64| !lines.contains(&line);
+        let removed = lines.end - lines.start;
+        self.remap_lines(|line| match line {
+            _ if lines.contains(&line) => None,
+            _ if line >= lines.end => Some(line - removed),
+            _ => Some(line),
+        });
+    }
+
+    // What sat on a line that `map` drops goes with it; the rest follows its line.
+    pub fn remap_lines(&mut self, map: impl Fn(i64) -> Option<i64>) {
+        let kept = |line: i64| map(line).is_some();
         self.marks.retain(|mark| kept(*mark));
         self.named_marks.retain(|(line, _)| kept(*line));
         self.output = self.output.filter(|[start, _]| kept(*start));
@@ -278,11 +296,13 @@ impl Extras {
         self.images.retain(|image| kept(image.line));
         self.annotations
             .retain(|annotation| kept(annotation.start.0) && kept(annotation.end.0));
+        self.folds.retain(|fold| kept(fold.line));
         self.sub_selections.clear();
-        let removed = lines.end - lines.start;
-        self.anchored_lines()
-            .filter(|anchored| **anchored >= lines.end)
-            .for_each(|anchored| *anchored -= removed);
+        self.anchored_lines().for_each(|anchored| {
+            if let Some(line) = map(*anchored) {
+                *anchored = line;
+            }
+        });
     }
 }
 

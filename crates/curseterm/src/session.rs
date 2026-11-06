@@ -13,7 +13,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use alacritty_terminal::event::{Event, EventListener, OnResize, WindowSize};
-use alacritty_terminal::grid::{Dimensions, Scroll};
+use alacritty_terminal::grid::{Dimensions, Row, Scroll};
 use alacritty_terminal::index::{Boundary, Column, Direction, Line, Point, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::sync::FairMutex;
@@ -30,14 +30,17 @@ use regex::Regex;
 use rustix::process::{Pid, Signal, kill_process_group};
 
 use crate::activity::Activity;
+use crate::buffer_edit;
+use crate::clock;
 use crate::composer::Composer;
 use crate::config::{APP_NAME, CursorType, Profile, SCROLLBACK_LIMIT};
 use crate::hints;
-use crate::io::{self as pty_io, Extras};
+use crate::io::{self as pty_io, Extras, Fold};
 use crate::jobs;
 use crate::key_report::{KITTY_FLAGS, KeyMode};
 use crate::keys::CopyCommand;
 use crate::links;
+use crate::localize::tr;
 use crate::profile_switching::{Place, Switcher};
 use crate::semantic_history::{self, Action, SemanticHistory, Target};
 use crate::session_note::SessionNote;
@@ -791,6 +794,129 @@ impl Session {
 
     // PTYTextView.m -scrollLineNumberRangeIntoView: centers a range that is not on screen.
     // PTYTextView -scrollToSelection.
+    // The selection's whole lines, as absolute line numbers.
+    fn selected_lines(term: &Term<Listener>) -> Option<Range<i64>> {
+        let range = term.selection.as_ref()?.to_range(term)?;
+        let history = term.history_size() as i64;
+        Some(history + i64::from(range.start.line.0)..history + i64::from(range.end.line.0) + 1)
+    }
+
+    pub fn selection_has_fold(&self) -> bool {
+        let term = self.term.lock();
+        let Some(lines) = Self::selected_lines(&term) else {
+            return false;
+        };
+        self.extras()
+            .folds
+            .iter()
+            .any(|fold| lines.contains(&fold.line))
+    }
+
+    // PTYTextView.swift -toggleFold(nsrange:): unfold what the selection holds, else fold it.
+    pub fn toggle_fold(&self) {
+        let mut term = self.term.lock();
+        if term.mode().contains(TermMode::ALT_SCREEN) {
+            return;
+        }
+        let Some(lines) = Self::selected_lines(&term) else {
+            return;
+        };
+        let mut extras = self.extras();
+        let mut inside: Vec<i64> = extras
+            .folds
+            .iter()
+            .map(|fold| fold.line)
+            .filter(|line| lines.contains(line))
+            .collect();
+        if !inside.is_empty() {
+            inside.sort_unstable_by(|a, b| b.cmp(a));
+            for line in inside {
+                unfold(&mut term, &mut extras, line, self.options.get().0);
+            }
+            return;
+        }
+        if lines.end - lines.start < 2 {
+            return;
+        }
+        let rows = buffer_edit::rows_of(&term, lines.clone());
+        let hidden = lines.end - lines.start - 2;
+        let middle = tr!("fold-middle", count = hidden);
+        let placeholder = buffer_edit::fold_placeholder(&rows, term.columns(), &middle);
+        fold(
+            &mut term,
+            &mut extras,
+            lines,
+            rows,
+            placeholder,
+            self.options.get().0,
+        );
+    }
+
+    // PTYTextView.swift -foldAllAboveCursor: from the first line that is not a fold to the one
+    // above the cursor.
+    pub fn fold_all(&self) {
+        let mut term = self.term.lock();
+        if term.mode().contains(TermMode::ALT_SCREEN) {
+            return;
+        }
+        let mut extras = self.extras();
+        let cursor = pty_io::absolute_line(&term);
+        let mut start = 0;
+        while start < cursor && extras.folds.iter().any(|fold| fold.line == start) {
+            start += 1;
+        }
+        if start >= cursor {
+            return;
+        }
+        let lines = start..cursor;
+        let folded = cursor - start;
+        let count = tr!("fold-all-count", count = folded);
+        let text = match extras.stamps.iter().find(|(line, _)| lines.contains(line)) {
+            Some((_, at)) => format!("{} — {count}", clock::local_date_time(*at)),
+            None => count.to_string(),
+        };
+        let rows = buffer_edit::rows_of(&term, lines.clone());
+        let placeholder = buffer_edit::fold_all_placeholder(&text, term.columns());
+        fold(
+            &mut term,
+            &mut extras,
+            lines,
+            rows,
+            placeholder,
+            self.options.get().0,
+        );
+    }
+
+    // PTYTextView+ARC.m -selectionIsEligibleForReplacement: and the JSON check: one selection of
+    // whole lines, more than one of them, that parses as an object or an array.
+    pub fn json_replacement(&self) -> Option<(Range<i64>, Vec<Row<GridCell>>)> {
+        let term = self.term.lock();
+        let range = term.selection.as_ref()?.to_range(&term)?;
+        let lines = Self::selected_lines(&term)?;
+        let last = &term.grid()[range.end.line];
+        let text_end = (0..term.columns())
+            .rev()
+            .find(|column| last[Column(*column)].c != ' ')
+            .map_or(0, |column| column + 1);
+        let whole = range.start.column.0 == 0
+            && (range.end.column.0 + 1 >= text_end || range.end.column.0 == 0);
+        if !whole || lines.end - lines.start < 2 {
+            return None;
+        }
+        let text = term.selection_to_string()?;
+        Some((lines, buffer_edit::json_rows(&text, term.columns())?))
+    }
+
+    // PTYTextView+ARC.m -replaceSelectionWith:.
+    pub fn replace_selection_with_json(&self) {
+        let Some((lines, rows)) = self.json_replacement() else {
+            return;
+        };
+        let mut term = self.term.lock();
+        let limit = self.options.get().0;
+        buffer_edit::replace_lines(&mut term, &mut self.extras(), lines, rows, limit);
+    }
+
     // PseudoTerminal.m -zoomOnSelection:: the selected lines alone, as a session that only shows.
     pub fn zoom_on_selection(&self) {
         let mut term = self.term.lock();
@@ -1426,6 +1552,29 @@ fn toggle_vi_selection(term: &mut Term<Listener>, kind: SelectionType) {
 }
 
 // iTermController selectionRespectsSoftBoundaries: one setting for every session.
+fn fold(
+    term: &mut Term<Listener>,
+    extras: &mut Extras,
+    lines: Range<i64>,
+    rows: Vec<Row<GridCell>>,
+    placeholder: Row<GridCell>,
+    limit: usize,
+) {
+    let placed = buffer_edit::replace_lines(term, extras, lines, vec![placeholder], limit);
+    extras.folds.push(Fold {
+        line: placed.start,
+        rows,
+    });
+}
+
+fn unfold(term: &mut Term<Listener>, extras: &mut Extras, line: i64, limit: usize) {
+    let Some(at) = extras.folds.iter().position(|fold| fold.line == line) else {
+        return;
+    };
+    let fold = extras.folds.remove(at);
+    buffer_edit::replace_lines(term, extras, line..line + 1, fold.rows, limit);
+}
+
 pub static SOFT_BOUNDARIES: AtomicBool = AtomicBool::new(false);
 
 const DIVIDERS: [char; 4] = ['|', '\u{2502}', '\u{251c}', '\u{2524}'];

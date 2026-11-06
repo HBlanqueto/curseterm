@@ -33,6 +33,7 @@ regex = "1"
 plist = "1.10"
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 tracing = "0.1"
 i18n-embed = { version = "0.16", features = ["fluent-system"] }
 i18n-embed-fl = "0.10"
