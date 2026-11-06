@@ -156,6 +156,13 @@ pub const MOVE_TAB_LEFT: Action = Action::new("move-tab-left", || tr!("move-tab-
 pub const MOVE_TAB_RIGHT: Action = Action::new("move-tab-right", || tr!("move-tab-right"));
 pub const SELECT_TAB: &str = "select-tab";
 pub const SELECT_TAB_PREFIX: &str = "select-tab:";
+pub const ARRANGEMENTS_MENU: &str = "arrangements-menu";
+pub const RESTORE_ARRANGEMENT: &str = "restore-arrangement";
+pub const RESTORE_ARRANGEMENT_TABS: &str = "restore-arrangement-tabs";
+pub const ARRANGEMENT_PREFIX: &str = "arrangement:";
+pub const ARRANGEMENT_TABS_PREFIX: &str = "arrangement-tabs:";
+pub const SAVE_ARRANGEMENT: Action = Action::new("save-arrangement", || tr!("save-arrangement"))
+    .shortcut(super_with(Modifiers::ALT.union(Modifiers::SHIFT), 's'));
 pub const PROFILE_PREFIX: &str = "profile:";
 pub const SPLIT_PANE: &str = "split-pane";
 pub const NEXT_PANE: Action =
@@ -362,6 +369,21 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                     ],
                 ),
                 submenu(SPLIT_PANE, tr!("split-pane"), split_pane_items()),
+                MenuItem::Separator,
+                submenu(
+                    ARRANGEMENTS_MENU,
+                    tr!("arrangements-menu"),
+                    vec![
+                        SAVE_ARRANGEMENT.item(true),
+                        MenuItem::Separator,
+                        submenu(RESTORE_ARRANGEMENT, tr!("restore-arrangement"), Vec::new()),
+                        submenu(
+                            RESTORE_ARRANGEMENT_TABS,
+                            tr!("restore-arrangement-tabs"),
+                            Vec::new(),
+                        ),
+                    ],
+                ),
             ],
         ),
         Menu::new(
@@ -427,6 +449,14 @@ pub fn select_tab_items(titles: &[String], active: usize) -> Vec<MenuItem> {
                 _ => item,
             }
         })
+        .collect()
+}
+
+pub fn arrangement_items(prefix: &str, names: &[String]) -> Vec<MenuItem> {
+    names
+        .iter()
+        .enumerate()
+        .map(|(index, name)| MenuItem::action(format!("{prefix}{index}"), name.clone()))
         .collect()
 }
 

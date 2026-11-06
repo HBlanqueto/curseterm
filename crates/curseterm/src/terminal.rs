@@ -31,6 +31,7 @@ use vow_design::{
     CAPTION, DURATION_FAST_MS, DURATION_SLOW_MS, HEADLINE, Rgba, SPACE_1, SPACE_2, SPACE_3,
 };
 
+use crate::arrangement::{self, Arrangement, TabLayout};
 use crate::clock::local_time;
 use crate::config::{
     APP_ID, AltKey, ClosePrompt, Defaults, Profile, SessionEnd, WorkingDirectory, change_defaults,
@@ -103,6 +104,7 @@ enum Sheet {
     SaveContents(SessionId),
     Log(SessionId),
     Coprocess(SessionId),
+    SaveArrangement,
     CopyModeKeys,
 }
 
@@ -243,6 +245,7 @@ impl Handles {
 
 pub struct Terminal {
     pub profile: Option<String>,
+    pub arrangement: Option<String>,
 }
 
 impl App for Terminal {
@@ -354,7 +357,11 @@ impl App for Terminal {
         use_hook({
             let (handles, events) = (handles.clone(), events.clone());
             let first = self.profile.clone();
+            let arrangement = self.arrangement.clone();
             move || {
+                if arrangement.is_some_and(|name| restore_arrangement(&handles, &events, &name)) {
+                    return;
+                }
                 let profile =
                     first.unwrap_or_else(|| handles.defaults.peek().default_profile_name());
                 new_tab(&handles, &events, &profile, None)
@@ -737,6 +744,21 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::JUMP_TO_MARK.id, marks);
     use_menu_enabled(menu::NEXT_MARK, marks);
     use_menu_enabled(menu::PREVIOUS_MARK, marks);
+    let arrangements: Vec<String> = handles
+        .defaults
+        .read()
+        .arrangements
+        .iter()
+        .map(|saved| saved.name.clone())
+        .collect();
+    use_submenu_items(
+        menu::RESTORE_ARRANGEMENT,
+        menu::arrangement_items(menu::ARRANGEMENT_PREFIX, &arrangements),
+    );
+    use_submenu_items(
+        menu::RESTORE_ARRANGEMENT_TABS,
+        menu::arrangement_items(menu::ARRANGEMENT_TABS_PREFIX, &arrangements),
+    );
     use_submenu_items(
         menu::BROADCAST_MENU,
         menu::broadcast_items(*handles.broadcast.read()),
@@ -1009,6 +1031,11 @@ fn field_sheet(handles: &Handles, target: Sheet) -> Element {
         Sheet::SaveSelection(_) => (tr!("save-selection"), tr!("save-path"), tr!("save-confirm")),
         Sheet::SaveContents(_) => (tr!("save-contents"), tr!("save-path"), tr!("save-confirm")),
         Sheet::Log(_) => (tr!("log-start"), tr!("save-path"), tr!("log-confirm")),
+        Sheet::SaveArrangement => (
+            tr!("save-arrangement"),
+            tr!("arrangement-name"),
+            tr!("save-confirm"),
+        ),
         Sheet::Coprocess(_) => (
             tr!("run-coprocess"),
             tr!("coprocess-command"),
@@ -1074,6 +1101,7 @@ fn confirm_later(handles: &Handles, target: Sheet) {
             Sheet::SaveContents(of) => save(&later, of, &typed, |session| Some(session.contents())),
             Sheet::Log(of) => start_log(&later, of, &typed),
             Sheet::Coprocess(of) => start_coprocess(&later, of, &typed),
+            Sheet::SaveArrangement => save_arrangement(&later, &typed),
             _ => workspace.write().rename_window(&typed),
         }
         let mut sheet = later.sheet;
@@ -1567,6 +1595,72 @@ fn spawn(handles: &Handles, events: &Events, launch: Launch) -> Option<SessionId
     }
 }
 
+fn save_arrangement(handles: &Handles, name: &str) {
+    let name = name.trim();
+    if name.is_empty() {
+        return;
+    }
+    let sessions = handles.sessions.peek();
+    let describe = |id| {
+        let session = sessions.get(&id)?;
+        Some((session.profile.clone(), session.working_directory()))
+    };
+    let tabs: Vec<TabLayout> = handles
+        .workspace
+        .peek()
+        .tabs
+        .iter()
+        .filter_map(|tab| {
+            Some(TabLayout {
+                title: tab.title.clone(),
+                root: arrangement::capture(&tab.root, &describe)?,
+            })
+        })
+        .collect();
+    change_defaults(|defaults| {
+        defaults.arrangements.retain(|saved| saved.name != name);
+        defaults.arrangements.push(Arrangement {
+            name: name.to_string(),
+            tabs,
+        });
+    });
+}
+
+fn restore_arrangement(handles: &Handles, events: &Events, name: &str) -> bool {
+    let Some(saved) = handles
+        .defaults
+        .peek()
+        .arrangements
+        .iter()
+        .find(|saved| saved.name == name)
+        .cloned()
+    else {
+        return false;
+    };
+    let mut restored = false;
+    for tab in saved.tabs {
+        let root = arrangement::build(&tab.root, &mut |profile, directory| {
+            let mut launch = handles.launch(profile, None);
+            if directory.is_some() {
+                launch.directory = directory;
+            }
+            spawn(handles, events, launch)
+        });
+        if let Some(root) = root {
+            let active = root.leaves()[0];
+            let mut workspace = handles.workspace;
+            workspace.write().restore(Tab {
+                root,
+                active,
+                zoomed: false,
+                title: tab.title,
+            });
+            restored = true;
+        }
+    }
+    restored
+}
+
 fn new_tab(handles: &Handles, events: &Events, profile: &str, directory: Option<PathBuf>) {
     let previous = handles
         .active()
@@ -1767,6 +1861,26 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         workspace.write().select_tab(index);
         return;
     }
+    let defaults = handles.defaults.peek();
+    let arrangement = |prefix| {
+        id.strip_prefix(prefix)
+            .and_then(|index| index.parse::<usize>().ok())
+            .and_then(|index| defaults.arrangements.get(index))
+            .map(|arrangement| arrangement.name.clone())
+    };
+    let (window, tabs) = (
+        arrangement(menu::ARRANGEMENT_PREFIX),
+        arrangement(menu::ARRANGEMENT_TABS_PREFIX),
+    );
+    drop(defaults);
+    if let Some(name) = window {
+        windows::open(&["--arrangement", &name]);
+        return;
+    }
+    if let Some(name) = tabs {
+        restore_arrangement(handles, events, &name);
+        return;
+    }
     if let Some(profile) = id
         .strip_prefix(menu::PROFILE_PREFIX)
         .and_then(|index| index.parse::<usize>().ok())
@@ -1828,6 +1942,10 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
                 handles.draft.clone().set(String::new());
                 open_sheet(handles, Sheet::SaveSelection(session.id));
             }
+        }
+        _ if id == menu::SAVE_ARRANGEMENT.id => {
+            handles.draft.clone().set(String::new());
+            open_sheet(handles, Sheet::SaveArrangement);
         }
         _ if id == menu::SAVE_CONTENTS.id => {
             if let Some(session) = active {

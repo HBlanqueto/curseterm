@@ -3,7 +3,8 @@ use crate::session::SessionId;
 const MIN_RATIO: f32 = 0.1;
 const EDGE: f32 = 1e-4;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Axis {
     Row,
     Column,

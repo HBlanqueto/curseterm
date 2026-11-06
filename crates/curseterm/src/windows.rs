@@ -83,19 +83,29 @@ pub fn describe(arguments: &[&str]) -> (AppComponent, WindowOptions) {
         ["--settings", profile @ ..] => {
             preferences::window(profile.first().map(|name| name.to_string()))
         }
-        ["--profile", name, ..] => terminal_window(Some(name.to_string())),
-        _ => terminal_window(None),
+        ["--profile", name, ..] => terminal_window(Some(name.to_string()), None),
+        ["--arrangement", name, ..] => terminal_window(None, Some(name.to_string())),
+        _ => terminal_window(None, None),
     }
 }
 
-fn terminal_window(profile: Option<String>) -> (AppComponent, WindowOptions) {
+fn terminal_window(
+    profile: Option<String>,
+    arrangement: Option<String>,
+) -> (AppComponent, WindowOptions) {
     let size = terminal_size(profile.as_deref());
     let options = WindowOptions::new(APP_NAME, "curseterm")
         .app_id(APP_ID)
         .size(size)
         .min_size(Some(WINDOW_MIN_SIZE))
         .menu(menu::terminal_menu(&profile_names()));
-    (AppComponent::new(terminal::Terminal { profile }), options)
+    (
+        AppComponent::new(terminal::Terminal {
+            profile,
+            arrangement,
+        }),
+        options,
+    )
 }
 
 fn profile_names() -> Vec<String> {

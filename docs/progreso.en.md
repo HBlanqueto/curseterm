@@ -1471,3 +1471,44 @@ menu (no shortcut).
 
 **Differs from iTerm2:** the path is typed in a field; there is no file
 chooser (BK-023).
+
+## Phase 34 — Window arrangements
+
+### Plan
+
+iTerm2's Window › Arrangements (`sources/iTermController/iTermController.m`:
+`saveWindowArrangementForWindow:`, `loadWindowArrangementWithName:` and
+`tryOpenArrangement:named:asTabsInWindow:`):
+
+1. **Save Current Window as Arrangement… (⌥⇧⌘S):** asks for a name and saves
+   the window's tabs: title, pane tree with its ratios and, in each pane,
+   profile and current directory. A repeated name replaces the old one.
+2. **Restore Window Arrangement › name:** opens a new window with those tabs
+   (in the same process with patch 0008; otherwise another process with
+   `--arrangement name`).
+3. **Restore Window Arrangement as Tabs › name:** adds the tabs to the
+   current window.
+4. Arrangements are stored in the app's `.domain`, like iTerm2 in its
+   preferences. `arrangement.rs` holds capture and rebuild, with tests.
+5. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-06)
+
+Tested on headless sway in both kit modes. `./dev.sh check` clean in both
+modes; 44 app tests.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| ⌘D, `cd /tmp`, ⌘T, `cd /var` and ⌥⇧⌘S «trabajo»: the `.domain` stores one tab with a `row` `split` 0.5/0.5 (`/root` and `/tmp`) and another in `/var` | ✓ with the kit as is the field must be clicked before typing (BK-029) | — |
+| `curseterm --arrangement trabajo`: two tabs; the first one split, with `pwd` `/root` and `/tmp`; the second in `/var` | ✓ | `fase34-disposicion-restaurada.png` |
+| Patched kit, D-Bus menu: «as Tabs › trabajo» goes from 1 to 3 tabs; «Restore › trabajo» opens a second window in the same process | ✓ | — |
+
+**Not tested:** an arrangement with a deleted profile (it opens with the
+default profile).
+
+**Differs from iTerm2:** there is no Save Window Arrangement (⇧⌘S) for every
+window, because each window only knows its own tabs; neither size nor
+position is saved (Wayland does not let apps place windows), nor contents,
+and there is no default arrangement at start, nor import or export to a file.

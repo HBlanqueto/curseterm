@@ -1474,3 +1474,47 @@ global (sin atajo).
 
 **Difiere de iTerm2:** la ruta se escribe en un campo; no hay selector de
 archivos (BK-023).
+
+## Fase 34 — Disposiciones de ventana
+
+### Plan
+
+Window › Arrangements de iTerm2 (`sources/iTermController/iTermController.m`:
+`saveWindowArrangementForWindow:`, `loadWindowArrangementWithName:` y
+`tryOpenArrangement:named:asTabsInWindow:`):
+
+1. **Save Current Window as Arrangement… (⌥⇧⌘S):** pide un nombre y guarda
+   las pestañas de la ventana: título, árbol de paneles con sus proporciones
+   y, en cada panel, perfil y directorio actual. Un nombre repetido sustituye
+   al anterior.
+2. **Restore Window Arrangement › nombre:** abre una ventana nueva con esas
+   pestañas (en el mismo proceso con el parche 0008; si no, otro proceso con
+   `--arrangement nombre`).
+3. **Restore Window Arrangement as Tabs › nombre:** añade las pestañas a la
+   ventana actual.
+4. Las disposiciones se guardan en el `.domain` de la app, como iTerm2 en sus
+   preferencias. `arrangement.rs` tiene la captura y la reconstrucción, con
+   tests.
+5. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla en los dos modos del kit. `./dev.sh check`
+limpio en los dos modos; 44 tests de la app.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| ⌘D, `cd /tmp`, ⌘T, `cd /var` y ⌥⇧⌘S «trabajo»: el `.domain` guarda una pestaña con un `split` `row` 0.5/0.5 (`/root` y `/tmp`) y otra en `/var` | ✓ con el kit tal cual hay que pulsar el campo antes de escribir (BK-029) | — |
+| `curseterm --arrangement trabajo`: dos pestañas; la primera dividida, con `pwd` `/root` y `/tmp`; la segunda en `/var` | ✓ | `fase34-disposicion-restaurada.png` |
+| Kit parcheado, menú D-Bus: «as Tabs › trabajo» pasa de 1 a 3 pestañas; «Restore › trabajo» abre una segunda ventana en el mismo proceso | ✓ | — |
+
+**No probado:** una disposición con un perfil borrado (sale con el perfil por
+omisión).
+
+**Difiere de iTerm2:** no hay Save Window Arrangement (⇧⌘S) para todas las
+ventanas, porque cada ventana solo conoce sus pestañas; no se guardan ni el
+tamaño ni la posición (Wayland no deja colocar ventanas), ni el contenido,
+ni hay disposición por omisión al arrancar, ni importar o exportar a un
+archivo.

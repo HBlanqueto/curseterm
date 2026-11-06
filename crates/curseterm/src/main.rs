@@ -1,3 +1,4 @@
+mod arrangement;
 mod auxiliary;
 mod clock;
 mod config;

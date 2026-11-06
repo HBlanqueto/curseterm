@@ -5,6 +5,8 @@ use alacritty_terminal::vte::ansi::Rgb;
 use barrier_kit_next::tokens::{MONO, TERMINAL};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::arrangement::Arrangement;
+
 pub const APP_ID: &str = "org.curseterm.CurseTerm";
 pub const APP_NAME: &str = "CurseTerm";
 const DEFAULT_PROFILE: &str = "Default";
@@ -20,6 +22,7 @@ pub struct Defaults {
     pub show_tab_bar: bool,
     pub copy_on_select: bool,
     pub focus_follows_mouse: bool,
+    pub arrangements: Vec<Arrangement>,
 }
 
 impl Default for Defaults {
@@ -31,6 +34,7 @@ impl Default for Defaults {
             show_tab_bar: false,
             copy_on_select: true,
             focus_follows_mouse: false,
+            arrangements: Vec::new(),
         }
     }
 }
