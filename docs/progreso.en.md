@@ -2111,9 +2111,13 @@ modes; a new test for when to warn.
 one-line-with-newline cases (they are in the test).
 
 **Differs from iTerm2:** no Paste Without Newline, Advanced… nor «don't ask
-again» (BK-037); Paste Slowly and Paste Escaped do not warn; with a shell
+again» (BK-037); with a shell
 that only emits `133;B` the session stays «at the prompt» while a command
 runs too.
+
+**Fix (2026-11-06):** Paste Slowly now goes past the same warning and, after
+Paste, pastes slowly (tested on sway with two lines at a marked prompt);
+Paste Escaped already warned.
 
 ## Phase 47 — Advanced Paste
 

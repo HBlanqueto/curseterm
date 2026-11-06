@@ -112,7 +112,7 @@ struct Handles {
     reveals: Rc<OnceCell<Reveals>>,
     buried: State<Option<Buried>>,
     pastes: State<Vec<String>>,
-    pending_paste: State<Option<String>>,
+    pending_paste: State<Option<(String, bool)>>,
     advanced: AdvancedPaste,
     picker: PickerState,
     sheet: State<Option<Sheet>>,
@@ -308,7 +308,7 @@ impl App for Terminal {
         let confirm = use_state(|| None::<Confirm>);
         let buried = use_state(|| None::<Buried>);
         let pastes = paste_history::shared();
-        let pending_paste = use_state(|| None::<String>);
+        let pending_paste = use_state(|| None::<(String, bool)>);
         let advanced = AdvancedPaste {
             text: use_state(String::new),
             transform: use_state(Transform::default),
@@ -1239,17 +1239,26 @@ fn paste(handles: &Handles) {
 }
 
 fn paste_text(handles: &Handles, text: String) {
+    paste_checked(handles, text, false);
+}
+
+// iTermPasteHelper.m -tryToPasteEvent: every paste, slow ones too, goes past the warning.
+fn paste_checked(handles: &Handles, text: String, slowly: bool) {
     let at_prompt = handles.active().is_some_and(|session| session.at_prompt());
     let warnings = handles.defaults.peek().paste_warnings;
     if let Some(warning) = paste_warning::warning(&text, at_prompt, warnings) {
         let (mut pending, mut confirm) = (handles.pending_paste, handles.confirm);
         if confirm.peek().is_none() {
-            pending.set(Some(text));
+            pending.set(Some((text, slowly)));
             confirm.set(Some(Confirm::Paste(warning)));
         }
         return;
     }
-    paste_now(handles, text);
+    if slowly {
+        paste_slowly(handles, text);
+    } else {
+        paste_now(handles, text);
+    }
 }
 
 fn paste_now(handles: &Handles, text: String) {
@@ -2618,8 +2627,10 @@ fn confirm_alert(handles: &Handles, pending: Confirm) -> Alert {
                 Confirm::MarkSet(id) => reveal(&handles, id, None),
                 Confirm::Paste(_) => {
                     let mut pending = handles.pending_paste;
-                    if let Some(text) = pending.write().take() {
-                        paste_now(&handles, text);
+                    match pending.write().take() {
+                        Some((text, true)) => paste_slowly(&handles, text),
+                        Some((text, false)) => paste_now(&handles, text),
+                        None => {}
                     }
                 }
             });
@@ -2854,7 +2865,7 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         }
         _ if id == menu::PASTE_SLOWLY.id => {
             if let Some(text) = clipboard_text(handles.clipboard) {
-                paste_slowly(handles, text);
+                paste_checked(handles, text, true);
             }
         }
         _ if id == menu::PASTE_ESCAPED.id => {

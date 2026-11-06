@@ -2122,9 +2122,13 @@ los dos modos; un test nuevo para cuándo avisar.
 casos de una línea con salto final (están en el test).
 
 **Difiere de iTerm2:** sin Paste Without Newline, Advanced… ni «no volver a
-preguntar» (BK-037); Paste Slowly y Paste Escaped no avisan; con una shell
+preguntar» (BK-037); con una shell
 que solo emite `133;B` la sesión se queda «en el prompt» también mientras
 corre un comando.
+
+**Corrección (2026-11-06):** Paste Slowly pasa ahora por el mismo aviso y,
+tras Paste, pega despacio (probado en sway con dos líneas en un prompt
+marcado); Paste Escaped ya avisaba.
 
 ## Fase 47 — Advanced Paste
 
