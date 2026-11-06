@@ -3384,3 +3384,32 @@ app no puede hacerlo: los atajos del menú los despacha BarrierKit con los
 modificadores tal cual llegan, y remapear solo la entrada del terminal dejaría
 el menú sin remapear. El remapeo es del compositor (Malaysia) o de xkb
 (`altwin:swap_alt_win`, `ctrl:swap_lwin_lctl`…); CurseTerm no lo implementa.
+
+## Fase 78 — Zoom In on Selection y Zoom Out
+
+### Plan
+
+`PseudoTerminal.m -zoomOnSelection:` muestra las líneas de la selección en
+una sesión sintética que solo enseña; `-zoomOut:` (Esc) vuelve:
+
+1. View › Zoom In on Selection (⌥⌘Z), activo con selección y fuera de Instant
+   Replay, copia las líneas seleccionadas y quita la selección.
+2. Mientras dura, el panel pinta solo esas líneas y no envía teclas al shell.
+3. View › Zoom Out (Esc), activo con zoom o con filtro: primero quita el
+   filtro y, si no hay, termina el zoom.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Seleccionar 6–9 de `seq 30` y ⌥⌘Z: solo quedan 6–9 | ✓ | `fase78-zoom-seleccion.png` |
+| Esc: vuelve la sesión completa | ✓ | `fase78-zoom-seleccion.png` |
+
+**No probado:** con el kit tal cual; Zoom Out con un filtro activo.
+
+**Difiere de iTerm2:** la vista ampliada no se desplaza ni se puede
+seleccionar ni buscar en ella; si la selección no cabe, se ven sus primeras
+líneas.

@@ -64,6 +64,10 @@ pub const COPY_STYLED: Action =
 pub const COPY_CONTROL_SEQUENCES: Action =
     Action::new("copy-control-sequences", || tr!("copy-control-sequences"));
 pub const PASTE_FILE_BASE64: Action = Action::new("paste-file-base64", || tr!("paste-file-base64"));
+pub const ZOOM_IN_ON_SELECTION: Action =
+    Action::new("zoom-in-on-selection", || tr!("zoom-in-on-selection"))
+        .shortcut(super_with(Modifiers::ALT, 'z'));
+pub const ZOOM_OUT: &str = "zoom-out";
 pub const JUMP_TO_SELECTION: Action =
     Action::new("jump-to-selection", || tr!("jump-to-selection")).shortcut(super_key('j'));
 pub const PASTE: Action = Action::new("paste", || tr!("paste")).shortcut(super_key('v'));
@@ -478,6 +482,9 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
                 TEXT_BIGGER.item(true),
                 TEXT_NORMAL.item(true),
                 TEXT_SMALLER.item(true),
+                MenuItem::Separator,
+                ZOOM_IN_ON_SELECTION.item(false),
+                keyed(ZOOM_OUT, tr!("zoom-out"), "Escape").with_enabled(false),
             ],
         ),
         Menu::new(

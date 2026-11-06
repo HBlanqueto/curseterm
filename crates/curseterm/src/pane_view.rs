@@ -189,7 +189,8 @@ impl Component for TerminalPane {
                     replay: replay
                         .and_then(|index| extras.replay.get(index))
                         .map(|snapshot| snapshot.rows.as_slice())
-                        .or(filtered.as_deref()),
+                        .or(filtered.as_deref())
+                        .or(extras.zoomed.as_deref()),
                     blink_off,
                 };
                 grid::draw(ctx, &term, &fonts, &scheme, focused, &overlay);

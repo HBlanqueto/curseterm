@@ -636,3 +636,5 @@ preset-load-heading = Load Preset
 preset-remove-before-loading = Remove all key mappings before loading a preset?
 preset-keep = Keep
 preset-remove = Remove
+zoom-in-on-selection = Zoom In on Selection
+zoom-out = Zoom Out

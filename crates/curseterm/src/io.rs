@@ -89,6 +89,7 @@ pub struct Extras {
     pub cursor_guide: bool,
     pub log: Option<File>,
     pub replay: VecDeque<Snapshot>,
+    pub zoomed: Option<Vec<Vec<Cell>>>,
     pub coprocess: Option<ChildStdin>,
     pub cursor_spotlight: Option<Instant>,
     pub triggers_enabled: bool,

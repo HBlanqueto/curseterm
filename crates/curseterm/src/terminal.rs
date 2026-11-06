@@ -822,6 +822,10 @@ impl App for Terminal {
                 let Some(session) = &keyboard.active() else {
                     return;
                 };
+                // PTYSession.m: a synthetic session only shows; Zoom Out (Esc) leaves it.
+                if session.extras().zoomed.is_some() {
+                    return;
+                }
                 if navigate_hints(&keyboard, session, &data.key, data.modifiers) {
                     return;
                 }
@@ -1282,6 +1286,15 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::COPY_STYLED.id, selection);
     use_menu_enabled(menu::COPY_CONTROL_SEQUENCES.id, selection);
     use_menu_enabled(menu::JUMP_TO_SELECTION.id, selection);
+    let replaying = handles.replay.read().is_some();
+    use_menu_enabled(menu::ZOOM_IN_ON_SELECTION.id, selection && !replaying);
+    let zoomed_in = handles
+        .active()
+        .is_some_and(|session| session.extras().zoomed.is_some());
+    use_menu_enabled(
+        menu::ZOOM_OUT,
+        zoomed_in || !handles.filter.query.read().is_empty(),
+    );
     use_menu_enabled(menu::PASTE_SELECTION.id, selection);
     let logging = handles.active().is_some_and(|session| session.logging());
     use_menu_enabled(menu::LOG_START.id, !logging);
@@ -3957,6 +3970,19 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             }
         }
         _ if id == menu::PASTE.id => paste(handles),
+        _ if id == menu::ZOOM_IN_ON_SELECTION.id => {
+            if let Some(session) = &active {
+                session.zoom_on_selection();
+            }
+        }
+        // PseudoTerminal.m -zoomOut:: a filter stops first, otherwise the zoom ends.
+        menu::ZOOM_OUT => {
+            if !handles.filter.query.peek().is_empty() {
+                close_filter(handles.filter);
+            } else if let Some(session) = &active {
+                session.extras().zoomed = None;
+            }
+        }
         _ if id == menu::FIND.id => {
             let mut open = handles.find.open;
             open.set(true);

@@ -3362,3 +3362,31 @@ they arrive, and remapping only the terminal input would leave the menu
 unremapped. Remapping belongs to the compositor (Malaysia) or to xkb
 (`altwin:swap_alt_win`, `ctrl:swap_lwin_lctl`…); CurseTerm does not implement
 it.
+
+## Phase 78 — Zoom In on Selection and Zoom Out
+
+### Plan
+
+`PseudoTerminal.m -zoomOnSelection:` shows the selection's lines in a
+synthetic session that only displays; `-zoomOut:` (Esc) goes back:
+
+1. View › Zoom In on Selection (⌥⌘Z), enabled with a selection and outside
+   Instant Replay, copies the selected lines and clears the selection.
+2. Meanwhile the pane paints only those lines and sends no keys to the shell.
+3. View › Zoom Out (Esc), enabled while zoomed or filtering: it clears the
+   filter first and, if there is none, ends the zoom.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Select 6–9 of `seq 30` and ⌥⌘Z: only 6–9 remain | ✓ | `fase78-zoom-seleccion.png` |
+| Esc: the full session comes back | ✓ | `fase78-zoom-seleccion.png` |
+
+**Not tested:** the kit as is; Zoom Out with an active filter.
+
+**Differs from iTerm2:** the zoomed view does not scroll and cannot be
+selected or searched; if the selection does not fit, its first lines show.

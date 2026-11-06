@@ -636,3 +636,5 @@ preset-load-heading = Cargar preajuste
 preset-remove-before-loading = ¿Quitar todas las combinaciones antes de cargar un preajuste?
 preset-keep = Conservar
 preset-remove = Quitar
+zoom-in-on-selection = Ampliar la selección
+zoom-out = Reducir

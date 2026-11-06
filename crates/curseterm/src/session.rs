@@ -791,6 +791,24 @@ impl Session {
 
     // PTYTextView.m -scrollLineNumberRangeIntoView: centers a range that is not on screen.
     // PTYTextView -scrollToSelection.
+    // PseudoTerminal.m -zoomOnSelection:: the selected lines alone, as a session that only shows.
+    pub fn zoom_on_selection(&self) {
+        let mut term = self.term.lock();
+        let Some(range) = term
+            .selection
+            .as_ref()
+            .and_then(|selection| selection.to_range(&term))
+        else {
+            return;
+        };
+        let rows = (range.start.line.0..=range.end.line.0)
+            .map(|line| term.grid()[Line(line)].into_iter().cloned().collect())
+            .collect();
+        term.selection = None;
+        drop(term);
+        self.extras().zoomed = Some(rows);
+    }
+
     pub fn jump_to_selection(&self) {
         let lines = {
             let term = self.term.lock();
