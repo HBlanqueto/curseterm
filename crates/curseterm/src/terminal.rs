@@ -609,6 +609,22 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                     broadcast: painting.receivers.contains(id),
                     find: painting.find.clone().filter(|_| *id == painting.active),
                     on_focus: Callback::new(move |id| workspace.write().focus(id)),
+                    on_hover: {
+                        let defaults = painting.handles.defaults;
+                        Callback::new(move |id| {
+                            if defaults.peek().focus_follows_mouse {
+                                workspace.write().focus(id);
+                            }
+                        })
+                    },
+                    on_select: {
+                        let handles = painting.handles.clone();
+                        Callback::new(move |text| {
+                            if handles.defaults.peek().copy_on_select {
+                                copy_text(&handles, text);
+                            }
+                        })
+                    },
                     held: painting.handles.held,
                     preedit: painting.preedit.clone().filter(|_| *id == painting.active),
                     replay: painting
@@ -763,9 +779,13 @@ fn use_profiles_menu(names: Vec<String>) {
 
 fn copy(handles: &Handles, session: &Session) {
     if let Some(text) = session.selected_text() {
-        remember_paste(handles, text.clone());
-        set_clipboard(handles.clipboard, text);
+        copy_text(handles, text);
     }
+}
+
+fn copy_text(handles: &Handles, text: String) {
+    remember_paste(handles, text.clone());
+    set_clipboard(handles.clipboard, text);
 }
 
 // BK-035: without patch 0011 the clipboard only takes plain text.

@@ -27,6 +27,8 @@ pub struct TerminalPane {
     pub broadcast: bool,
     pub find: Option<Rc<str>>,
     pub on_focus: Callback<SessionId, ()>,
+    pub on_hover: Callback<SessionId, ()>,
+    pub on_select: Callback<String, ()>,
     pub held: State<Modifiers>,
     pub badge: Option<Rc<str>>,
     pub opacity: f32,
@@ -71,6 +73,8 @@ impl Component for TerminalPane {
         let broadcast = self.broadcast;
         let find = self.find.clone();
         let on_focus = self.on_focus.clone();
+        let on_hover = self.on_hover.clone();
+        let on_select = self.on_select.clone();
         let held = self.held;
         let primary = Primary::get();
         let mut pressed = use_state(|| None::<MouseButton>);
@@ -159,7 +163,13 @@ impl Component for TerminalPane {
                             );
                         }
                     })
-                    .on_pointer_enter(|_| Cursor::set(CursorIcon::Text))
+                    .on_pointer_enter({
+                        let id = session.id;
+                        move |_| {
+                            Cursor::set(CursorIcon::Text);
+                            on_hover.call(id);
+                        }
+                    })
                     .on_pointer_leave(|_| Cursor::set(CursorIcon::default()))
                     .on_mouse_down({
                         let session = session.clone();
@@ -217,6 +227,7 @@ impl Component for TerminalPane {
                         move |event: Event<MouseEventData>| {
                             let Some(button) = pressed.write().take() else {
                                 if let Some(text) = session.selected_text() {
+                                    on_select.call(text.clone());
                                     primary.publish(text);
                                 }
                                 return;

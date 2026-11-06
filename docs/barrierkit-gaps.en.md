@@ -53,7 +53,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-021 | controls | `RadioGroup` is always horizontal | low | Workaround: one single-option group per row |
 | BK-022 | platform / persistence | A `.domain` change does not repaint unfocused windows | high | Patch 0005 tested |
 | BK-023 | app | No file chooser | medium | Workaround: path in a field and `--import-colors` |
-| BK-024 | symbols | Missing symbols for a settings bar and for the bell | low | `CircleHalf`, `ListBullet` and `SpeakerWave` are used |
+| BK-024 | symbols | Missing symbols for a settings bar and for the bell | low | `SlidersVertical`, `CircleHalf`, `ListBullet`, `SquareGrid` and `SpeakerWave` are used |
 | BK-025 | platform / input | No global shortcuts nor a way to hide and show the window | medium | Tested workaround: `curseterm --hotkey` |
 | BK-026 | app / platform | No bell, attention request or notifications | low | Tested workaround: visual bell |
 | BK-027 | controls / input | A view with global keyboard does not know whether a text field or an `Alert` keeps the key | low | Tested workaround: tracked focus and deferred `Alert` dismissal |
@@ -527,8 +527,9 @@ Each gap says how it is solved (CurseTerm ADR 0001):
   background tab where it rang (phase 5).
 - **What BarrierKit offers today**: 31 symbols in `symbol.rs`; none of those.
 - **What is missing**: extending the registry.
-- **How CurseTerm solves it**: `CircleHalf` for Appearance,
-  `ListBullet` for Profiles and `SpeakerWave` in the tab badge (`Badge` of
+- **How CurseTerm solves it**: `SlidersVertical` for General,
+  `CircleHalf` for Appearance, `ListBullet` for Profiles, `SquareGrid` for
+  Pointer and `SpeakerWave` in the tab badge (`Badge` of
   the `views::tab_bar` block).
 - **Cost of the workaround**: less like iTerm2.
 - **Proposed kit API**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt, Bell}`.

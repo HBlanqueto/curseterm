@@ -53,7 +53,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-021 | controles | `RadioGroup` es siempre horizontal | baja | Workaround: un grupo de una opción por fila |
 | BK-022 | plataforma / persistencia | Un cambio de `.domain` no repinta las ventanas sin foco | alta | Parche 0005 probado |
 | BK-023 | app | Sin selector de archivos | media | Workaround: ruta en un campo y `--import-colors` |
-| BK-024 | símbolos | Faltan símbolos para una barra de ajustes y para la campana | baja | Se usan `CircleHalf`, `ListBullet` y `SpeakerWave` |
+| BK-024 | símbolos | Faltan símbolos para una barra de ajustes y para la campana | baja | Se usan `SlidersVertical`, `CircleHalf`, `ListBullet`, `SquareGrid` y `SpeakerWave` |
 | BK-025 | plataforma / input | Sin atajos globales ni forma de ocultar y mostrar la ventana | media | Workaround probado: `curseterm --hotkey` |
 | BK-026 | app / plataforma | Sin campana, petición de atención ni notificaciones | baja | Workaround probado: campana visual |
 | BK-027 | controles / input | Una vista con teclado global no sabe si un campo de texto o un `Alert` se quedan la tecla | baja | Workaround probado: foco seguido y cierre diferido del `Alert` |
@@ -530,8 +530,9 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
   una pestaña de fondo donde ha sonado (fase 5).
 - **Qué ofrece hoy BarrierKit**: 31 símbolos en `symbol.rs`; ninguno de esos.
 - **Qué falta**: ampliar el registro.
-- **Cómo lo resolví en CurseTerm**: `CircleHalf` para Appearance,
-  `ListBullet` para Profiles y `SpeakerWave` en la insignia de la pestaña
+- **Cómo lo resolví en CurseTerm**: `SlidersVertical` para General,
+  `CircleHalf` para Appearance, `ListBullet` para Profiles, `SquareGrid` para
+  Pointer y `SpeakerWave` en la insignia de la pestaña
   (`Badge` del bloque `views::tab_bar`).
 - **Coste del workaround**: menos parecido a iTerm2.
 - **API propuesta para el kit**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt, Bell}`.

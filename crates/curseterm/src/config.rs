@@ -11,13 +11,28 @@ const DEFAULT_PROFILE: &str = "Default";
 // Grid::clear_history reallocates every row up to this limit (alacritty_terminal 0.26 grid/mod.rs).
 pub const SCROLLBACK_LIMIT: u32 = 100_000;
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Defaults {
     pub default_profile: Option<String>,
     pub profiles: Vec<Profile>,
     pub schemes: Vec<Scheme>,
     pub show_tab_bar: bool,
+    pub copy_on_select: bool,
+    pub focus_follows_mouse: bool,
+}
+
+impl Default for Defaults {
+    fn default() -> Self {
+        Self {
+            default_profile: None,
+            profiles: Vec::new(),
+            schemes: Vec::new(),
+            show_tab_bar: false,
+            copy_on_select: true,
+            focus_follows_mouse: false,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -343,6 +358,7 @@ mod tests {
             }],
             schemes: vec![imported],
             show_tab_bar: true,
+            ..Defaults::default()
         };
         let text = toml::to_string(&defaults).expect("serialize");
         let back: Defaults = toml::from_str(&text).expect("deserialize");

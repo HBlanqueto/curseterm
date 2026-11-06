@@ -70,7 +70,7 @@ impl App for Settings {
         let controls = WindowControls::get();
         use_menu_action(move |id| on_action(id, &controls));
         let defaults = use_defaults::<Defaults>(APP_ID).read().clone();
-        let mut tab = use_state(|| 1usize);
+        let mut tab = use_state(|| 2usize);
         let palette = Palette::current();
         rect()
             .width(Size::fill())
@@ -83,9 +83,24 @@ impl App for Settings {
                 rect().width(Size::fill()).height(Size::flex(1.0)).child(
                     TabView::new(tr!("settings-title"))
                         .tab(
+                            Symbol::SlidersVertical,
+                            tr!("pane-general"),
+                            switch_pane(
+                                tr!("section-selection"),
+                                tr!("copy-on-select"),
+                                defaults.copy_on_select,
+                                |defaults, on| defaults.copy_on_select = on,
+                            ),
+                        )
+                        .tab(
                             Symbol::CircleHalf,
                             tr!("pane-appearance"),
-                            appearance(&defaults),
+                            switch_pane(
+                                tr!("section-tabs"),
+                                tr!("show-tab-bar-always"),
+                                defaults.show_tab_bar,
+                                |defaults, on| defaults.show_tab_bar = on,
+                            ),
                         )
                         .tab(
                             Symbol::ListBullet,
@@ -95,6 +110,16 @@ impl App for Settings {
                                 opened: self.profile.clone(),
                             },
                         )
+                        .tab(
+                            Symbol::SquareGrid,
+                            tr!("pane-pointer"),
+                            switch_pane(
+                                tr!("section-pointer-misc"),
+                                tr!("focus-follows-mouse"),
+                                defaults.focus_follows_mouse,
+                                |defaults, on| defaults.focus_follows_mouse = on,
+                            ),
+                        )
                         .selected(*tab.read())
                         .on_change(move |index| tab.set(index)),
                 ),
@@ -102,16 +127,19 @@ impl App for Settings {
     }
 }
 
-fn appearance(defaults: &Defaults) -> Rect {
+fn switch_pane(
+    section: &'static str,
+    label: &'static str,
+    on: bool,
+    apply: fn(&mut Defaults, bool),
+) -> Rect {
     rect().padding(Gaps::new_all(SPACE_3)).child(
         Form::new().section(
-            Section::titled(tr!("section-tabs")).row(
-                Row::new(tr!("show-tab-bar-always")).control(
-                    Switch::new(tr!("show-tab-bar-always"))
-                        .on(defaults.show_tab_bar)
-                        .on_toggle(|on: bool| {
-                            change_defaults(|defaults| defaults.show_tab_bar = on)
-                        }),
+            Section::titled(section).row(
+                Row::new(label).control(
+                    Switch::new(label)
+                        .on(on)
+                        .on_toggle(move |on: bool| change_defaults(|defaults| apply(defaults, on))),
                 ),
             ),
         ),

@@ -1313,3 +1313,40 @@ panel nuevo y el reinicio al terminar la sesión.
 
 **Difiere de iTerm2:** el eco del texto sale antes del primer prompt, porque
 se escribe en cuanto existe el pty, sin esperar a que la shell lo pida.
+
+## Fase 29 — Ajustes General y Pointer
+
+### Plan
+
+1. **Settings › General › Selection › Copy to clipboard on selection:**
+   soltar el ratón tras seleccionar copia al portapapeles y al historial de
+   pegado, además de la selección primaria. Activado por omisión, como en
+   iTerm2.
+2. **Settings › Pointer › Focus follows mouse:** al entrar el puntero en un
+   panel, ese panel recibe el foco. Apagado por omisión.
+3. Los dos se leen en el momento del evento, no al pintar: un panel que no
+   se repinta no se queda con el valor viejo.
+4. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit tal cual: no necesita parche.
+`./dev.sh check` limpio en los dos modos del kit.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Arrastrar sobre una línea: el portapapeles pasa de `vacio` a `copia-al-seleccionar`; con `copy_on_select = false` se queda en `vacio` | ✓ | — |
+| ⌘D y `focus_follows_mouse = true`: mover el puntero al panel izquierdo y escribir lo escribe allí; con la opción apagada, el texto sigue en el panel activo | ✓ tras leer la opción al vuelo: con el valor capturado, el panel inactivo al cambiarla seguía con el viejo | `fase29-foco-sigue-al-raton.png` |
+| Ajustes muestra General, Appearance, Profiles y Pointer; el interruptor de General escribe `copy_on_select = true` | ✓ | `fase29-ajustes-general.png` |
+
+**Corregido de paso:** `instant-replay` estaba dos veces en los `.ftl` y
+Fluent lo avisaba al arrancar.
+
+**No probado:** el interruptor de Pointer (solo desde el `.domain`).
+
+**Difiere de iTerm2:** el foco solo pasa entre paneles de una ventana; el
+foco entre ventanas lo decide el compositor. Los iconos de General y
+Pointer no son los de iTerm2 (BK-024). Faltan el resto de opciones de los
+dos paneles.

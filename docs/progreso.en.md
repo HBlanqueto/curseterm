@@ -1308,3 +1308,40 @@ new pane and the restart when the session ends.
 **Differs from iTerm2:** the text's echo shows before the first prompt,
 because it is written as soon as the pty exists, without waiting for the
 shell to ask for it.
+
+## Phase 29 — General and Pointer settings
+
+### Plan
+
+1. **Settings › General › Selection › Copy to clipboard on selection:**
+   releasing the mouse after selecting copies to the clipboard and to the
+   paste history, besides the primary selection. On by default, as in
+   iTerm2.
+2. **Settings › Pointer › Focus follows mouse:** when the pointer enters a
+   pane, that pane gets the focus. Off by default.
+3. Both are read when the event happens, not when painting: a pane that is
+   not repainted does not keep the old value.
+4. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the kit as is: it needs no patch. `./dev.sh
+check` clean in both kit modes.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Dragging over a line: the clipboard goes from `vacio` to `copia-al-seleccionar`; with `copy_on_select = false` it stays `vacio` | ✓ | — |
+| ⌘D and `focus_follows_mouse = true`: moving the pointer to the left pane and typing types there; with the option off, the text stays in the active pane | ✓ after reading the option on the fly: with the captured value, the pane that was inactive when it changed kept the old one | `fase29-foco-sigue-al-raton.png` |
+| Settings shows General, Appearance, Profiles and Pointer; the General switch writes `copy_on_select = true` | ✓ | `fase29-ajustes-general.png` |
+
+**Fixed on the way:** `instant-replay` was twice in the `.ftl` files and
+Fluent warned about it at start.
+
+**Not tested:** the Pointer switch (only from the `.domain`).
+
+**Differs from iTerm2:** focus only moves between the panes of a window;
+focus between windows is up to the compositor. The General and Pointer
+icons are not iTerm2's (BK-024). The other options of both panes are
+missing.
