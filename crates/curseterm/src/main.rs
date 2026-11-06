@@ -3,6 +3,7 @@ mod advanced_paste;
 mod arrangement;
 mod auxiliary;
 mod clock;
+mod command_history;
 mod composer;
 mod composer_view;
 mod config;

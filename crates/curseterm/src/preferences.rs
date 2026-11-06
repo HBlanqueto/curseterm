@@ -26,7 +26,7 @@ use vow_design::{CAPTION, HEADLINE, SIDEBAR, SPACE_1, SPACE_3, WINDOW_MIN_SIZE};
 use crate::auxiliary::on_action;
 use crate::config::{
     APP_ID, AltKey, ClosePrompt, CursorType, Defaults, Profile, SCROLLBACK_LIMIT, SessionEnd,
-    Theme, Trigger, TriggerAction, WorkingDirectory, change_defaults,
+    Theme, Trigger, TriggerAction, WindowStyle, WorkingDirectory, change_defaults,
 };
 use crate::itermcolors;
 use crate::key_bindings_pane::{KeyBindingsEditor, Owner};
@@ -609,7 +609,20 @@ fn profile_choice<T: Copy + PartialEq + 'static, const N: usize>(
 }
 
 fn window_section(index: usize, profile: &Profile) -> Section {
+    let styles = [
+        (WindowStyle::Normal, tr!("window-style-normal")),
+        (WindowStyle::FullScreen, tr!("window-style-full-screen")),
+        (WindowStyle::Maximized, tr!("window-style-maximized")),
+        (WindowStyle::NoTitleBar, tr!("window-style-no-title-bar")),
+    ];
     Section::titled(tr!("section-window"))
+        .row(Row::new(tr!("window-style")).control(profile_choice(
+            index,
+            tr!("window-style"),
+            styles,
+            profile.window_style,
+            |profile, style| profile.window_style = style,
+        )))
         .row(
             Row::new(tr!("window-columns"))
                 .detail(tr!("window-size-detail"))

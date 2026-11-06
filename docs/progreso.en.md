@@ -2611,3 +2611,85 @@ nor Merge All Windows: without patch 0008 each window is its own process
 (BK-001) and with it a session is tied to its window's event channel; buried
 sessions belong to each window and are not saved on quit; no moving by
 dragging the tab.
+
+## Phase 59 — Full screen, Show Tabs in Fullscreen and Window Style
+
+### Plan
+
+iTerm2's Lion full screen (`PseudoTerminal.m
+-toggleTraditionalFullScreenMode:`, `-toggleShowTabsInFullScreen:` and
+`-initWithContentRect:…windowType:`), with Malaysia's focus mode as the macOS
+menu bar:
+
+1. **No title bar:** in full screen the window loses its title bar and
+   traffic lights; the tabs sit at the very top.
+2. **Show Tabs in Fullscreen (⇧⌘U):** a View checkbox that hides or shows the
+   tabs in full screen; it is saved in the preferences.
+3. **Focus mode:** with Malaysia's bar down (pointer at the top edge), the
+   title bar slides in over the terminal and fades with the bar's progress
+   (`WindowControls::titlebar_overlay_top`); with `fullscreen_push` it pushes
+   the tabs instead of covering them.
+4. **Profile Window Style:** Normal, Full Screen, Maximized and No Title Bar,
+   in Settings › Profiles › Window; it applies when the window opens.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Two tabs and ⌃⌘F: no title bar, the tabs at the top | ✓ | `fase59-pantalla-completa.png` |
+| ⇧⌘U in full screen: the tabs hide; again, they come back | ✓ | — |
+| Window Style Full Screen: the window opens in full screen | ✓ | — |
+| A single tab in full screen: only the terminal | ✓ | — |
+
+**Not tested:** the kit as is; the title bar revealed by focus mode and
+`fullscreen_push`: Malaysia does not start in the lab (llvmpipe lacks
+`EGL_ANDROID_native_fence_sync`) and sway has no `infinity_focus_v1`
+protocol; full screen with client-side decoration (headless sway always
+decorates the window); No Title Bar and Maximized.
+
+**Differs from iTerm2:** no traditional (pre-Lion) full screen nor the Top,
+Bottom, Left, Right or Compact styles; with server-side decoration No Title
+Bar does not remove the bar the compositor draws.
+
+## Phase 60 — Command history and autocomplete
+
+### Plan
+
+iTerm2's Session › Open Command History… (⇧⌘;) and Open Autocomplete… (⌘;)
+(`iTermShellHistoryController.m`, `CommandHistoryPopup.m`, `Autocomplete.m`
+and `PseudoTerminal.m -openCommandHistory:`):
+
+1. **History:** with shell integration, the command at `OSC 133;C` goes into
+   a history shared by the window's sessions, with its number of uses.
+2. **Open Command History:** the commands that start like what is typed at
+   the prompt, the most used first; choosing one types the rest.
+3. **Open Autocomplete:** the words on the screen and in the history that
+   continue the one before the cursor, the nearest first; choosing one types
+   the rest.
+4. Both use Paste History's picker.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit, with `PS1=$'$ \e]133;B\a'` and
+`PS0=$'\e]133;C\a'`. `./dev.sh check` clean in both modes; a new test checks
+the history order and the words.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `git status` twice and `git log`; `gi` and Open Command History: `git status` first and `git log` | ✓ | `fase60-historial.png` |
+| Enter: the line becomes `git status` | ✓ | — |
+| `echo car` and Open Autocomplete: `cargo-build` and `carbonara`; Down and Enter: `echo carbonara` | ✓ | `fase60-autocompletar.png` |
+
+**Bug found and fixed while testing:** Down and Up in the picker crashed the
+app: the `peek` guard was still alive during `set` («already borrowed»). It
+also happened in Paste History, Open Quickly and Recent Directories.
+
+**Not tested:** the kit as is; the ⌘; and ⇧⌘; shortcuts (the lab's virtual
+keyboard has no semicolon).
+
+**Differs from iTerm2:** the history is not saved on quit nor kept per
+remote host; no Auto Command Completion nor the Command History toolbelt
+tool; a command does not remember its folder or exit code.

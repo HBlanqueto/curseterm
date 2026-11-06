@@ -25,7 +25,7 @@ use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu
 use barrier_kit_next::notifications::{self, Notice};
 use barrier_kit_next::tokens::{
     ANNOTATION, PASTE_HISTORY_SIZE, PASTE_QUESTION_WIDTH, RENAME_WIDTH, SHORTCUT_LABEL, TAB_STRIP,
-    TERMINAL, TITLE_BAR, TOOLBELT_WIDTH, TabStyle,
+    TERMINAL, TITLE_BAR, TOOLBELT_WIDTH, TabStyle, TitleBarColors,
 };
 use barrier_kit_next::views::split_panes::SplitPanes;
 use barrier_kit_next::views::tab_bar::{Badge, TabBar};
@@ -42,10 +42,11 @@ use vow_design::{
 use crate::advanced_paste::{AdvancedPaste, advanced_paste_sheet};
 use crate::arrangement::{self, Arrangement, TabLayout};
 use crate::clock::{local_date_time, local_time};
+use crate::command_history;
 use crate::composer_view::ComposerEvent;
 use crate::config::{
     APP_ID, APP_NAME, AltKey, ClosePrompt, Defaults, MarkAlert, Profile, SessionEnd, Theme,
-    WorkingDirectory, change_defaults,
+    WindowStyle, WorkingDirectory, change_defaults,
 };
 use crate::drop_target::{DropTarget, Half};
 use crate::find_mode::FindMode;
@@ -166,6 +167,8 @@ struct Toolbelt {
 
 #[derive(Clone, Copy, PartialEq)]
 enum Picker {
+    CommandHistory,
+    Autocomplete,
     PasteHistory,
     OpenQuickly,
     Profiles,
@@ -516,7 +519,19 @@ impl App for Terminal {
             DecorationResponse::Client if theme::compact(theme) => Chrome::Compact,
             DecorationResponse::Client => Chrome::Regular,
         };
-        let compact = chrome == Chrome::Compact;
+        let full_screen = handles.controls.status.read().fullscreen;
+        let window_style = defaults
+            .read()
+            .profile(&handles.current_profile())
+            .window_style;
+        // PseudoTerminal.m -initWithContentRect:…windowType: the profile's style on opening.
+        use_hook(|| match window_style {
+            WindowStyle::FullScreen => handles.controls.toggle_fullscreen(),
+            WindowStyle::Maximized => handles.controls.toggle_maximize(),
+            WindowStyle::Normal | WindowStyle::NoTitleBar => {}
+        });
+        let no_title_bar = full_screen || window_style == WindowStyle::NoTitleBar;
+        let compact = chrome == Chrome::Compact && !full_screen;
         let terminal_background = handles
             .active()
             .map(|session| {
@@ -529,7 +544,9 @@ impl App for Terminal {
         let state = workspace.read();
         let title = state.window_title().to_string();
         let show_tab_bar = defaults.read().show_tab_bar;
-        let tab_bar = (state.tabs.len() > 1 || show_tab_bar).then(|| {
+        // iTermRootTerminalView.m -tabBarShouldBeVisibleWithAdditionalTabs:
+        let tabs_allowed = !full_screen || defaults.read().show_tabs_in_fullscreen;
+        let tab_bar = ((state.tabs.len() > 1 || show_tab_bar) && tabs_allowed).then(|| {
             let (on_close, on_add) = (handles.clone(), handles.clone());
             // BK-024: the kit has no bell symbol; SpeakerWave stands in for iTerm2's bell.
             let bell = Badge {
@@ -832,15 +849,19 @@ impl App for Terminal {
                 }
                 *revision.write() += 1;
             })
-            .children(window_chrome(
-                chrome,
-                dark,
-                tab_style,
-                title,
-                tab_bar,
-                window_focused,
-                drag,
-            ))
+            .children(if no_title_bar && chrome != Chrome::Server {
+                full_screen_chrome(dark, title, tab_bar, window_focused, drag)
+            } else {
+                window_chrome(
+                    chrome,
+                    dark,
+                    tab_style,
+                    title,
+                    tab_bar,
+                    window_focused,
+                    drag,
+                )
+            })
             .maybe_child(find_bar)
             .maybe_child(filter_bar)
             .maybe_child(alert)
@@ -889,58 +910,12 @@ fn window_chrome(
     if chrome == Chrome::Server {
         return tab_bar.into_iter().map(Into::into).collect();
     }
-    let fixed = WindowControls::get().fixed;
-    let lights = |height: f32| {
-        rect()
-            .position(Position::new_absolute().left(0.0).top(0.0))
-            .layer(1)
-            .width(Size::px(TAB_STRIP.compact_inset))
-            .height(Size::px(height))
-            .padding(Gaps::new(0.0, 0.0, 0.0, TAB_STRIP.compact_lights_x))
-            .main_align(Alignment::Center)
-            .child(window_traffic_lights(active, fixed))
-    };
+    let lights = |height: f32| traffic_lights(height, active);
     let title_bar = |height: f32, background: Rgba, ink: Rgba| {
-        rect()
-            .width(Size::fill())
-            .height(Size::px(height))
-            .background(color(background))
-            .on_mouse_down(drag)
-            .child(
-                rect()
-                    .width(Size::fill())
-                    .height(Size::fill())
-                    .padding(Gaps::new(
-                        0.0,
-                        TAB_STRIP.compact_inset,
-                        0.0,
-                        TAB_STRIP.compact_inset,
-                    ))
-                    .main_align(Alignment::Center)
-                    .cross_align(Alignment::Center)
-                    .child(text(
-                        title,
-                        vow_design::Font {
-                            size: TITLE_BAR.font_size as u32,
-                            weight: TITLE_BAR.font_weight,
-                            ..TITLEBAR.font
-                        },
-                        ink,
-                    )),
-            )
-            .child(lights(height))
+        title_strip(height, background, ink, title, active, drag)
     };
     if chrome == Chrome::Regular {
-        let colors = if dark {
-            TITLE_BAR.dark
-        } else {
-            TITLE_BAR.light
-        };
-        let (ink, division) = if active {
-            (colors.title, colors.division)
-        } else {
-            (colors.title_inactive, colors.division_inactive)
-        };
+        let (colors, ink, division) = title_colors(dark, active);
         let below: Element = match tab_bar {
             Some(bar) => bar.into(),
             None => rect()
@@ -974,6 +949,112 @@ fn window_chrome(
             vec![title_bar(style.height, style.backing, ink).into()]
         }
     }
+}
+
+fn traffic_lights(height: f32, active: bool) -> Rect {
+    rect()
+        .position(Position::new_absolute().left(0.0).top(0.0))
+        .layer(1)
+        .width(Size::px(TAB_STRIP.compact_inset))
+        .height(Size::px(height))
+        .padding(Gaps::new(0.0, 0.0, 0.0, TAB_STRIP.compact_lights_x))
+        .main_align(Alignment::Center)
+        .child(window_traffic_lights(active, WindowControls::get().fixed))
+}
+
+fn title_colors(dark: bool, active: bool) -> (TitleBarColors, Rgba, Rgba) {
+    let colors = if dark {
+        TITLE_BAR.dark
+    } else {
+        TITLE_BAR.light
+    };
+    let (ink, division) = if active {
+        (colors.title, colors.division)
+    } else {
+        (colors.title_inactive, colors.division_inactive)
+    };
+    (colors, ink, division)
+}
+
+fn title_strip(
+    height: f32,
+    background: Rgba,
+    ink: Rgba,
+    title: String,
+    active: bool,
+    drag: impl Fn(Event<MouseEventData>) + 'static,
+) -> Rect {
+    rect()
+        .width(Size::fill())
+        .height(Size::px(height))
+        .background(color(background))
+        .on_mouse_down(drag)
+        .child(
+            rect()
+                .width(Size::fill())
+                .height(Size::fill())
+                .padding(Gaps::new(
+                    0.0,
+                    TAB_STRIP.compact_inset,
+                    0.0,
+                    TAB_STRIP.compact_inset,
+                ))
+                .main_align(Alignment::Center)
+                .cross_align(Alignment::Center)
+                .child(text(
+                    title,
+                    vow_design::Font {
+                        size: TITLE_BAR.font_size as u32,
+                        weight: TITLE_BAR.font_weight,
+                        ..TITLEBAR.font
+                    },
+                    ink,
+                )),
+        )
+        .child(traffic_lights(height, active))
+}
+
+// PseudoTerminal.m in Lion full screen: no title bar, the tabs stay while Show Tabs in Fullscreen
+// is on, and with the compositor's focus bar down the title bar slides in over the terminal
+// (barrier-kit `WindowControls::titlebar_overlay_top`).
+fn full_screen_chrome(
+    dark: bool,
+    title: String,
+    tab_bar: Option<TabBar>,
+    active: bool,
+    drag: impl Fn(Event<MouseEventData>) + 'static,
+) -> Vec<Element> {
+    let controls = WindowControls::get();
+    let revealed = controls.titlebar_overlay_top().map(|top| {
+        let (colors, ink, _) = title_colors(dark, active);
+        let progress = *controls.focus_bar_progress.read();
+        let strip = rect()
+            .width(Size::fill())
+            .opacity(progress)
+            .child(title_strip(
+                TITLE_BAR.height,
+                colors.background,
+                ink,
+                title,
+                active,
+                drag,
+            ));
+        // barrier-kit already pushes the window by the focus bar; the title bar pushes the tabs.
+        if *controls.fullscreen_push.read() {
+            strip
+                .height(Size::px(TITLE_BAR.height * progress))
+                .overflow(Overflow::Clip)
+        } else {
+            strip
+                .position(Position::new_absolute().left(0.0).top(top))
+                .layer(Layer::Overlay)
+        }
+        .into_element()
+    });
+    revealed
+        .into_iter()
+        .chain(tab_bar.map(Into::into))
+        .collect()
 }
 
 struct Painting {
@@ -1312,6 +1393,10 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::MAXIMIZE_PANE, split);
     use_menu_checked(menu::MAXIMIZE_PANE, zoomed);
     use_menu_checked(menu::SHOW_TAB_BAR.id, handles.defaults.read().show_tab_bar);
+    use_menu_checked(
+        menu::SHOW_TABS_IN_FULLSCREEN.id,
+        handles.defaults.read().show_tabs_in_fullscreen,
+    );
     use_menu_enabled(menu::NEXT_TAB, tabs > 1);
     use_menu_enabled(menu::PREVIOUS_TAB, tabs > 1);
     use_menu_enabled(menu::MOVE_TAB_LEFT.id, active > 0);
@@ -1595,6 +1680,33 @@ fn paste_now(handles: &Handles, text: String) {
 
 fn pick_entries(handles: &Handles, picker: Picker) -> Vec<(String, Choice)> {
     match picker {
+        // CommandHistoryPopup.m -insertableString: what follows the typed prefix is inserted.
+        Picker::CommandHistory => {
+            let typed = handles
+                .active()
+                .and_then(|session| session.typed_command())
+                .unwrap_or_default();
+            command_history::candidates(&command_history::shared().read(), &typed)
+                .into_iter()
+                .map(|entry| {
+                    let rest = entry.command[typed.len()..].to_string();
+                    (entry.command, Choice::Type(rest))
+                })
+                .collect()
+        }
+        Picker::Autocomplete => {
+            let (prefix, lines) = handles
+                .active()
+                .map(|session| session.autocomplete_context())
+                .unwrap_or_default();
+            command_history::words(&lines, &prefix)
+                .into_iter()
+                .map(|word| {
+                    let rest = word[prefix.len()..].to_string();
+                    (word, Choice::Type(rest))
+                })
+                .collect()
+        }
         Picker::PasteHistory => handles
             .pastes
             .read()
@@ -1634,6 +1746,8 @@ fn pick_entries(handles: &Handles, picker: Picker) -> Vec<(String, Choice)> {
 
 fn pick_sheet(handles: &Handles, picker: Picker, mut revision: State<u64>) -> Element {
     let (heading, column) = match picker {
+        Picker::CommandHistory => (tr!("command-history-title"), tr!("command-history-command")),
+        Picker::Autocomplete => (tr!("autocomplete-title"), tr!("autocomplete-word")),
         Picker::PasteHistory => (tr!("paste-history"), tr!("paste-history-text")),
         Picker::OpenQuickly => (tr!("open-quickly"), tr!("open-quickly-session")),
         Picker::Profiles => (tr!("open-profiles"), tr!("open-profiles-name")),
@@ -1662,10 +1776,13 @@ fn pick_sheet(handles: &Handles, picker: Picker, mut revision: State<u64>) -> El
                     .auto_focus(true)
                     .on_navigate(move |key| {
                         let mut selected = history.selected;
+                        // A `peek` guard alive during `set` panics in Freya, so read first.
+                        let current = *selected.peek();
                         match key {
-                            NamedKey::ArrowDown => selected
-                                .set((*selected.peek() + 1).min(navigate.len().saturating_sub(1))),
-                            NamedKey::ArrowUp => selected.set(selected.peek().saturating_sub(1)),
+                            NamedKey::ArrowDown => {
+                                selected.set((current + 1).min(navigate.len().saturating_sub(1)))
+                            }
+                            NamedKey::ArrowUp => selected.set(current.saturating_sub(1)),
                             _ => {
                                 if let Some((_, choice)) = navigate.get(*selected.peek()).cloned() {
                                     choose_later(&chosen, choice);
@@ -2609,13 +2726,21 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
             }
         }
         TermEvent::Wakeup => {
-            let (reported, posted) = {
+            let (reported, posted, entered) = {
                 let mut extras = session.extras();
                 (
                     std::mem::take(&mut extras.mark_reported),
                     std::mem::take(&mut extras.notifications),
+                    std::mem::take(&mut extras.entered),
                 )
             };
+            if !entered.is_empty() {
+                let mut commands = command_history::shared();
+                let mut commands = commands.write();
+                for command in entered {
+                    command_history::remember(&mut commands, &command);
+                }
+            }
             if reported {
                 mark_set(handles, &session);
             }
@@ -3337,6 +3462,8 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         }
         _ if id == menu::OPEN_QUICKLY.id => open_picker(handles, Picker::OpenQuickly),
         _ if id == menu::RECENT_DIRECTORIES.id => open_picker(handles, Picker::RecentDirectories),
+        _ if id == menu::COMMAND_HISTORY.id => open_picker(handles, Picker::CommandHistory),
+        _ if id == menu::AUTOCOMPLETE.id => open_picker(handles, Picker::Autocomplete),
         _ if id == menu::OPEN_PROFILES.id => open_picker(handles, Picker::Profiles),
         _ if id == menu::EDIT_TAB_TITLE.id => {
             if let Some(session) = active {
@@ -3655,6 +3782,12 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
                     *revision.write() += 1;
                 });
             }
+        }
+        // iTermApplicationDelegate.m -toggleFullScreenTabBar:
+        _ if id == menu::SHOW_TABS_IN_FULLSCREEN.id => {
+            change_defaults(|defaults| {
+                defaults.show_tabs_in_fullscreen = !defaults.show_tabs_in_fullscreen;
+            });
         }
         _ if id == menu::SHOW_TAB_BAR.id => {
             change_defaults(|defaults| defaults.show_tab_bar = !defaults.show_tab_bar);

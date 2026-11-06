@@ -37,6 +37,7 @@ pub struct Defaults {
     pub global_search_mode: FindMode,
     pub snippets: Vec<Snippet>,
     pub key_bindings: Vec<Binding>,
+    pub show_tabs_in_fullscreen: bool,
 }
 
 impl Default for Defaults {
@@ -60,6 +61,8 @@ impl Default for Defaults {
             global_search_mode: FindMode::default(),
             snippets: Vec::new(),
             key_bindings: Vec::new(),
+            // iTermPreferences.m: ShowFullScreenTabBar YES.
+            show_tabs_in_fullscreen: true,
         }
     }
 }
@@ -99,6 +102,7 @@ pub struct Profile {
     pub cursor: CursorType,
     pub blinking_cursor: bool,
     pub cursor_guide: bool,
+    pub window_style: WindowStyle,
 }
 
 // iTermPreferences.h iTermPreferencesTabStyle, in the order of PreferencePanel.xib's Theme
@@ -162,6 +166,18 @@ pub enum ClosePrompt {
 
 impl ClosePrompt {
     pub const ALL: [Self; 3] = [Self::IfJobs, Self::Always, Self::Never];
+}
+
+// ITAddressBookMgr.h WINDOW_TYPE_*: the styles a Wayland client can ask for; where the window
+// goes is the compositor's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WindowStyle {
+    #[default]
+    Normal,
+    FullScreen,
+    Maximized,
+    NoTitleBar,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -246,6 +262,7 @@ impl Default for Profile {
             cursor: CursorType::Box,
             blinking_cursor: false,
             cursor_guide: false,
+            window_style: WindowStyle::Normal,
         }
     }
 }

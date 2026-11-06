@@ -2633,3 +2633,88 @@ Merge All Windows: sin el parche 0008 cada ventana es otro proceso (BK-001) y
 con él una sesión queda unida al canal de eventos de su ventana; las sesiones
 enterradas son de cada ventana y no se guardan al salir; no se puede mover
 arrastrando la pestaña.
+
+## Fase 59 — Pantalla completa, Show Tabs in Fullscreen y Window Style
+
+### Plan
+
+La pantalla completa de Lion en iTerm2 (`PseudoTerminal.m
+-toggleTraditionalFullScreenMode:`, `-toggleShowTabsInFullScreen:` y
+`-initWithContentRect:…windowType:`), con el modo foco de Malaysia como barra
+de menús de macOS:
+
+1. **Sin barra de título:** en pantalla completa la ventana pierde la barra de
+   título y los semáforos; las pestañas quedan arriba del todo.
+2. **Show Tabs in Fullscreen (⇧⌘U):** casilla de View que oculta o muestra las
+   pestañas en pantalla completa; se guarda en las preferencias.
+3. **Modo foco:** con la barra de Malaysia bajada (puntero en el borde
+   superior), la barra de título entra encima del terminal y se funde con el
+   avance de la barra (`WindowControls::titlebar_overlay_top`); con
+   `fullscreen_push` empuja las pestañas en vez de taparlas.
+4. **Window Style del perfil:** Normal, Full Screen, Maximized y No Title Bar,
+   en Ajustes › Profiles › Window; se aplica al abrir la ventana.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Dos pestañas y ⌃⌘F: sin barra de título, las pestañas arriba | ✓ | `fase59-pantalla-completa.png` |
+| ⇧⌘U en pantalla completa: las pestañas se ocultan; otra vez, vuelven | ✓ | — |
+| Window Style Full Screen: la ventana abre en pantalla completa | ✓ | — |
+| Una sola pestaña en pantalla completa: solo el terminal | ✓ | — |
+
+**No probado:** con el kit tal cual; la barra de título revelada por el modo
+foco y `fullscreen_push`: Malaysia no arranca en el laboratorio
+(llvmpipe no ofrece `EGL_ANDROID_native_fence_sync`) y sway no da el
+protocolo `infinity_focus_v1`; la pantalla completa con decoración del
+cliente (sway sin pantalla siempre decora la ventana); No Title Bar y
+Maximized.
+
+**Difiere de iTerm2:** sin pantalla completa tradicional (anterior a Lion) ni
+los estilos Top, Bottom, Left, Right o Compact; con decoración del servidor
+No Title Bar no quita la barra que dibuja el compositor.
+
+## Fase 60 — Historial de órdenes y autocompletado
+
+### Plan
+
+Session › Open Command History… (⇧⌘;) y Open Autocomplete… (⌘;) de iTerm2
+(`iTermShellHistoryController.m`, `CommandHistoryPopup.m`, `Autocomplete.m` y
+`PseudoTerminal.m -openCommandHistory:`):
+
+1. **Historial:** con la integración con la shell, la orden de `OSC 133;C`
+   entra en un historial común a las sesiones de la ventana, con su número de
+   usos.
+2. **Open Command History:** las órdenes que empiezan como lo escrito en el
+   prompt, las más usadas primero; elegir una escribe lo que falta.
+3. **Open Autocomplete:** las palabras de la pantalla y del historial que
+   continúan la que está antes del cursor, las más cercanas primero; elegir
+   una escribe lo que falta.
+4. Las dos usan la ventana de selección de Paste History.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado, con `PS1=$'$ \e]133;B\a'`
+y `PS0=$'\e]133;C\a'`. `./dev.sh check` limpio en los dos modos; un test
+nuevo comprueba el orden del historial y las palabras.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `git status` dos veces y `git log`; `gi` y Open Command History: `git status` primero y `git log` | ✓ | `fase60-historial.png` |
+| Intro: la línea queda `git status` | ✓ | — |
+| `echo car` y Open Autocomplete: `cargo-build` y `carbonara`; Abajo e Intro: `echo carbonara` | ✓ | `fase60-autocompletar.png` |
+
+**Fallo encontrado y corregido en la prueba:** Abajo y Arriba en la ventana de
+selección cerraban la app: la guarda de `peek` seguía viva durante `set`
+(«already borrowed»). Pasaba también en Paste History, Open Quickly y Recent
+Directories.
+
+**No probado:** con el kit tal cual; los atajos ⌘; y ⇧⌘; (en el
+laboratorio el teclado virtual no da el punto y coma).
+
+**Difiere de iTerm2:** el historial no se guarda al salir ni es por equipo
+remoto; sin Auto Command Completion ni la herramienta Command History de la
+barra lateral; la orden no recuerda su carpeta ni su código de salida.

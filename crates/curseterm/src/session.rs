@@ -127,6 +127,9 @@ pub struct Session {
     pub idle_armed: Cell<bool>,
 }
 
+// Autocomplete.m searches back from the cursor; this many lines is enough for a prompt.
+const AUTOCOMPLETE_LINES: usize = 500;
+
 thread_local! {
     static SEARCH: RefCell<Option<(String, RegexSearch)>> = const { RefCell::new(None) };
 }
@@ -783,6 +786,57 @@ impl Session {
     // PTYSession.m -isAtShellPrompt: between OSC 133;B and 133;C.
     pub fn at_prompt(&self) -> bool {
         self.extras().command_start.is_some()
+    }
+
+    // PTYSession.m -currentCommand: what is typed at the prompt so far.
+    pub fn typed_command(&self) -> Option<String> {
+        let start = self.extras().command_start?;
+        let term = self.term.lock();
+        let history = term.history_size() as i64;
+        let end = (
+            pty_io::absolute_line(&term),
+            term.grid().cursor.point.column.0,
+        );
+        if end <= start {
+            return Some(String::new());
+        }
+        let point = |(line, column): (i64, usize)| {
+            Point::new(Line((line - history) as i32), Column(column))
+        };
+        Some(
+            term.bounds_to_string(point(start), point(end).sub(&*term, Boundary::None, 1))
+                .replace('\n', ""),
+        )
+    }
+
+    // Autocomplete.m: the word before the cursor and the lines from the cursor upwards.
+    pub fn autocomplete_context(&self) -> (String, Vec<String>) {
+        let term = self.term.lock();
+        let cursor = term.grid().cursor.point;
+        let line_start = Point::new(cursor.line, Column(0));
+        let before = if cursor.column.0 > 0 {
+            term.bounds_to_string(line_start, Point::new(cursor.line, cursor.column - 1))
+        } else {
+            String::new()
+        };
+        let prefix = before
+            .rsplit(char::is_whitespace)
+            .next()
+            .unwrap_or_default()
+            .to_string();
+        let top = -(term.history_size() as i32);
+        let lines = (top..=cursor.line.0)
+            .rev()
+            .take(AUTOCOMPLETE_LINES)
+            .map(|line| {
+                let line = Line(line);
+                term.bounds_to_string(
+                    Point::new(line, Column(0)),
+                    Point::new(line, Column(term.columns() - 1)),
+                )
+            })
+            .collect();
+        (prefix, lines)
     }
 
     pub fn has_current_command(&self) -> bool {

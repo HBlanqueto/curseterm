@@ -129,6 +129,10 @@ pub const BURY_SESSION: Action = Action::new("bury-session", || tr!("bury-sessio
     .shortcut(super_with(Modifiers::ALT.union(Modifiers::SHIFT), 'b'));
 pub const BURIED_MENU: &str = "buried-menu";
 pub const BURIED_PREFIX: &str = "buried:";
+pub const COMMAND_HISTORY: Action = Action::new("command-history", || tr!("command-history"))
+    .shortcut(super_with(Modifiers::SHIFT, ';'));
+pub const AUTOCOMPLETE: Action =
+    Action::new("autocomplete", || tr!("autocomplete")).shortcut(super_key(';'));
 pub const MARKS_MENU: &str = "marks-menu";
 pub const SET_MARK: Action =
     Action::new("set-mark", || tr!("set-mark")).shortcut(super_with(Modifiers::SHIFT, 'm'));
@@ -164,6 +168,9 @@ pub const BROADCAST_CURRENT_TAB: &str = "broadcast-current-tab";
 pub const SHOW_TAB_BAR: Action = Action::new("show-tab-bar", || tr!("show-tab-bar"));
 pub const FULL_SCREEN: Action =
     Action::new("full-screen", || tr!("full-screen")).shortcut(super_with(Modifiers::CONTROL, 'f'));
+pub const SHOW_TABS_IN_FULLSCREEN: Action =
+    Action::new("show-tabs-in-fullscreen", || tr!("show-tabs-in-fullscreen"))
+        .shortcut(super_with(Modifiers::SHIFT, 'u'));
 pub const SHOW_TIMESTAMPS: Action = Action::new("show-timestamps", || tr!("show-timestamps"))
     .shortcut(super_with(Modifiers::SHIFT, 'e'));
 pub const SHOW_SESSION_NOTE: Action = Action::new("show-session-note", || tr!("show-session-note"))
@@ -433,6 +440,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
             vec![
                 SHOW_TAB_BAR.item_with(true, CheckState::Checkbox(false)),
                 FULL_SCREEN.item(true),
+                SHOW_TABS_IN_FULLSCREEN.item_with(true, CheckState::Checkbox(true)),
                 USE_TRANSPARENCY.item_with(false, CheckState::Checkbox(true)),
                 MenuItem::Separator,
                 FIND_CURSOR.item(true),
@@ -466,6 +474,8 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 MenuItem::Separator,
                 RECENT_DIRECTORIES.item(false),
                 PASTE_HISTORY.item(false),
+                COMMAND_HISTORY.item(true),
+                AUTOCOMPLETE.item(true),
                 MenuItem::Separator,
                 submenu(
                     LOG_MENU,

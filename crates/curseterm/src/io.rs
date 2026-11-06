@@ -13,7 +13,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::grid::Dimensions;
-use alacritty_terminal::index::{Column, Line};
+use alacritty_terminal::index::{Column, Line, Point};
 use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::Term;
 use alacritty_terminal::term::cell::{Cell, Flags};
@@ -102,6 +102,7 @@ pub struct Extras {
     pub notifications: Vec<Notification>,
     pub sub_selections: Vec<((i64, usize), (i64, usize))>,
     pub key_mode: KeyMode,
+    pub entered: Vec<String>,
     pub apps_change_key_mode: bool,
     triggers: Vec<Trigger>,
     compiled: Vec<Compiled>,
@@ -512,7 +513,17 @@ fn apply(term: &mut Term<Listener>, extras: &Mutex<Extras>, report: Report) {
         Report::OutputStart => {
             let line = absolute_line(term);
             if let Some(start) = extras.command_start.take() {
-                extras.command = Some((start, cursor_point(term)));
+                let end = cursor_point(term);
+                extras.command = Some((start, end));
+                // iTermShellHistoryController.m: the command at OSC 133;C is the one entered.
+                let history = term.history_size() as i64;
+                let point = |(line, column): (i64, usize)| {
+                    Point::new(Line((line - history) as i32), Column(column))
+                };
+                if end > start {
+                    let text = term.bounds_to_string(point(start), point(end));
+                    extras.entered.push(text.replace('\n', ""));
+                }
             }
             extras.output_start = Some(line);
         }
