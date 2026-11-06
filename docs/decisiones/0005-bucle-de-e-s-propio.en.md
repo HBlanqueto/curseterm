@@ -22,7 +22,7 @@ see the order between text and image.
    including the cutoff of synchronized updates
    (`sync_timeout`).
 2. Before the `Processor`, a pure splitter (`osc.rs`) pulls OSC
-   7, 133 and 1337 out of the stream and keeps the rest in order. Each OSC is handled with the `Term`
+   7, 9, 133 and 1337 out of the stream and keeps the rest in order. Each OSC is handled with the `Term`
    locked, between the text chunks around it.
 3. Writing goes through a thread with a channel; resizing, through
    the `Pty`'s `OnResize`, which lives in the session.

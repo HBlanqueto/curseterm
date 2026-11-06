@@ -22,7 +22,7 @@ ve el orden entre texto e imagen.
    Alacritty, incluido el corte de las actualizaciones sincronizadas
    (`sync_timeout`).
 2. Antes del `Processor`, un separador puro (`osc.rs`) saca del flujo los OSC
-   7, 133 y 1337 y deja el resto en orden. Cada OSC se atiende con el `Term`
+   7, 9, 133 y 1337 y deja el resto en orden. Cada OSC se atiende con el `Term`
    bloqueado, entre los trozos de texto que lo rodean.
 3. La escritura va por un hilo con canal; el redimensionado, por
    `OnResize` del `Pty`, que vive en la sesión.

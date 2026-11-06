@@ -25,6 +25,7 @@ use barrier_kit::platform::WakeHandle;
 
 use rustix::process::{Pid, Signal, kill_process_group};
 
+use crate::activity::Activity;
 use crate::composer::Composer;
 use crate::config::{APP_NAME, CursorType, Profile, SCROLLBACK_LIMIT};
 use crate::hints;
@@ -117,6 +118,8 @@ pub struct Session {
     options: Cell<(usize, CursorStyle)>,
     coprocess: RefCell<Option<Child>>,
     pub composer: RefCell<Composer>,
+    pub activity: Cell<Activity>,
+    pub idle_armed: Cell<bool>,
 }
 
 thread_local! {
@@ -182,6 +185,8 @@ impl Session {
             options: Cell::new((Config::default().scrolling_history, CursorStyle::default())),
             coprocess: RefCell::new(None),
             composer: RefCell::default(),
+            activity: Cell::default(),
+            idle_armed: Cell::new(false),
         })
     }
 

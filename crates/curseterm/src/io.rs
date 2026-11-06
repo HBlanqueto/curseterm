@@ -24,7 +24,7 @@ use regex::Regex;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 
 use crate::config::{Trigger, TriggerAction};
-use crate::integration::{self, Dimension, InlineImage, Report};
+use crate::integration::{self, Dimension, InlineImage, Notification, Report};
 use crate::osc::{Piece, Splitter};
 use crate::session::Listener;
 
@@ -96,6 +96,7 @@ pub struct Extras {
     pub mark_reported: bool,
     pub last_status: Option<i32>,
     pub alert_on_next_mark: bool,
+    pub notifications: Vec<Notification>,
     triggers: Vec<Trigger>,
     compiled: Vec<Compiled>,
 }
@@ -493,6 +494,7 @@ fn apply(term: &mut Term<Listener>, extras: &Mutex<Extras>, report: Report) {
             extras.last_status = status;
             extras.end_output(absolute_line(term), term.grid().cursor.point.column.0)
         }
+        Report::Notification(notification) => extras.notifications.push(notification),
         Report::Image(image) => {
             if let Some(placed) = place(term, extras.cell, &image) {
                 let lines = (placed.height / extras.cell.1).ceil() as usize;

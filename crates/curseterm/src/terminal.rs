@@ -44,6 +44,7 @@ use crate::config::{
 use crate::grid::Fonts;
 use crate::hint_view;
 use crate::hints::{self, HintAction, Hints, Typed};
+use crate::integration::Notification;
 use crate::io::AnnotationId;
 use crate::keys::{COPY_KEYS, CopyCommand, KeyAction, copy_command, encode};
 use crate::links;
@@ -1774,6 +1775,15 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
             if profile.bell_icon_in_tabs {
                 workspace.write().ring(id);
             }
+            if profile.notify_bell && should_post_notification(handles, id, &profile) {
+                let (name, tab) = session_label(&workspace.peek(), id);
+                post_for_session(
+                    handles,
+                    id,
+                    tr!("bell-title").to_string(),
+                    tr!("bell-notification", name = name, tab = tab),
+                );
+            }
             if profile.flash_visual_bell {
                 session.extras().bell = Some(Instant::now());
                 handles.after(Duration::from_millis(DURATION_FAST_MS), move || {
@@ -1783,17 +1793,34 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
             }
         }
         TermEvent::Wakeup => {
-            if std::mem::take(&mut session.extras().mark_reported) {
+            let (reported, posted) = {
+                let mut extras = session.extras();
+                (
+                    std::mem::take(&mut extras.mark_reported),
+                    std::mem::take(&mut extras.notifications),
+                )
+            };
+            if reported {
                 mark_set(handles, &session);
             }
+            let profile = handles.defaults.peek().profile(&session.profile);
+            for notification in posted {
+                post_escape_sequence_notification(handles, id, &profile, notification);
+            }
+            note_output(handles, &session, &profile);
         }
         TermEvent::ChildExit(_) | TermEvent::Exit => {
-            match handles
-                .defaults
-                .peek()
-                .profile(&session.profile)
-                .when_session_ends
-            {
+            let profile = handles.defaults.peek().profile(&session.profile);
+            if profile.notify_session_ended && should_post_notification(handles, id, &profile) {
+                let (name, tab) = session_label(&workspace.peek(), id);
+                post_for_session(
+                    handles,
+                    id,
+                    tr!("session-ended-title").to_string(),
+                    tr!("session-ended-notification", name = name, tab = tab),
+                );
+            }
+            match profile.when_session_ends {
                 SessionEnd::Close => close_session(handles, id),
                 SessionEnd::Restart if session.started.elapsed() < QUICK_EXIT => {
                     session.show_ended(tr!("session-ended-quickly"));
@@ -1808,6 +1835,134 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
         }
         _ => {}
     }
+}
+
+fn session_label(workspace: &Workspace, id: SessionId) -> (String, usize) {
+    let tab = workspace.tab_of(id).map_or(0, |index| index + 1);
+    (workspace.title(id).to_string(), tab)
+}
+
+fn post_for_session(handles: &Handles, id: SessionId, summary: String, body: String) {
+    let Some((sender, wake)) = handles.reveals.get().cloned() else {
+        return;
+    };
+    let notice = Notice {
+        app_name: APP_NAME,
+        desktop_entry: APP_ID,
+        summary,
+        body,
+        action: tr!("reveal").to_string(),
+    };
+    notifications::post(notice, move |token| {
+        if sender.send((id, token)).is_ok() {
+            wake.wake();
+        }
+    });
+}
+
+// PTYSession.m -notificationsSuppressed
+fn notifications_suppressed(handles: &Handles, id: SessionId, profile: &Profile) -> bool {
+    profile.suppress_alerts_in_active_session
+        && handles.workspace.peek().active_session() == Some(id)
+        && handles.controls.status.peek().activated
+}
+
+// PTYSession.m -shouldPostUserNotification
+fn should_post_notification(handles: &Handles, id: SessionId, profile: &Profile) -> bool {
+    if !profile.notifications || notifications_suppressed(handles, id, profile) {
+        return false;
+    }
+    let workspace = handles.workspace.peek();
+    workspace.tab_of(id) != Some(workspace.active) || !handles.controls.status.peek().activated
+}
+
+// PTYSession.m -screenPostUserNotification:rich:
+fn post_escape_sequence_notification(
+    handles: &Handles,
+    id: SessionId,
+    profile: &Profile,
+    notification: Notification,
+) {
+    if !profile.notifications
+        || !profile.notify_escape_sequences
+        || notifications_suppressed(handles, id, profile)
+    {
+        return;
+    }
+    let (summary, body) = if notification.rich {
+        let body = match notification.subtitle {
+            Some(subtitle) => format!("{subtitle}\n{}", notification.message),
+            None => notification.message,
+        };
+        (notification.title.unwrap_or_default(), body)
+    } else {
+        let (name, tab) = session_label(&handles.workspace.peek(), id);
+        let message = notification.message;
+        (
+            tr!("escape-notification-title").to_string(),
+            tr!(
+                "escape-notification",
+                name = name,
+                tab = tab,
+                message = message
+            ),
+        )
+    };
+    post_for_session(handles, id, summary, body);
+}
+
+// PTYTab.m -setLabelAttributesForActiveTab: and -setLabelAttributesForIdleTab
+fn note_output(handles: &Handles, session: &Rc<Session>, profile: &Profile) {
+    let id = session.id;
+    let seen = {
+        let workspace = handles.workspace.peek();
+        workspace.tab_of(id) == Some(workspace.active)
+    };
+    let may_notify = *handles.broadcast.peek() == Broadcast::Off
+        && should_post_notification(handles, id, profile);
+    let mut activity = session.activity.get();
+    if activity.output(Instant::now(), seen, may_notify) && profile.notify_new_output {
+        let (name, tab) = session_label(&handles.workspace.peek(), id);
+        post_for_session(
+            handles,
+            id,
+            tr!("new-output-title").to_string(),
+            tr!("new-output-notification", name = name, tab = tab),
+        );
+    }
+    session.activity.set(activity);
+    if !seen && !session.idle_armed.replace(true) {
+        watch_idle(handles, session.clone());
+    }
+}
+
+fn watch_idle(handles: &Handles, session: Rc<Session>) {
+    let Some(at) = session.activity.get().idle_at() else {
+        session.idle_armed.set(false);
+        return;
+    };
+    let waiting = handles.clone();
+    handles.after(at.saturating_duration_since(Instant::now()), move || {
+        let now = Instant::now();
+        if session.activity.get().idle_at().is_some_and(|at| at > now) {
+            watch_idle(&waiting, session.clone());
+            return;
+        }
+        session.idle_armed.set(false);
+        let profile = waiting.defaults.peek().profile(&session.profile);
+        let may_notify = should_post_notification(&waiting, session.id, &profile);
+        let mut activity = session.activity.get();
+        if activity.idle(now, may_notify) && profile.notify_idle {
+            let (name, tab) = session_label(&waiting.workspace.peek(), session.id);
+            post_for_session(
+                &waiting,
+                session.id,
+                tr!("idle-title").to_string(),
+                tr!("idle-notification", name = name, tab = tab),
+            );
+        }
+        session.activity.set(activity);
+    });
 }
 
 fn listen_reveals(handles: Handles) -> Reveals {
@@ -1849,26 +2004,13 @@ fn mark_set(handles: &Handles, session: &Session) {
             }
         }
         MarkAlert::PostNotification => {
-            let Some((sender, wake)) = handles.reveals.get().cloned() else {
-                return;
-            };
-            let id = session.id;
-            let notice = Notice {
-                app_name: APP_NAME,
-                desktop_entry: APP_ID,
-                summary: tr!("mark-set-title").to_string(),
-                body: tr!(
-                    "mark-set-notification",
-                    name = workspace.title(id),
-                    tab = workspace.tab_of(id).map_or(0, |index| index + 1)
-                ),
-                action: tr!("reveal").to_string(),
-            };
-            notifications::post(notice, move |token| {
-                if sender.send((id, token)).is_ok() {
-                    wake.wake();
-                }
-            });
+            let (name, tab) = session_label(&workspace, session.id);
+            post_for_session(
+                handles,
+                session.id,
+                tr!("mark-set-title").to_string(),
+                tr!("mark-set-notification", name = name, tab = tab),
+            );
         }
         // The freedesktop names for iTerm2's success-sound and error-sound.
         MarkAlert::PlaySound => notifications::play_event_sound(

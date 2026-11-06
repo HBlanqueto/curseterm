@@ -178,14 +178,16 @@ impl Component for ProfilesPane {
             .collect();
         let several = profiles.len() > 1;
         let form = match *section.read() {
-            0 => general_section(defaults, index, &profile),
-            1 => colors_section(defaults, index, &profile),
-            2 => text_section(index, &profile),
-            3 => window_section(index, &profile),
-            4 => terminal_section(index, &profile),
-            5 => session_section(index, &profile),
-            6 => keys_section(index, &profile),
-            _ => triggers_section(index, &profile),
+            0 => Form::new().section(general_section(defaults, index, &profile)),
+            1 => Form::new().section(colors_section(defaults, index, &profile)),
+            2 => Form::new().section(text_section(index, &profile)),
+            3 => Form::new().section(window_section(index, &profile)),
+            4 => Form::new()
+                .section(terminal_section(index, &profile))
+                .section(notifications_section(index, &profile)),
+            5 => Form::new().section(session_section(index, &profile)),
+            6 => Form::new().section(keys_section(index, &profile)),
+            _ => Form::new().section(triggers_section(index, &profile)),
         };
         rect()
             .width(Size::fill())
@@ -267,11 +269,7 @@ impl Component for ProfilesPane {
                                     .on_change(move |choice| section.set(choice)),
                             ),
                     )
-                    .child(
-                        ScrollView::new()
-                            .height(Size::flex(1.0))
-                            .child(Form::new().section(form)),
-                    ),
+                    .child(ScrollView::new().height(Size::flex(1.0)).child(form)),
             )
     }
 }
@@ -634,6 +632,53 @@ fn terminal_section(index: usize, profile: &Profile) -> Section {
                     }),
             ),
         )
+}
+
+// ProfilesTerminalPreferencesViewController.m: Notification Center alerts and Filter Alerts.
+fn notifications_section(index: usize, profile: &Profile) -> Section {
+    let switch = |label: &'static str, on: bool, set: fn(&mut Profile, bool)| {
+        Row::new(label).control(
+            Switch::new(label)
+                .on(on)
+                .on_toggle(move |on: bool| edit(index, |profile| set(profile, on))),
+        )
+    };
+    Section::titled(tr!("section-notifications"))
+        .row(switch(
+            tr!("send-notifications"),
+            profile.notifications,
+            |profile, on| profile.notifications = on,
+        ))
+        .row(switch(
+            tr!("notify-bell"),
+            profile.notify_bell,
+            |profile, on| profile.notify_bell = on,
+        ))
+        .row(switch(
+            tr!("notify-idle"),
+            profile.notify_idle,
+            |profile, on| profile.notify_idle = on,
+        ))
+        .row(switch(
+            tr!("notify-new-output"),
+            profile.notify_new_output,
+            |profile, on| profile.notify_new_output = on,
+        ))
+        .row(switch(
+            tr!("notify-session-ended"),
+            profile.notify_session_ended,
+            |profile, on| profile.notify_session_ended = on,
+        ))
+        .row(switch(
+            tr!("notify-escape-sequences"),
+            profile.notify_escape_sequences,
+            |profile, on| profile.notify_escape_sequences = on,
+        ))
+        .row(switch(
+            tr!("suppress-alerts-in-active-session"),
+            profile.suppress_alerts_in_active_session,
+            |profile, on| profile.suppress_alerts_in_active_session = on,
+        ))
 }
 
 fn triggers_section(index: usize, profile: &Profile) -> Section {

@@ -1,8 +1,8 @@
-//! iTerm2's OSC 7, 133 and 1337 split out of the PTY stream (ADR 0005).
+//! iTerm2's OSC 7, 9, 133 and 1337 split out of the PTY stream (ADR 0005).
 
 const ESC: u8 = 0x1b;
 const BEL: u8 = 0x07;
-const WANTED: [&[u8]; 3] = [b"7", b"133", b"1337"];
+const WANTED: [&[u8]; 4] = [b"7", b"9", b"133", b"1337"];
 const MAX_ID: usize = 4;
 const MAX_PAYLOAD: usize = 64 << 20;
 

@@ -1,3 +1,4 @@
+mod activity;
 mod arrangement;
 mod auxiliary;
 mod clock;

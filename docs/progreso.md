@@ -1830,3 +1830,61 @@ available»); Malaysia, que aún no tiene servidor de notificaciones.
 (`successSound`/`errorSound`); no hay indicador de alerta en la esquina del
 panel; una sesión restaurada de una disposición no espera a la primera tecla
 antes de avisar de marcas fuera de la vista; no se manda al iPhone.
+
+## Fase 41 — Notificaciones del perfil
+
+### Plan
+
+Profiles › Terminal › Notifications de iTerm2
+(`ProfilesTerminalPreferencesViewController.m`, `PTYSession.m
+-shouldPostUserNotification`, `-notificationsSuppressed`, `-setBell:`,
+`-brokenPipeWithError:` y `-screenPostUserNotification:rich:`, `PTYTab.m
+-setLabelAttributesForActiveTab:` y `-setLabelAttributesForIdleTab`):
+
+1. **Ajustes** en la pestaña Terminal del perfil, con los valores por defecto
+   de iTerm2: Notification Center alerts (apagado), Bell (encendido), Idle y
+   New Output (apagados), Session Ended y las de secuencias de escape
+   (encendidos) y Suppress alerts from active session (apagado).
+2. **Cuándo se envía:** con las alertas encendidas, si no está suprimida y la
+   sesión no se ve (otra pestaña) o la ventana no está activa.
+3. **Campana, fin de sesión, salida nueva e inactividad**, con los textos de
+   iTerm2. Salida nueva avisa una vez por tanda en una pestaña de fondo (no
+   con difusión de entrada); inactiva, 3 s después de la última salida
+   (`idleTimeSeconds` más 1).
+4. **Secuencias de escape:** `OSC 9;texto` («Alert», «Session … #n: texto»;
+   un primer campo numérico es el progreso de ConEmu y no avisa) y
+   `OSC 1337;Notification=title=…;subtitle=…;message=…` en base64. No miran
+   si la sesión se ve, como en iTerm2.
+5. **Pulsar** cualquiera muestra la sesión, como en la fase 40.
+6. **Prueba** genérica con mako y `dbus-monitor`, sin Malaysia.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos; tests nuevos para `OSC 9` y `1337;Notification` y para la
+lógica de salida nueva e inactividad (`activity.rs`).
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Ajustes › Perfiles › Terminal: sección Notifications con los valores de iTerm2; los interruptores se guardan | ✓ | `fase41-ajustes.png` |
+| `OSC 9;hola desde OSC 9` en la pestaña visible: «Alert», «Session root@vm: ~ #1: hola desde OSC 9» | ✓ | `fase41-osc9.png` |
+| `OSC 9;4;1;50` no avisa | ✓ | — |
+| `1337;Notification` con título, subtítulo y mensaje: «Hecho» y «make» más «todo listo» | ✓ | `fase41-osc9.png` |
+| Pestaña de fondo con `sleep 3; echo salida; printf '\a'`: Bell y New Output al llegar, Idle 3 s después | ✓ | `fase41-fondo.png` |
+| La pestaña nueva, que se ve, no avisa de su propia salida | ✓ | — |
+| `exit` en una pestaña de fondo: «Session Ended», «Session “root@vm: ~” in tab #1 just terminated.» | ✓ | — |
+| Con Suppress alerts from active session, un `OSC 9` en la sesión activa no sale; al apagarlo, sí | ✓ | — |
+
+**No probado:** con el kit tal cual; la ventana inactiva como motivo para
+avisar (sway sin pantalla no cambia el foco entre ventanas en la prueba);
+Malaysia, que aún no tiene servidor de notificaciones.
+
+**Difiere de iTerm2:** los filtros van en la misma sección y no en el
+desplegable Filter Alerts; no hay alertas suprimidas por tipo («Suppressed
+Alerts…»), ni texto propio de fin de sesión (`sessionEndMessageText`), ni
+`simpleNotifications`, ni la imagen de `1337;Notification`; el subtítulo va
+en la primera línea del cuerpo; la salida tras cambiar el tamaño de la
+ventana no se descarta; no se cuenta en la insignia del Dock ni se manda al
+iPhone.
