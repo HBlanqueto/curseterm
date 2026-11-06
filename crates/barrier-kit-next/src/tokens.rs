@@ -1,6 +1,6 @@
 //! Tengen values that move to `tengen/components.json` under the same name.
 
-use vow_design::{BG_WINDOW_DARK, BG_WINDOW_LIGHT, Font, Rgba};
+use vow_design::{Font, Rgba};
 
 pub const MONO: Font = Font {
     family: "Geist Mono",
@@ -348,11 +348,52 @@ const fn white(level: f32, alpha: f32) -> Rgba {
     )
 }
 
-// PSMYosemiteTabStyle.m: the selected tab is clear over the window background.
+// A titled NSWindow on macOS 11 to 15: a 28-point title bar with the bold 13-point title, in
+// NSColor.windowBackgroundColor (236 light, 50 dark), and iTermRootTerminalView.m's 1-point
+// division view (HSB brightness 0.70 or 0.86 light, 0.10 or 0.07 dark) when no tab bar is below.
+pub const TITLE_BAR: TitleBarMetrics = TitleBarMetrics {
+    height: 28.0,
+    font_size: 13.0,
+    font_weight: 700,
+    light: TitleBarColors {
+        background: white(236.0 / 255.0, 1.0),
+        title: white(0.0, 0.85),
+        title_inactive: white(0.0, 0.25),
+        division: white(0.70, 1.0),
+        division_inactive: white(0.86, 1.0),
+    },
+    dark: TitleBarColors {
+        background: white(50.0 / 255.0, 1.0),
+        title: white(1.0, 0.85),
+        title_inactive: white(1.0, 0.25),
+        division: white(0.10, 1.0),
+        division_inactive: white(0.07, 1.0),
+    },
+};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TitleBarMetrics {
+    pub height: f32,
+    pub font_size: f32,
+    pub font_weight: u16,
+    pub light: TitleBarColors,
+    pub dark: TitleBarColors,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TitleBarColors {
+    pub background: Rgba,
+    pub title: Rgba,
+    pub title_inactive: Rgba,
+    pub division: Rgba,
+    pub division_inactive: Rgba,
+}
+
+// PSMYosemiteTabStyle.m: the selected tab is clear over the title bar's background.
 pub const TAB_STYLE_LIGHT: TabStyle = TabStyle {
     height: 24.0,
     font_size: 11.0,
-    backing: BG_WINDOW_LIGHT,
+    backing: TITLE_BAR.light.background,
     selected: Rgba::TRANSPARENT,
     selected_hover: Rgba::TRANSPARENT,
     unselected: white(0.0, 0.07),
@@ -371,7 +412,7 @@ pub const TAB_STYLE_LIGHT: TabStyle = TabStyle {
 
 // PSMDarkTabStyle.m; the bottom row blends its black-to-0.75 gradient over the 0.1 line.
 pub const TAB_STYLE_DARK: TabStyle = TabStyle {
-    backing: BG_WINDOW_DARK,
+    backing: TITLE_BAR.dark.background,
     unselected: white(0.0, 0.5),
     unselected_hover: white(0.0, 0.2),
     text_selected: white(1.0, 1.0),
@@ -388,8 +429,8 @@ pub const TAB_STYLE_DARK: TabStyle = TabStyle {
 // PSMLightHighContrastTabStyle.m
 pub const TAB_STYLE_LIGHT_HIGH_CONTRAST: TabStyle = TabStyle {
     font_size: 12.0,
-    selected: BG_WINDOW_LIGHT,
-    selected_hover: BG_WINDOW_LIGHT,
+    selected: TITLE_BAR.light.background,
+    selected_hover: TITLE_BAR.light.background,
     unselected: white(180.0 / 255.0, 1.0),
     unselected_hover: white(180.0 / 255.0 - 0.1, 1.0),
     text_selected_inactive: white(0.0, 1.0),

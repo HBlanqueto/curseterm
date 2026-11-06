@@ -15,13 +15,13 @@ use barrier_kit::platform::{DecorationResponse, Timers, WakeHandle, WindowContro
 use barrier_kit::style::{Palette, text};
 use barrier_kit::symbol::Symbol;
 use barrier_kit::theme::color;
-use barrier_kit::titlebar::{Titlebar, window_drag_handler, window_traffic_lights};
+use barrier_kit::titlebar::{window_drag_handler, window_traffic_lights};
 use barrier_kit::views::feedback::{Alert, sheet};
 use barrier_kit::views::table::Table;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
 use barrier_kit_next::notifications::{self, Notice};
 use barrier_kit_next::tokens::{
-    ANNOTATION, PASTE_HISTORY_SIZE, RENAME_WIDTH, SHORTCUT_LABEL, TAB_STRIP, TERMINAL,
+    ANNOTATION, PASTE_HISTORY_SIZE, RENAME_WIDTH, SHORTCUT_LABEL, TAB_STRIP, TERMINAL, TITLE_BAR,
     TOOLBELT_WIDTH, TabStyle,
 };
 use barrier_kit_next::views::split_panes::SplitPanes;
@@ -437,8 +437,12 @@ impl App for Terminal {
         use_focus_report(&handles, window_focused);
         let drag = window_drag_handler(handles.controls.fixed);
         let theme = defaults.read().theme;
-        let compact = theme::compact(theme)
-            && handles.controls.status.read().decoration == DecorationResponse::Client;
+        let chrome = match handles.controls.status.read().decoration {
+            DecorationResponse::Server => Chrome::Server,
+            DecorationResponse::Client if theme::compact(theme) => Chrome::Compact,
+            DecorationResponse::Client => Chrome::Regular,
+        };
+        let compact = chrome == Chrome::Compact;
         let terminal_background = handles
             .active()
             .map(|session| {
@@ -643,12 +647,12 @@ impl App for Terminal {
                 *revision.write() += 1;
             })
             .children(window_chrome(
-                compact,
+                chrome,
+                dark,
                 tab_style,
                 title,
                 tab_bar,
                 window_focused,
-                handles.controls.fixed,
                 drag,
             ))
             .maybe_child(find_bar)
@@ -675,36 +679,101 @@ impl App for Terminal {
     }
 }
 
-// iTermRootTerminalView.m: a compact window puts the stoplights and the tabs in one strip, or a
-// fake title bar as tall as the tabs when the tab bar is hidden.
+// The window chrome iTerm2 draws: with CSD, a macOS title bar above the tabs (Regular and the
+// fixed themes) or one strip with the stoplights and the tabs, or a fake title bar as tall as
+// the tabs when there is no tab bar (iTermRootTerminalView.m, Compact and Minimal).
+#[derive(Clone, Copy, PartialEq)]
+enum Chrome {
+    Server,
+    Regular,
+    Compact,
+}
+
 fn window_chrome(
-    compact: bool,
+    chrome: Chrome,
+    dark: bool,
     style: TabStyle,
     title: String,
     tab_bar: Option<TabBar>,
     active: bool,
-    fixed: bool,
     drag: impl Fn(Event<MouseEventData>) + 'static,
 ) -> Vec<Element> {
-    if !compact {
-        return [
-            Some(Titlebar::new().title(title).into_element()),
-            tab_bar.map(Into::into),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
+    if chrome == Chrome::Server {
+        return tab_bar.into_iter().map(Into::into).collect();
     }
-    let lights = rect()
-        .position(Position::new_absolute().left(0.0).top(0.0))
-        .layer(1)
-        .width(Size::px(TAB_STRIP.compact_inset))
-        .height(Size::px(style.height - 1.0))
-        .padding(Gaps::new(0.0, 0.0, 0.0, TAB_STRIP.compact_lights_x))
-        .main_align(Alignment::Center)
-        .child(window_traffic_lights(active, fixed));
-    let strip = match tab_bar {
-        Some(bar) => rect().width(Size::fill()).child(bar),
+    let fixed = WindowControls::get().fixed;
+    let lights = |height: f32| {
+        rect()
+            .position(Position::new_absolute().left(0.0).top(0.0))
+            .layer(1)
+            .width(Size::px(TAB_STRIP.compact_inset))
+            .height(Size::px(height))
+            .padding(Gaps::new(0.0, 0.0, 0.0, TAB_STRIP.compact_lights_x))
+            .main_align(Alignment::Center)
+            .child(window_traffic_lights(active, fixed))
+    };
+    let title_bar = |height: f32, background: Rgba, ink: Rgba| {
+        rect()
+            .width(Size::fill())
+            .height(Size::px(height))
+            .background(color(background))
+            .on_mouse_down(drag)
+            .child(
+                rect()
+                    .width(Size::fill())
+                    .height(Size::fill())
+                    .padding(Gaps::new(
+                        0.0,
+                        TAB_STRIP.compact_inset,
+                        0.0,
+                        TAB_STRIP.compact_inset,
+                    ))
+                    .main_align(Alignment::Center)
+                    .cross_align(Alignment::Center)
+                    .child(text(
+                        title,
+                        vow_design::Font {
+                            size: TITLE_BAR.font_size as u32,
+                            weight: TITLE_BAR.font_weight,
+                            ..TITLEBAR.font
+                        },
+                        ink,
+                    )),
+            )
+            .child(lights(height))
+    };
+    if chrome == Chrome::Regular {
+        let colors = if dark {
+            TITLE_BAR.dark
+        } else {
+            TITLE_BAR.light
+        };
+        let (ink, division) = if active {
+            (colors.title, colors.division)
+        } else {
+            (colors.title_inactive, colors.division_inactive)
+        };
+        let below: Element = match tab_bar {
+            Some(bar) => bar.into(),
+            None => rect()
+                .width(Size::fill())
+                .height(Size::px(1.0))
+                .background(color(division))
+                .into(),
+        };
+        return vec![
+            title_bar(TITLE_BAR.height, colors.background, ink).into(),
+            below,
+        ];
+    }
+    match tab_bar {
+        Some(bar) => vec![
+            rect()
+                .width(Size::fill())
+                .child(bar)
+                .child(lights(style.height - 1.0))
+                .into(),
+        ],
         None => {
             let mut ink = if active {
                 style.text_selected
@@ -714,35 +783,9 @@ fn window_chrome(
             if active {
                 ink.a *= TAB_STRIP.title_alpha;
             }
-            rect()
-                .width(Size::fill())
-                .height(Size::px(style.height))
-                .background(color(style.backing))
-                .on_mouse_down(drag)
-                .child(
-                    rect()
-                        .width(Size::fill())
-                        .height(Size::fill())
-                        .padding(Gaps::new(
-                            0.0,
-                            TAB_STRIP.compact_inset,
-                            0.0,
-                            TAB_STRIP.compact_inset,
-                        ))
-                        .main_align(Alignment::Center)
-                        .cross_align(Alignment::Center)
-                        .child(text(
-                            title,
-                            vow_design::Font {
-                                size: TAB_STRIP.title_font_size as u32,
-                                ..TITLEBAR.font
-                            },
-                            ink,
-                        )),
-                )
+            vec![title_bar(style.height, style.backing, ink).into()]
         }
-    };
-    vec![strip.child(lights).into_element()]
+    }
 }
 
 struct Painting {

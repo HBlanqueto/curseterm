@@ -1950,6 +1950,12 @@ clásica, la que iTerm2 usa antes de macOS 26 y siempre en Compact:
 3. **Regular y Compact** siguen la apariencia del sistema; **Light, Dark** y
    los de alto contraste fuerzan la de la ventana entera, barra de título
    incluida (`use_appearance`).
+   Con CSD, la barra de título es la de una ventana de macOS (iTerm2 usa una
+   `NSWindow` normal): 28 puntos, título en negrita de 13 puntos centrado,
+   fondo `windowBackgroundColor` (236 claro, 50 oscuro), sin línea debajo si
+   hay pestañas y la «division view» de 1 punto de `iTermRootTerminalView.m`
+   si no. Las pestañas toman ese mismo fondo, así que la elegida continúa la
+   barra de título.
 4. **Compact y Minimal** (con CSD): sin barra de título; los botones de
    ventana y las pestañas comparten una franja con 75 puntos a la izquierda
    para los botones, y con una sola pestaña una barra falsa del mismo alto con
@@ -1969,8 +1975,8 @@ Probado con el kit parcheado en weston 16 sin pantalla (CSD) y en sway (SSD).
 Minimal.
 
 **Funciona** (capturas en [`capturas/`](capturas/); `fase43-temas.png`, de
-arriba abajo: Regular, Compact con dos pestañas y con una, Minimal con dos y
-con una, Light, Dark, Light HC y Dark HC):
+arriba abajo: Regular con dos pestañas y con una, Compact con dos y con una,
+Minimal con dos y con una, Light, Dark, Light HC y Dark HC):
 
 | Prueba | Resultado | Captura |
 |---|---|---|
@@ -1979,6 +1985,7 @@ con una, Light, Dark, Light HC y Dark HC):
 | Los nueve casos de `fase43-temas.png` en weston | ✓ | `fase43-temas.png` |
 | Minimal: franja de 38 puntos con el fondo de Solarized Dark, botones centrados, muesca alrededor de la pestaña elegida y «+» blanco | ✓ | `fase43-minimal.png` |
 | Dark y Dark HC fuerzan la barra de título oscura; Light y Light HC, la clara | ✓ | `fase43-temas.png` |
+| Regular: barra de 28 puntos con el título en negrita; la pestaña elegida es del mismo `#ECECEC` que la barra (antes era blanca bajo la barra de 44 px del kit); con una pestaña, la línea de 1 punto | ✓ | `fase43-temas.png` |
 | En sway (SSD), Compact y Minimal se quedan con la barra del compositor encima y sus colores de pestaña | ✓ | — |
 
 **No probado:** el paso del ratón (cierre y color de hover) y arrastrar o
@@ -1991,6 +1998,6 @@ cambia de golpe, sin la animación de 0,2 s; Regular y Compact no pasan solos
 a alto contraste con «Aumentar contraste» del sistema; los divisores de
 paneles no toman los colores del tema; Minimal no tiene en cuenta la
 transparencia ni la atenuación de ventanas de fondo; no hay colores de
-pestaña, números de pestaña, subtítulos ni menú de desbordamiento; el
-«backing» de las pestañas es el color de ventana de Tengen, sin el material
-de barra de título de macOS.
+pestaña, números de pestaña, subtítulos ni menú de desbordamiento; la
+barra de título y las pestañas usan `windowBackgroundColor` liso, sin el
+material translúcido de macOS; los botones de ventana son los del kit.

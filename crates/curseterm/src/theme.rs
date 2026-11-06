@@ -1,10 +1,10 @@
 use alacritty_terminal::vte::ansi::Rgb;
 use barrier_kit_next::tokens::{
     MINIMAL_TABS, TAB_STRIP, TAB_STYLE_DARK, TAB_STYLE_DARK_HIGH_CONTRAST, TAB_STYLE_LIGHT,
-    TAB_STYLE_LIGHT_HIGH_CONTRAST, TabStyle,
+    TAB_STYLE_LIGHT_HIGH_CONTRAST, TITLE_BAR, TabStyle,
 };
 use barrier_kit_next::views::tab_bar::brightness;
-use vow_design::{Rgba, TITLEBAR_CLIENT_HEIGHT};
+use vow_design::Rgba;
 
 use crate::config::Theme;
 
@@ -99,7 +99,8 @@ fn minimal(background: Rgb, tall: bool) -> TabStyle {
     }
 }
 
-// The window chrome above the panes: a compact window has only its strip.
+// The window chrome above the panes: a compact window has only its strip; a regular one, the
+// 28-point title bar and the tabs or the 1-point division view.
 pub fn chrome_height(theme: Theme, tab_bar_shown: bool) -> f32 {
     let tabs = if theme == Theme::Minimal {
         TAB_STRIP.minimal_height
@@ -108,8 +109,8 @@ pub fn chrome_height(theme: Theme, tab_bar_shown: bool) -> f32 {
     };
     match (compact(theme), tab_bar_shown) {
         (true, _) => tabs,
-        (false, true) => TITLEBAR_CLIENT_HEIGHT as f32 + tabs,
-        (false, false) => TITLEBAR_CLIENT_HEIGHT as f32,
+        (false, true) => TITLE_BAR.height + tabs,
+        (false, false) => TITLE_BAR.height + 1.0,
     }
 }
 

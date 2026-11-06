@@ -1939,6 +1939,12 @@ the one iTerm2 uses before macOS 26 and always for Compact:
 3. **Regular and Compact** follow the system appearance; **Light, Dark** and
    the high-contrast ones force it on the whole window, title bar included
    (`use_appearance`).
+   With CSD, the title bar is a macOS window's (iTerm2 uses a plain
+   `NSWindow`): 28 points, a centered bold 13-point title,
+   `windowBackgroundColor` (236 light, 50 dark), no line below when there are
+   tabs and `iTermRootTerminalView.m`'s 1-point division view when there are
+   none. The tabs take that same background, so the selected one continues
+   the title bar.
 4. **Compact and Minimal** (with CSD): no title bar; the window buttons and
    the tabs share one strip with 75 points on the left for the buttons, and
    with a single tab a fake title bar as tall, with the centered 13-point
@@ -1956,8 +1962,8 @@ Tested with the patched kit on headless weston 16 (CSD) and on sway (SSD).
 `./dev.sh check` clean in both modes; a new test for Minimal's colors.
 
 **Works** (screenshots in [`capturas/`](capturas/); `fase43-temas.png`, top to
-bottom: Regular, Compact with two tabs and with one, Minimal with two and with
-one, Light, Dark, Light HC and Dark HC):
+bottom: Regular with two tabs and with one, Compact with two and with one,
+Minimal with two and with one, Light, Dark, Light HC and Dark HC):
 
 | Test | Result | Screenshot |
 |---|---|---|
@@ -1966,6 +1972,7 @@ one, Light, Dark, Light HC and Dark HC):
 | The nine cases of `fase43-temas.png` on weston | ✓ | `fase43-temas.png` |
 | Minimal: a 38-point strip with the Solarized Dark background, centered buttons, a notch around the selected tab and a white «+» | ✓ | `fase43-minimal.png` |
 | Dark and Dark HC force the dark title bar; Light and Light HC, the light one | ✓ | `fase43-temas.png` |
+| Regular: a 28-point bar with the bold title; the selected tab is the same `#ECECEC` as the bar (it was white under the kit's 44 px bar); with one tab, the 1-point line | ✓ | `fase43-temas.png` |
 | On sway (SSD), Compact and Minimal keep the compositor's bar on top, with their tab colors | ✓ | — |
 
 **Not tested:** hover (close button and hover color) and dragging or
@@ -1978,5 +1985,6 @@ changes at once, without the 0.2 s animation; Regular and Compact do not
 switch to high contrast by themselves with the system's «Increase contrast»;
 pane dividers do not take the theme's colors; Minimal ignores transparency
 and the dimming of background windows; there are no tab colors, tab numbers,
-subtitles or overflow menu; the tabs' backing is Tengen's window color,
-without macOS's title bar material.
+subtitles or overflow menu; the title bar and tabs use flat
+`windowBackgroundColor`, without macOS's translucent material; the window
+buttons are the kit's.
