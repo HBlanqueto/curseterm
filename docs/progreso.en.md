@@ -2257,3 +2257,49 @@ menu.
 
 **Differs from iTerm2:** the mode is in a `PopUpButton`, not in the
 magnifier's menu (BK-038); no Erase Search History.
+
+## Phase 51 — Find Globally
+
+### Plan
+
+iTerm2's Edit › Find › Find Globally… (⇧⌘F)
+(`iTermGlobalSearchWindowController.m`, `iTermGlobalSearch.xib`,
+`iTermGlobalSearchEngineCursor.m` and `iTermGlobalSearchResult.m`):
+
+1. **Panel** of 741 × 567 with a title, the field, the mode (Substring —
+   Automatic, Substring — Case Sensitive, Substring — Case Insensitive, Regex
+   — Case Sensitive and Regex — Case Insensitive; saved separately, like
+   `globalSearchMode`) and the list. It lives inside the window because the
+   kit has no floating panel nor outline view (BK-039).
+2. **Results** from each session of the window, tab by tab: the session name
+   and under it one snippet per match. Each snippet has up to 20 characters
+   before it on the same logical line, the match underlined on yellow at
+   0.35, and up to 256 characters after it, with «…» if it goes on.
+3. **Reveal:** pressing a result, or moving with the arrows from the field,
+   focuses its session, scrolls to it and selects it. Escape closes the panel.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Two tabs, ⇧⌘F and `needle`: two groups with two snippets each, with text before and after | ✓ | `fase51-panel.png` |
+| Pressing the first result: switches to the first tab, scrolls up into the history and selects `needle` | ✓ | `fase51-mostrar.png` |
+| Two down arrows from the field: the third result, in the other tab | ✓ | — |
+| Escape closes the panel | ✓ | — |
+| Substring — Case Sensitive: only the tab with lowercase `needle` stays; `global_search_mode` is saved | ✓ | `fase51-modo.png` |
+
+**Bugs found and fixed while testing:** the yellow background filled the
+whole row and covered the text after it; the spaces between the snippet's
+three parts vanished (they are drawn as no-break spaces); and
+`text_decoration` does not underline a label in Freya 0.4.3, so the underline
+is a line of our own.
+
+**Not tested:** the kit as is; a snippet longer than 256 characters.
+
+**Differs from iTerm2:** it is a panel inside the window, not a floating
+window, and it cannot be moved (BK-039). It searches only the sessions of its
+window, all at once rather than bit by bit, without a progress bar. It does
+not include the alternate screen nor folded content.

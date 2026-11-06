@@ -68,6 +68,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-036 | controles | Sin vista de texto de varias líneas | media | Bloque probado `views::text_view` |
 | BK-037 | controles / avisos | `Alert` solo tiene dos botones y no se puede silenciar | baja | Workaround probado: hoja propia con `sheet` |
 | BK-038 | controles | `SearchField` no tiene menú de opciones | baja | Workaround probado: `PopUpButton` al lado |
+| BK-039 | controles / ventanas | Sin vista de contorno ni panel flotante | media | Workaround probado: panel dentro de la ventana |
 
 ## Gaps
 
@@ -859,6 +860,30 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Gravedad**: baja
 - **Cómo reproducirlo**: leer `pub struct SearchField` en
   `crates/barrier-kit/src/controls.rs`.
+
+### BK-039 — Sin vista de contorno ni panel flotante
+- **Área**: controles / ventanas
+- **Qué necesitaba CurseTerm**: Find Globally de iTerm2
+  (`iTermGlobalSearchWindowController.m`): un panel flotante de 741 × 567
+  que no bloquea las ventanas, con un `NSOutlineView` de sesiones y sus
+  resultados.
+- **Qué ofrece hoy BarrierKit**: `Table` de filas planas
+  (`views/table.rs`), `sheet`, que bloquea la ventana, y `open_window` solo
+  con el parche 0008 (BK-001).
+- **Qué falta**: una vista de contorno con grupos y selección por teclado, y
+  una ventana auxiliar flotante (`xdg_toplevel` con padre y sin bloquear).
+- **Cómo lo resolví en CurseTerm**: un panel con posición absoluta arriba a la
+  derecha de la zona de paneles (`global_search.rs`). Las filas están hechas a
+  mano y las flechas del campo recorren los resultados. Busca solo en las
+  sesiones de su ventana.
+- **Coste del workaround**: el panel tapa parte del terminal y no se puede
+  mover. Tampoco busca en otras ventanas, que sin el parche son otros
+  procesos.
+- **API propuesta para el kit**: `views::outline::Outline` con grupos,
+  `selected` y `on_select`, y `WindowOptions::utility(parent)`.
+- **Gravedad**: media
+- **Cómo reproducirlo**: buscar `Outline` o un panel flotante en
+  `crates/barrier-kit/src`; no hay ninguno.
 
 ## Cosas que funcionaron bien
 

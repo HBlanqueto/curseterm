@@ -493,3 +493,27 @@ pub struct AdvancedPasteMetrics {
 }
 
 pub const PASTE_QUESTION_WIDTH: f32 = 480.0;
+
+// iTermGlobalSearch.xib and iTermGlobalSearchEngineCursor.m: the panel, the snippet's 20
+// characters before the match and 256 after it, and the match's yellow at 0.35.
+pub const GLOBAL_SEARCH: GlobalSearchMetrics = GlobalSearchMetrics {
+    width: 741.0,
+    height: 567.0,
+    prefix_chars: 20,
+    suffix_chars: 256,
+    match_background: Rgba {
+        r: 1.0,
+        g: 1.0,
+        b: 0.0,
+        a: 0.35,
+    },
+};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GlobalSearchMetrics {
+    pub width: f32,
+    pub height: f32,
+    pub prefix_chars: usize,
+    pub suffix_chars: usize,
+    pub match_background: Rgba,
+}

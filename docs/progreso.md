@@ -2270,3 +2270,51 @@ D-Bus.
 
 **Difiere de iTerm2:** el modo está en un `PopUpButton` y no en el menú de la
 lupa (BK-038); sin Erase Search History.
+
+## Fase 51 — Find Globally
+
+### Plan
+
+Edit › Find › Find Globally… (⇧⌘F) de iTerm2
+(`iTermGlobalSearchWindowController.m`, `iTermGlobalSearch.xib`,
+`iTermGlobalSearchEngineCursor.m` y `iTermGlobalSearchResult.m`):
+
+1. **Panel** de 741 × 567 con título, el campo, el modo (Substring —
+   Automatic, Substring — Case Sensitive, Substring — Case Insensitive, Regex
+   — Case Sensitive y Regex — Case Insensitive; guardado aparte, como
+   `globalSearchMode`) y la lista. Va dentro de la ventana porque el kit no
+   tiene panel flotante ni vista de contorno (BK-039).
+2. **Resultados** de cada sesión de la ventana, pestaña por pestaña: el
+   nombre de la sesión y debajo un fragmento por coincidencia. Cada fragmento
+   lleva hasta 20 caracteres antes en la misma línea lógica, la coincidencia
+   subrayada sobre amarillo al 0,35 y hasta 256 caracteres después, con «…»
+   si sigue.
+3. **Mostrar:** pulsar un resultado, o moverse con las flechas desde el
+   campo, enfoca su sesión, la desplaza hasta él y lo selecciona. Escape
+   cierra el panel.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Dos pestañas, ⇧⌘F y `needle`: dos grupos con dos fragmentos cada uno, con texto antes y después | ✓ | `fase51-panel.png` |
+| Pulsar el primer resultado: pasa a la primera pestaña, sube al historial y selecciona `needle` | ✓ | `fase51-mostrar.png` |
+| Dos flechas abajo desde el campo: el tercer resultado, en la otra pestaña | ✓ | — |
+| Escape cierra el panel | ✓ | — |
+| Substring — Case Sensitive: queda solo la pestaña con `needle` en minúsculas; `global_search_mode` se guarda | ✓ | `fase51-modo.png` |
+
+**Fallos encontrados y corregidos en la prueba:** el fondo amarillo ocupaba
+toda la fila y tapaba el texto de después; los espacios entre las tres
+partes del fragmento desaparecían (se dibujan como espacios duros); y
+`text_decoration` no subraya una etiqueta en Freya 0.4.3, así que el
+subrayado es una línea propia.
+
+**No probado:** con el kit tal cual; un fragmento de más de 256 caracteres.
+
+**Difiere de iTerm2:** es un panel dentro de la ventana, no una ventana
+flotante, y no se puede mover (BK-039). Busca solo en las sesiones de su
+ventana, de una vez y no poco a poco, sin barra de progreso. No incluye la
+pantalla alternativa ni el contenido plegado.

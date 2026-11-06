@@ -68,6 +68,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-036 | controls | No multi-line text view | medium | Tested block `views::text_view` |
 | BK-037 | controls / alerts | `Alert` has only two buttons and cannot be silenced | low | Tested workaround: own sheet with `sheet` |
 | BK-038 | controls | `SearchField` has no options menu | low | Tested workaround: a `PopUpButton` beside it |
+| BK-039 | controls / windows | No outline view nor floating panel | medium | Tested workaround: a panel inside the window |
 
 ## Gaps
 
@@ -856,6 +857,31 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Severity**: low
 - **How to reproduce**: read `pub struct SearchField` in
   `crates/barrier-kit/src/controls.rs`.
+
+### BK-039 — No outline view nor floating panel
+- **Area**: controls / windows
+- **What CurseTerm needed**: iTerm2's Find Globally
+  (`iTermGlobalSearchWindowController.m`): a 741 × 567 floating panel that
+  does not block the windows, with an `NSOutlineView` of sessions and their
+  results.
+- **What BarrierKit offers today**: a `Table` of flat rows
+  (`views/table.rs`), `sheet`, which blocks the window, and `open_window`
+  only with patch 0008 (BK-001).
+- **What is missing**: an outline view with groups and keyboard selection,
+  and a floating auxiliary window (`xdg_toplevel` with a parent and no
+  blocking).
+- **How I solved it in CurseTerm**: a panel with absolute position at the top
+  right of the pane area (`global_search.rs`). Its rows are hand-built, and
+  the field's arrows walk the results. It searches only the sessions of its
+  window.
+- **Cost of the workaround**: the panel covers part of the terminal and
+  cannot be moved. It does not search other windows either, which are other
+  processes without the patch.
+- **Proposed kit API**: `views::outline::Outline` with groups, `selected` and
+  `on_select`, and `WindowOptions::utility(parent)`.
+- **Severity**: medium
+- **How to reproduce**: look for `Outline` or a floating panel in
+  `crates/barrier-kit/src`; there is none.
 
 ## Things that worked well
 

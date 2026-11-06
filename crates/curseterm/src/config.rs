@@ -32,6 +32,7 @@ pub struct Defaults {
     pub paste_tab_spaces: u8,
     pub find_mode: FindMode,
     pub filter_mode: FindMode,
+    pub global_search_mode: FindMode,
 }
 
 impl Default for Defaults {
@@ -52,6 +53,7 @@ impl Default for Defaults {
             paste_tab_spaces: 4,
             find_mode: FindMode::default(),
             filter_mode: FindMode::default(),
+            global_search_mode: FindMode::default(),
         }
     }
 }

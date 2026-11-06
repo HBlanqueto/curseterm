@@ -23,6 +23,7 @@ use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::tty;
 use alacritty_terminal::vte::ansi::{CursorShape, CursorStyle, Handler, Processor};
 use barrier_kit::platform::WakeHandle;
+use barrier_kit_next::tokens::GLOBAL_SEARCH;
 
 use rustix::process::{Pid, Signal, kill_process_group};
 
@@ -842,6 +843,38 @@ impl Session {
         true
     }
 
+    // iTermGlobalSearchEngineCursor.m -snippetFromExtractor:result:, over the whole history.
+    pub fn snippets(&self, pattern: &str) -> Vec<Snippet> {
+        let term = self.term.lock();
+        let start = Point::new(Line(-(term.history_size() as i32)), Column(0));
+        let end = Point::new(
+            Line(term.screen_lines() as i32 - 1),
+            Column(term.columns() - 1),
+        );
+        let history = term.history_size() as i64;
+        let absolute = |point: &Point| (history + i64::from(point.line.0), point.column.0);
+        matches_between(&term, pattern, start, end)
+            .iter()
+            .map(|found| Snippet {
+                start: absolute(found.start()),
+                end: absolute(found.end()),
+                parts: snippet(&term, found),
+            })
+            .collect()
+    }
+
+    pub fn reveal_match(&self, start: (i64, usize), end: (i64, usize)) {
+        let mut term = self.term.lock();
+        let history = term.history_size() as i64;
+        let point = |(line, column): (i64, usize)| {
+            Point::new(Line((line - history) as i32), Column(column))
+        };
+        term.scroll_to_point(point(start));
+        let mut selection = Selection::new(SelectionType::Simple, point(start), Side::Left);
+        selection.update(point(end), Side::Right);
+        term.selection = Some(selection);
+    }
+
     pub fn find_position(&self, pattern: &str) -> Option<(usize, usize)> {
         let term = self.term.lock();
         let start = Point::new(Line(-(term.history_size() as i32)), Column(0));
@@ -941,6 +974,48 @@ pub fn visible_matches(term: &Term<Listener>, pattern: &str) -> Vec<Match> {
         Column(term.columns() - 1),
     );
     matches_between(term, pattern, start, end)
+}
+
+#[derive(Clone, PartialEq)]
+pub struct Snippet {
+    pub start: (i64, usize),
+    pub end: (i64, usize),
+    pub parts: [String; 3],
+}
+
+// iTermTextExtractor.m -attributedStringForSnippetForRange:...: the match with some of its logical
+// line before and after it.
+fn snippet(term: &Term<Listener>, found: &Match) -> [String; 3] {
+    let line_start = term.line_search_left(*found.start());
+    let line_end = term.line_search_right(*found.end());
+    let before = if *found.start() > line_start {
+        let text = term.bounds_to_string(line_start, found.start().sub(term, Boundary::None, 1));
+        let skip = text
+            .chars()
+            .count()
+            .saturating_sub(GLOBAL_SEARCH.prefix_chars);
+        text.chars()
+            .skip(skip)
+            .collect::<String>()
+            .trim_start()
+            .to_string()
+    } else {
+        String::new()
+    };
+    let mut after = if *found.end() < line_end {
+        let text = term.bounds_to_string(found.end().add(term, Boundary::None, 1), line_end);
+        text.trim_end().to_string()
+    } else {
+        String::new()
+    };
+    if after.chars().count() > GLOBAL_SEARCH.suffix_chars {
+        after = after.chars().take(GLOBAL_SEARCH.suffix_chars).collect();
+        after.push('…');
+    }
+    let matched = term
+        .bounds_to_string(*found.start(), *found.end())
+        .replace('\n', " ");
+    [before, matched, after]
 }
 
 fn matches_between(term: &Term<Listener>, pattern: &str, start: Point, end: Point) -> Vec<Match> {

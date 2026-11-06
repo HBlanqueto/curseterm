@@ -48,6 +48,7 @@ use crate::config::{
     WorkingDirectory, change_defaults,
 };
 use crate::find_mode::FindMode;
+use crate::global_search::{GlobalSearch, SessionResults, global_search_panel};
 use crate::grid::Fonts;
 use crate::hint_view;
 use crate::hints::{self, HintAction, Hints, Typed};
@@ -117,6 +118,7 @@ struct Handles {
     pastes: State<Vec<String>>,
     pending_paste: State<Option<(String, bool)>>,
     advanced: AdvancedPaste,
+    global: GlobalSearch,
     picker: PickerState,
     sheet: State<Option<Sheet>>,
     draft: State<String>,
@@ -327,6 +329,13 @@ impl App for Terminal {
             substitution: use_state(String::new),
             bracketed: use_state(|| true),
         };
+        let global = GlobalSearch {
+            open: use_state(|| false),
+            query: use_state(String::new),
+            focused: use_state(|| false),
+            results: use_state(Vec::new),
+            selected: use_state(|| None),
+        };
         let sheet = use_state(|| None::<Sheet>);
         let mut held = use_state(Modifiers::empty);
         let transparency = use_state(|| true);
@@ -390,6 +399,7 @@ impl App for Terminal {
             pastes,
             pending_paste,
             advanced,
+            global,
             picker,
             sheet,
             draft,
@@ -431,6 +441,10 @@ impl App for Terminal {
                     });
                 }
             }
+        });
+        use_side_effect({
+            let handles = handles.clone();
+            move || search_globally(&handles, &defaults.read())
         });
         let events = use_hook({
             let handles = handles.clone();
@@ -607,6 +621,15 @@ impl App for Terminal {
             .then(|| filter_bar(handles.filter, &handles.defaults.read()));
         let replay_bar = (*replay.read()).map(|(id, index)| replay_bar(&handles, id, index));
         let alert = (*confirm.read()).map(|pending| confirm_alert(&handles, pending));
+        let global_panel = (*handles.global.open.read()).then(|| {
+            let (revealing, mode) = (handles.clone(), handles.defaults.read().global_search_mode);
+            global_search_panel(
+                handles.global,
+                mode,
+                |mode| change_defaults(|defaults| defaults.global_search_mode = mode),
+                move |at| reveal_global_result(&revealing, at),
+            )
+        });
         let sheet_view = (*sheet.read()).map(|open| match open {
             Sheet::Pick(picker) => pick_sheet(&handles, picker, revision),
             Sheet::CopyModeKeys => copy_mode_keys_sheet(&handles),
@@ -676,6 +699,13 @@ impl App for Terminal {
                     }
                     return;
                 }
+                let global = keyboard.global;
+                if *global.open.peek() && *global.focused.peek() {
+                    if data.key == Key::Named(NamedKey::Escape) {
+                        global.close();
+                    }
+                    return;
+                }
                 let filter = keyboard.filter;
                 if *filter.open.peek() && *filter.focused.peek() {
                     if data.key == Key::Named(NamedKey::Escape) {
@@ -740,6 +770,7 @@ impl App for Terminal {
                     .height(Size::flex(1.0))
                     .direction(Direction::Horizontal)
                     .content(Content::flex())
+                    .maybe_child(global_panel)
                     .child(
                         rect()
                             .width(Size::flex(1.0))
@@ -2102,6 +2133,56 @@ fn replay_bar(handles: &Handles, id: SessionId, index: usize) -> Element {
         .into_element()
 }
 
+// iTermGlobalSearchWindowController.m -search: every session of the window, tab by tab.
+fn search_globally(handles: &Handles, defaults: &Defaults) {
+    let global = handles.global;
+    let query = global.query.read().clone();
+    let open = *global.open.read();
+    let (mut results, mut selected) = (global.results, global.selected);
+    selected.set(None);
+    if !open || query.is_empty() {
+        results.set(Vec::new());
+        return;
+    }
+    let pattern = defaults.global_search_mode.pattern(&query);
+    let workspace = handles.workspace.peek();
+    let sessions = handles.sessions.peek();
+    let found = workspace
+        .tabs
+        .iter()
+        .flat_map(|tab| tab.root.leaves())
+        .filter_map(|id| {
+            let snippets = sessions.get(&id)?.snippets(&pattern);
+            (!snippets.is_empty()).then(|| SessionResults {
+                session: id,
+                name: workspace.title(id).to_string(),
+                snippets,
+            })
+        })
+        .collect();
+    results.set(found);
+}
+
+// iTermGlobalSearchResult.m -revealWithState:completion:
+fn reveal_global_result(handles: &Handles, (group, row): (usize, usize)) {
+    let global = handles.global;
+    let Some((id, snippet)) = global
+        .results
+        .peek()
+        .get(group)
+        .and_then(|found| Some((found.session, found.snippets.get(row)?.clone())))
+    else {
+        return;
+    };
+    let mut selected = global.selected;
+    selected.set(Some((group, row)));
+    let mut workspace = handles.workspace;
+    workspace.write().focus(id);
+    if let Some(session) = handles.sessions.peek().get(&id) {
+        session.reveal_match(snippet.start, snippet.end);
+    }
+}
+
 // FindView.xib: the search field's menu chooses how the query matches.
 fn mode_popup(find: Find, defaults: &Defaults) -> PopUpButton {
     let names = [
@@ -3081,6 +3162,10 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
                 query.set(text);
                 open.set(true);
             }
+        }
+        _ if id == menu::FIND_GLOBALLY.id => {
+            let mut open = handles.global.open;
+            open.set(true);
         }
         _ if id == menu::CLEAR_FIND.id => {
             let mut query = handles.find.query;

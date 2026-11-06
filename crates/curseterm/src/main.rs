@@ -7,6 +7,7 @@ mod composer;
 mod composer_view;
 mod config;
 mod find_mode;
+mod global_search;
 mod grid;
 mod hint_view;
 mod hints;

@@ -115,6 +115,8 @@ pub const USE_SELECTION_FOR_FIND: Action =
         .shortcut(super_key('e'));
 pub const CLEAR_FIND: Action =
     Action::new("clear-find", || tr!("clear-find")).shortcut(super_with(Modifiers::ALT, 'e'));
+pub const FIND_GLOBALLY: Action = Action::new("find-globally", || tr!("find-globally"))
+    .shortcut(super_with(Modifiers::SHIFT, 'f'));
 pub const MARKS_MENU: &str = "marks-menu";
 pub const SET_MARK: Action =
     Action::new("set-mark", || tr!("set-mark")).shortcut(super_with(Modifiers::SHIFT, 'm'));
@@ -309,6 +311,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                         FIND_PREVIOUS.item(true),
                         USE_SELECTION_FOR_FIND.item(false),
                         CLEAR_FIND.item(false),
+                        FIND_GLOBALLY.item(true),
                         MenuItem::Separator,
                         FIND_URLS.item(true),
                         SMART_SELECT_ALL.item(true),
