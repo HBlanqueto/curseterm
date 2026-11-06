@@ -3642,3 +3642,42 @@ los dos modos. Tests de `json_rows` y `fold_placeholder`.
 desplegar; Fold All no muestra los comandos; el JSON pone las claves en orden
 alfabético y no crea bloques plegables; sin Render Selection Natively ni
 Base64, que en iTerm2 son del menú contextual.
+
+## Fase 84 — Archivos de sesión
+
+### Plan
+
+`PTYSession.swift -saveArchive`, `ArchivesMenuBuilder.swift` y la opción del
+perfil «Archive sessions on closure»:
+
+1. Un archivo es la disposición de la ventana con la sesión y lo que mostraba,
+   hasta el cursor o la última línea escrita
+   (`-arrangementWithContents:`). `Layout::Session` lleva `contents`, que solo
+   rellena el archivo. Se guarda en JSON con la extensión `.cursetermarchive`.
+2. Shell › Archives › Save Archive of Current Session… propone
+   `~/.local/share/curseterm/archives/«fecha hora» - «nombre»` (sin `/` ni
+   `:`, y con « (2)» si ya existe). Restore Archive… pide la ruta.
+3. Debajo, los diez últimos archivos (`maxRecents`), en `recent_archives`.
+4. Restaurar abre una ventana: el contenido archivado arriba y un shell nuevo
+   debajo.
+5. Perfil › Session › Archive sessions on closure y Archive folder (vacía, la
+   de por defecto): al cerrar una sesión, una pestaña o la ventana se archiva
+   cada sesión; una sesión restaurada de un archivo no se vuelve a archivar.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos. Test de `path_for` y `remember`.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Save Archive escribe el archivo y lo añade a recientes | ✓ | — |
+| El reciente abre una ventana con `seq 5`, `ARCHIVADO` y un prompt nuevo | ✓ | `fase84-archivo.png` |
+| Con Archive on closure, ⌘W en dos sesiones deja dos archivos | ✓ | — |
+
+**No probado:** con el kit tal cual; una carpeta propia; Restore Archive…
+con una ruta escrita.
+
+**Difiere de iTerm2:** no hay panel de abrir ni guardar del sistema, sino una
+hoja con la ruta; el formato es JSON propio, no el plist de iTerm2; el
+contenido no guarda marcas ni anotaciones.

@@ -131,6 +131,7 @@ pub struct Session {
     pub started: Instant,
     ended: Cell<bool>,
     options: Cell<(usize, CursorStyle, bool)>,
+    restored_from_archive: Cell<bool>,
     coprocess: RefCell<Option<Child>>,
     switcher: RefCell<Switcher>,
     semantic_history: RefCell<SemanticHistory>,
@@ -207,6 +208,7 @@ impl Session {
                 CursorStyle::default(),
                 false,
             )),
+            restored_from_archive: Cell::new(false),
             coprocess: RefCell::new(None),
             switcher: RefCell::default(),
             semantic_history: RefCell::default(),
@@ -915,6 +917,47 @@ impl Session {
         let mut term = self.term.lock();
         let limit = self.options.get().0;
         buffer_edit::replace_lines(&mut term, &mut self.extras(), lines, rows, limit);
+    }
+
+    // PTYSession.m -arrangementWithContents:: every line up to the cursor or the last one written.
+    pub fn content_rows(&self) -> Vec<Row<GridCell>> {
+        let term = self.term.lock();
+        let total = (term.history_size() + term.screen_lines()) as i64;
+        let cursor = pty_io::absolute_line(&term);
+        let history = term.history_size() as i64;
+        let written = (0..total)
+            .rev()
+            .find(|line| {
+                let row = &term.grid()[Line((line - history) as i32)];
+                (0..row.len()).any(|column| row[Column(column)].c != ' ')
+            })
+            .unwrap_or(0);
+        buffer_edit::rows_of(&term, 0..cursor.max(written) + 1)
+    }
+
+    pub fn restored_from_archive(&self) -> bool {
+        self.restored_from_archive.get()
+    }
+
+    // The archived lines go above whatever the new shell prints.
+    pub fn restore_contents(&self, rows: &[Row<GridCell>]) {
+        self.restored_from_archive.set(true);
+        let mut term = self.term.lock();
+        let columns = term.columns();
+        let rows = rows
+            .iter()
+            .map(|row| {
+                let mut row = row.clone();
+                if row.len() < columns {
+                    row.grow(columns);
+                } else {
+                    row.shrink(columns);
+                }
+                row
+            })
+            .collect();
+        let limit = self.options.get().0;
+        buffer_edit::replace_lines(&mut term, &mut self.extras(), 0..0, rows, limit);
     }
 
     // PseudoTerminal.m -zoomOnSelection:: the selected lines alone, as a session that only shows.

@@ -2,7 +2,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use barrier_kit::platform::{WindowControls, WindowOptions};
@@ -11,6 +11,7 @@ use freya_core::prelude::{use_drop, use_hook};
 use rustix::process::{Pid, Signal, kill_process};
 use vow_design::{SPACE_2, WINDOW_MIN_SIZE};
 
+use crate::archive;
 use crate::arrangement::Arrangement;
 use crate::config::{APP_ID, APP_NAME, Defaults};
 use crate::grid::Fonts;
@@ -107,6 +108,7 @@ pub fn describe(arguments: &[&str]) -> (AppComponent, WindowOptions) {
         ["--profile", name, ..] => terminal_window(Some(name.to_string()), None, None),
         ["--arrangement", name, ..] => terminal_window(None, Some(name.to_string()), None),
         ["--layout", layout, ..] => terminal_window(None, None, toml::from_str(layout).ok()),
+        ["--archive", path, ..] => terminal_window(None, None, archive::load(Path::new(path))),
         _ => terminal_window(None, None, None),
     }
 }

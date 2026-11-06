@@ -27,6 +27,7 @@ use torin::prelude::{Alignment, Content, Direction, Gaps, Size};
 use vow_design::{CAPTION, HEADLINE, SIDEBAR, SPACE_1, SPACE_3, WINDOW_MIN_SIZE};
 
 use crate::advanced_pane::AdvancedPane;
+use crate::archive;
 use crate::arrangements_pane::ArrangementsPane;
 use crate::auxiliary::on_action;
 use crate::config::{
@@ -817,6 +818,21 @@ fn session_section(index: usize, profile: &Profile) -> Section {
                         .on_toggle(move |on: bool| edit(index, |profile| profile.status_bar = on)),
                 ),
         )
+        // ProfilesSessionPreferencesViewController.m KEY_ARCHIVE and KEY_ARCHIVEDIR.
+        .row(
+            Row::new(tr!("archive-on-close")).control(
+                Switch::new(tr!("archive-on-close"))
+                    .on(profile.archive_on_close)
+                    .on_toggle(move |on: bool| {
+                        edit(index, |profile| profile.archive_on_close = on)
+                    }),
+            ),
+        )
+        .row(Row::new(tr!("archive-folder")).control(ProfileText {
+            index,
+            field: Field::ArchiveFolder,
+            value: profile.archive_directory.clone(),
+        }))
 }
 
 fn keys_section(index: usize, profile: &Profile) -> Section {
@@ -1362,6 +1378,7 @@ enum Field {
     Scrollback,
     Columns,
     Rows,
+    ArchiveFolder,
 }
 
 impl Field {
@@ -1388,6 +1405,7 @@ impl Field {
             Self::Scrollback => tr!("scrollback-lines"),
             Self::Columns => tr!("window-columns"),
             Self::Rows => tr!("window-rows"),
+            Self::ArchiveFolder => archive_folder_placeholder(),
         }
     }
 
@@ -1402,6 +1420,7 @@ impl Field {
                     | Self::TriggerParameter(..)
                     | Self::SemanticText(_)
                     | Self::Tags
+                    | Self::ArchiveFolder
             )
         {
             return;
@@ -1424,6 +1443,7 @@ impl Field {
                     profile.working_directory = WorkingDirectory::Fixed(value.clone().into())
                 }
                 Self::Family => profile.font_family = value.clone(),
+                Self::ArchiveFolder => profile.archive_directory = value.clone(),
                 Self::Columns | Self::Rows => {
                     if let Ok(cells) = value.parse::<u16>().map(|cells| cells.max(1)) {
                         match self {
@@ -1474,6 +1494,16 @@ impl Field {
             }
         });
     }
+}
+
+// An empty folder means the default one (PTYSession.swift -saveArchive).
+fn archive_folder_placeholder() -> &'static str {
+    static FOLDER: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    FOLDER.get_or_init(|| {
+        archive::default_directory()
+            .map(|folder| folder.display().to_string())
+            .unwrap_or_default()
+    })
 }
 
 #[derive(PartialEq)]

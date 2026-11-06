@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use alacritty_terminal::grid::Row;
+use alacritty_terminal::term::cell::Cell;
 use serde::{Deserialize, Serialize};
 
 use crate::panes::{Axis, Pane};
@@ -42,6 +44,9 @@ pub enum Layout {
     Session {
         profile: String,
         directory: Option<PathBuf>,
+        // PTYSession.m -arrangementWithContents:: an archive keeps what the session showed.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        contents: Vec<Row<Cell>>,
     },
     Split {
         axis: Axis,
@@ -57,7 +62,11 @@ pub fn capture(
     match pane {
         Pane::Leaf(id) => {
             let (profile, directory) = describe(*id)?;
-            Some(Layout::Session { profile, directory })
+            Some(Layout::Session {
+                profile,
+                directory,
+                contents: Vec::new(),
+            })
         }
         Pane::Split {
             axis,
@@ -76,10 +85,14 @@ pub fn capture(
 
 pub fn build(
     layout: &Layout,
-    spawn: &mut impl FnMut(&str, Option<PathBuf>) -> Option<SessionId>,
+    spawn: &mut impl FnMut(&str, Option<PathBuf>, &[Row<Cell>]) -> Option<SessionId>,
 ) -> Option<Pane> {
     match layout {
-        Layout::Session { profile, directory } => spawn(profile, directory.clone()).map(Pane::Leaf),
+        Layout::Session {
+            profile,
+            directory,
+            contents,
+        } => spawn(profile, directory.clone(), contents).map(Pane::Leaf),
         Layout::Split {
             axis,
             ratios,
@@ -138,7 +151,7 @@ mod tests {
         let back: TabLayout = toml::from_str(&text).expect("deserialize");
         let mut spawned = Vec::new();
         let mut next = 10;
-        let rebuilt = build(&back.root, &mut |profile, directory| {
+        let rebuilt = build(&back.root, &mut |profile, directory, _| {
             spawned.push((profile.to_string(), directory));
             next += 1;
             Some(next)
@@ -170,14 +183,18 @@ mod tests {
                 Layout::Session {
                     profile: "falla".into(),
                     directory: None,
+                    contents: Vec::new(),
                 },
                 Layout::Session {
                     profile: "vale".into(),
                     directory: None,
+                    contents: Vec::new(),
                 },
             ],
         };
-        let rebuilt = build(&layout, &mut |profile, _| (profile == "vale").then_some(7));
+        let rebuilt = build(&layout, &mut |profile, _, _| {
+            (profile == "vale").then_some(7)
+        });
         assert_eq!(rebuilt, Some(Pane::Leaf(7)));
     }
 }

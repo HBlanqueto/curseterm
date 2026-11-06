@@ -3,12 +3,13 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use alacritty_terminal::event::{Event as TermEvent, WindowSize};
-use alacritty_terminal::grid::Scroll;
+use alacritty_terminal::grid::{Row, Scroll};
 use alacritty_terminal::index::Direction as SearchDirection;
 use alacritty_terminal::term::TermMode;
+use alacritty_terminal::term::cell::Cell as GridCell;
 use barrier_kit::app::use_menu_action;
 use barrier_kit::app_menu::MenuHandle;
 use barrier_kit::compact::Stepper;
@@ -48,7 +49,8 @@ use base64::engine::general_purpose::STANDARD;
 use crate::add_trigger::AddTriggerSheet;
 use crate::advanced;
 use crate::advanced_paste::{AdvancedPaste, advanced_paste_sheet};
-use crate::arrangement::{self, Arrangement, SavedFloat, TabLayout};
+use crate::archive;
+use crate::arrangement::{self, Arrangement, Layout, SavedFloat, TabLayout};
 use crate::clock::{local_date_time, local_time};
 use crate::command_history;
 use crate::composer_view::ComposerEvent;
@@ -169,6 +171,8 @@ enum Sheet {
     AddTrigger(SessionId),
     SaveArrangement,
     NewTabGroup,
+    SaveArchive(SessionId),
+    RestoreArchive,
     NamedMark(SessionId),
     CopyModeKeys,
     AdvancedPaste,
@@ -1601,6 +1605,10 @@ fn use_live_menu(handles: &Handles) {
     drop(workspace);
     use_submenu_items(menu::BURIED_MENU, menu::buried_items(&buried));
     use_submenu_items(
+        menu::ARCHIVES_MENU,
+        menu::archive_items(&handles.defaults.read().recent_archives),
+    );
+    use_submenu_items(
         menu::SNIPPETS_MENU,
         snippets::menu_items(&handles.defaults.read().snippets),
     );
@@ -2174,6 +2182,12 @@ fn field_sheet(handles: &Handles, target: Sheet) -> Element {
             tr!("save-arrangement-name"),
             tr!("save-confirm"),
         ),
+        Sheet::SaveArchive(_) => (tr!("save-archive"), tr!("save-path"), tr!("save-confirm")),
+        Sheet::RestoreArchive => (
+            tr!("restore-archive"),
+            tr!("archive-path"),
+            tr!("restore-confirm"),
+        ),
         // PseudoTerminal.m -promptForTabGroupName:title:.
         Sheet::NewTabGroup => (
             tr!("new-tab-group"),
@@ -2254,6 +2268,8 @@ fn confirm_later(handles: &Handles, target: Sheet) {
             Sheet::NewTabGroup => workspace
                 .write()
                 .add_active_to_new_group(typed.trim().to_string()),
+            Sheet::SaveArchive(of) => save_archive(&later, of, PathBuf::from(typed.trim())),
+            Sheet::RestoreArchive => restore_archive(PathBuf::from(typed.trim())),
             Sheet::NamedMark(of) => {
                 if let Some(session) = later.sessions.peek().get(&of).filter(|_| !typed.is_empty())
                 {
@@ -3500,12 +3516,18 @@ fn tab_layout(handles: &Handles, tab: &Tab) -> Option<TabLayout> {
 }
 
 fn open_layout(handles: &Handles, events: &Events, tab: TabLayout) -> bool {
-    let mut launch = |profile: &str, directory: Option<PathBuf>| {
+    let mut launch = |profile: &str, directory: Option<PathBuf>, contents: &[Row<GridCell>]| {
         let mut launch = handles.launch(profile, None);
         if directory.is_some() {
             launch.directory = directory;
         }
-        spawn(handles, events, launch)
+        let id = spawn(handles, events, launch)?;
+        if !contents.is_empty()
+            && let Some(session) = handles.sessions.peek().get(&id)
+        {
+            session.restore_contents(contents);
+        }
+        Some(id)
     };
     let Some(root) = arrangement::build(&tab.root, &mut launch) else {
         return false;
@@ -3639,7 +3661,13 @@ fn close_now(handles: &Handles, closing: Closing) {
             bury(handles, tab);
             close_tab(handles, index);
         }
-        (Closing::Window, ..) => handles.controls.close(),
+        (Closing::Window, ..) => {
+            let ids = handles.workspace.peek().receivers(Broadcast::AllTabs);
+            for id in ids {
+                archive_on_close(handles, id);
+            }
+            handles.controls.close();
+        }
         _ => {}
     }
 }
@@ -3905,7 +3933,71 @@ fn bury_session(handles: &Handles, id: SessionId) {
     }
 }
 
+// PTYSession.swift -saveArchiveTo:term:: the session's window arrangement with what it showed.
+fn save_archive(handles: &Handles, id: SessionId, path: PathBuf) {
+    let Some(session) = handles.sessions.peek().get(&id).cloned() else {
+        return;
+    };
+    let title = handles.workspace.peek().title(id).to_string();
+    let saved = Arrangement {
+        name: title.clone(),
+        tabs: vec![TabLayout {
+            title: Some(title),
+            root: Layout::Session {
+                profile: session.profile(),
+                directory: session.working_directory(),
+                contents: session.content_rows(),
+            },
+            group: None,
+            floats: Vec::new(),
+            floats_hidden: false,
+        }],
+        layout_locked: false,
+    };
+    match archive::save(&path, &saved) {
+        Ok(()) => {
+            change_defaults(|defaults| archive::remember(&mut defaults.recent_archives, path))
+        }
+        Err(error) => tracing::warn!(%error, path = %path.display(), "could not save the archive"),
+    }
+}
+
+// ArchivesMenuBuilder.swift -reallyRestoreArchive: the archive opens as a window.
+fn restore_archive(path: PathBuf) {
+    if archive::load(&path).is_none() {
+        tracing::warn!(path = %path.display(), "could not read the archive");
+        return;
+    }
+    change_defaults(|defaults| archive::remember(&mut defaults.recent_archives, path.clone()));
+    windows::open(&["--archive", &path.to_string_lossy()]);
+}
+
+// PTYSession.m -terminate: “Archive sessions on closure” writes one to the profile's folder; a
+// session restored from an archive is already in one.
+fn archive_on_close(handles: &Handles, id: SessionId) {
+    let Some(session) = handles.sessions.peek().get(&id).cloned() else {
+        return;
+    };
+    let profile = handles.defaults.peek().profile(&session.profile());
+    if !profile.archive_on_close || session.restored_from_archive() {
+        return;
+    }
+    let directory = match profile.archive_directory.trim() {
+        "" => archive::default_directory(),
+        chosen => Some(PathBuf::from(chosen)),
+    };
+    if let Some(directory) = directory {
+        let title = handles.workspace.peek().title(id).to_string();
+        save_archive(
+            handles,
+            id,
+            archive::path_for(&directory, &title, SystemTime::now()),
+        );
+    }
+}
+
 fn close_session(handles: &Handles, id: SessionId) {
+    archive_on_close(handles, id);
     let mut interred = handles.interred;
     interred.write().retain(|buried| *buried != id);
     let mut workspace = handles.workspace;
@@ -3918,6 +4010,16 @@ fn close_session(handles: &Handles, id: SessionId) {
 }
 
 fn close_tab(handles: &Handles, index: usize) {
+    let ids = handles
+        .workspace
+        .peek()
+        .tabs
+        .get(index)
+        .map(Tab::sessions)
+        .unwrap_or_default();
+    for id in ids {
+        archive_on_close(handles, id);
+    }
     let mut workspace = handles.workspace;
     let closed = workspace.write().close_tab(index);
     let mut sessions = handles.sessions;
@@ -3975,6 +4077,14 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
     }
     if let Some(name) = tabs {
         restore_arrangement(handles, events, &name);
+        return;
+    }
+    if let Some(path) = id
+        .strip_prefix(menu::ARCHIVE_PREFIX)
+        .and_then(|index| index.parse::<usize>().ok())
+        .and_then(|index| handles.defaults.peek().recent_archives.get(index).cloned())
+    {
+        restore_archive(path);
         return;
     }
     if let Some(buried) = id
@@ -4151,6 +4261,26 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         _ if id == menu::REMOVE_TAB_FROM_GROUP.id => workspace.write().remove_active_from_group(),
         menu::NEXT_TAB_GROUP => workspace.write().step_tab_group(1),
         menu::PREVIOUS_TAB_GROUP => workspace.write().step_tab_group(-1),
+        _ if id == menu::SAVE_ARCHIVE.id => {
+            if let Some(session) = &active {
+                let title = workspace.peek().title(session.id).to_string();
+                let directory = archive::default_directory().unwrap_or_default();
+                let path = archive::path_for(&directory, &title, SystemTime::now());
+                handles
+                    .draft
+                    .clone()
+                    .set(path.to_string_lossy().into_owned());
+                open_sheet(handles, Sheet::SaveArchive(session.id));
+            }
+        }
+        _ if id == menu::RESTORE_ARCHIVE.id => {
+            let directory = archive::default_directory().unwrap_or_default();
+            handles
+                .draft
+                .clone()
+                .set(format!("{}/", directory.display()));
+            open_sheet(handles, Sheet::RestoreArchive);
+        }
         _ if id == menu::SAVE_ARRANGEMENT.id => {
             handles.draft.clone().set(String::new());
             open_sheet(handles, Sheet::SaveArrangement);

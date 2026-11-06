@@ -3,6 +3,7 @@ mod add_trigger;
 mod advanced;
 mod advanced_pane;
 mod advanced_paste;
+mod archive;
 mod arrangement;
 mod arrangements_pane;
 mod auxiliary;

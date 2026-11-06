@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use barrier_kit::app::{Action, Shortcut, ShortcutKey};
 use barrier_kit::app_menu::{AppMenu, Menu};
 use barrier_kit::menu::{CheckState, MenuItem};
@@ -166,6 +168,10 @@ pub const PREVIOUS_ANNOTATION: &str = "previous-annotation";
 pub const SET_NAMED_MARK: Action = Action::new("set-named-mark", || tr!("set-named-mark"))
     .shortcut(super_with(Modifiers::ALT.union(Modifiers::SHIFT), 'm'));
 pub const NAMED_MARKS_MENU: &str = "named-marks-menu";
+pub const ARCHIVES_MENU: &str = "archives-menu";
+pub const SAVE_ARCHIVE: Action = Action::new("save-archive", || tr!("save-archive"));
+pub const RESTORE_ARCHIVE: Action = Action::new("restore-archive", || tr!("restore-archive"));
+pub const ARCHIVE_PREFIX: &str = "archive:";
 pub const FOLD_SELECTION: Action = Action::new("fold-selection", || tr!("fold-selected-lines"))
     .shortcut(super_with(Modifiers::SHIFT, 'l'));
 pub const FOLD_ALL: Action = Action::new("fold-all", || tr!("fold-all"))
@@ -421,6 +427,7 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
                 CLOSE_WINDOW.item(true),
                 CLOSE_PANES.item(false),
                 UNDO_CLOSE.item(false),
+                submenu(ARCHIVES_MENU, tr!("archives-menu"), archive_items(&[])),
                 MenuItem::Separator,
                 submenu(
                     BROADCAST_MENU,
@@ -913,6 +920,22 @@ pub fn action_items(profiles: &ProfileEntries) -> Vec<(String, String)> {
 }
 
 // iTermBuriedSessions.m -menuItems: one entry per buried session, by its name.
+// ArchivesMenuBuilder.swift: the two actions, then the recent archives by name.
+pub fn archive_items(recents: &[PathBuf]) -> Vec<MenuItem> {
+    let mut items = vec![
+        SAVE_ARCHIVE.item(true),
+        RESTORE_ARCHIVE.item(true),
+        MenuItem::Separator,
+    ];
+    items.extend(recents.iter().enumerate().map(|(index, path)| {
+        let name = path
+            .file_stem()
+            .map_or_else(String::new, |stem| stem.to_string_lossy().into_owned());
+        MenuItem::action(format!("{ARCHIVE_PREFIX}{index}"), name)
+    }));
+    items
+}
+
 pub fn buried_items(buried: &[(SessionId, String)]) -> Vec<MenuItem> {
     buried
         .iter()

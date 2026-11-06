@@ -3615,3 +3615,42 @@ modes. Tests for `json_rows` and `fold_placeholder`.
 All shows no commands; the JSON sorts keys alphabetically and creates no
 foldable blocks; no Render Selection Natively nor Base64, which in iTerm2
 belong to the context menu.
+
+## Phase 84 — Session archives
+
+### Plan
+
+`PTYSession.swift -saveArchive`, `ArchivesMenuBuilder.swift` and the profile
+option “Archive sessions on closure”:
+
+1. An archive is the window arrangement with the session and what it showed,
+   up to the cursor or the last line written (`-arrangementWithContents:`).
+   `Layout::Session` carries `contents`, which only the archive fills. It is
+   saved as JSON with the `.cursetermarchive` extension.
+2. Shell › Archives › Save Archive of Current Session… proposes
+   `~/.local/share/curseterm/archives/“date time” - “name”` (no `/` nor `:`,
+   and “ (2)” if it exists). Restore Archive… asks for the path.
+3. Below, the last ten archives (`maxRecents`), in `recent_archives`.
+4. Restoring opens a window: the archived contents on top and a new shell
+   below.
+5. Profile › Session › Archive sessions on closure and Archive folder (empty,
+   the default one): closing a session, a tab or the window archives each
+   session; a session restored from an archive is not archived again.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes. Test for `path_for` and `remember`.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Save Archive writes the file and adds it to the recents | ✓ | — |
+| The recent item opens a window with `seq 5`, `ARCHIVADO` and a new prompt | ✓ | `fase84-archivo.png` |
+| With Archive on closure, ⌘W on two sessions leaves two archives | ✓ | — |
+
+**Not tested:** the kit as is; a custom folder; Restore Archive… with a typed
+path.
+
+**Differs from iTerm2:** no system open or save panel, but a sheet with the
+path; the format is CurseTerm's own JSON, not iTerm2's plist; the contents
+keep no marks nor annotations.
