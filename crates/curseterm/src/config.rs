@@ -49,6 +49,7 @@ pub struct Defaults {
     pub show_tabs_in_fullscreen: bool,
     pub reset_key_reporting: Option<bool>,
     pub selection_respects_soft_boundaries: bool,
+    pub maximize_throughput: bool,
 }
 
 impl Default for Defaults {
@@ -82,6 +83,8 @@ impl Default for Defaults {
             show_tabs_in_fullscreen: true,
             reset_key_reporting: None,
             selection_respects_soft_boundaries: false,
+            // iTermPreferences.m: metalMaximizeThroughput YES.
+            maximize_throughput: true,
         }
     }
 }

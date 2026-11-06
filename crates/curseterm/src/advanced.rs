@@ -20,6 +20,9 @@ pub struct Advanced {
     pub slow_paste_bytes_per_call: f64,
     pub slow_paste_delay_between_calls: f64,
     pub paste_history_max_options: f64,
+    pub adaptive_frame_rate_throughput_threshold: f64,
+    pub slow_frame_rate: f64,
+    pub maximum_frame_rate: f64,
 }
 
 impl Default for Advanced {
@@ -34,6 +37,11 @@ impl Default for Advanced {
             slow_paste_bytes_per_call: 16.0,
             slow_paste_delay_between_calls: 0.125,
             paste_history_max_options: 20.0,
+            // iTermAdvancedSettingsModel.m: adaptiveFrameRateThroughputThreshold,
+            // metalSlowFrameRate and maximumFrameRate.
+            adaptive_frame_rate_throughput_threshold: 10_000.0,
+            slow_frame_rate: 30.0,
+            maximum_frame_rate: 60.0,
         }
     }
 }
@@ -71,6 +79,14 @@ impl Advanced {
     pub fn paste_history_limit(&self) -> usize {
         self.paste_history_max_options as usize
     }
+
+    pub fn slow_frame_interval(&self) -> Duration {
+        seconds(1.0 / self.slow_frame_rate.max(1.0))
+    }
+
+    pub fn fast_frame_interval(&self) -> Duration {
+        seconds(1.0 / self.maximum_frame_rate.max(1.0))
+    }
 }
 
 static CURRENT: LazyLock<RwLock<Advanced>> = LazyLock::new(RwLock::default);
@@ -105,7 +121,31 @@ pub struct Entry {
 }
 
 // iTermAdvancedSettingsViewController.m: grouped by section, in the model's order.
-pub const ENTRIES: [Entry; 9] = [
+pub const ENTRIES: [Entry; 12] = [
+    Entry {
+        section: || tr!("advanced-section-drawing"),
+        description: || tr!("advanced-slow-frame-rate"),
+        value: Value::Number(
+            |advanced| advanced.slow_frame_rate,
+            |advanced, value| advanced.slow_frame_rate = value,
+        ),
+    },
+    Entry {
+        section: || tr!("advanced-section-drawing"),
+        description: || tr!("advanced-throughput-threshold"),
+        value: Value::Number(
+            |advanced| advanced.adaptive_frame_rate_throughput_threshold,
+            |advanced, value| advanced.adaptive_frame_rate_throughput_threshold = value,
+        ),
+    },
+    Entry {
+        section: || tr!("advanced-section-drawing"),
+        description: || tr!("advanced-maximum-frame-rate"),
+        value: Value::Number(
+            |advanced| advanced.maximum_frame_rate,
+            |advanced, value| advanced.maximum_frame_rate = value,
+        ),
+    },
     Entry {
         section: || tr!("advanced-section-tabs"),
         description: || tr!("advanced-move-left-after-closing-tab"),

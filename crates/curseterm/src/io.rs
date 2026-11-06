@@ -29,6 +29,7 @@ use crate::key_report::{KeyMode, ModifyOtherKeysWatch, StuckKeyReporting};
 use crate::osc::{Piece, Splitter};
 use crate::session::Listener;
 use crate::smart_selection::{self, Precision, Rule};
+use crate::throughput::Throughput;
 use crate::triggers::{self, Compiled, PARTIAL_LINE_INTERVAL};
 
 const READ_BUFFER: usize = 1 << 16;
@@ -79,6 +80,7 @@ pub struct Fold {
 
 #[derive(Default)]
 pub struct Extras {
+    pub throughput: Throughput,
     pub directory: Option<PathBuf>,
     pub remote_host: Option<(String, String)>,
     pub marks: Vec<i64>,
@@ -499,6 +501,7 @@ fn tee_output(extras: &Mutex<Extras>, bytes: &[u8]) {
     let Ok(mut extras) = extras.lock() else {
         return;
     };
+    extras.throughput.add(bytes.len(), Instant::now());
     if let Some(log) = extras.log.as_mut()
         && let Err(error) = log.write_all(bytes)
     {

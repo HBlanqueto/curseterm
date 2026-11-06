@@ -3120,6 +3120,7 @@ fn listen(handles: Handles, revision: State<u64>) -> Events {
     let (sender, receiver) = channel();
     let receiver: RefCell<Receiver<(SessionId, TermEvent)>> = RefCell::new(receiver);
     let timers = handles.timers.clone();
+    let cadence = Rc::new(Cadence::default());
     let wake = timers.wakeup(move || {
         if !handles.alive.get() {
             return;
@@ -3128,13 +3129,70 @@ fn listen(handles: Handles, revision: State<u64>) -> Events {
         if pending.is_empty() {
             return;
         }
+        let ids: Vec<SessionId> = pending.iter().map(|(id, _)| *id).collect();
         for (id, event) in pending {
             on_term_event(&handles, id, event, revision);
         }
-        let mut revision = revision;
-        *revision.write() += 1;
+        match redraw_interval(&handles, &ids) {
+            Some(interval) => cadence.redraw_within(&handles, interval, revision),
+            None => redraw(revision),
+        }
     });
     Rc::new((sender, wake))
+}
+
+fn redraw(revision: State<u64>) {
+    let mut revision = revision;
+    *revision.write() += 1;
+}
+
+#[derive(Default)]
+struct Cadence {
+    last: Cell<Option<Instant>>,
+    deferred: Cell<bool>,
+}
+
+impl Cadence {
+    // iTermUpdateCadenceController.m -setUpdateCadence:: at most one redraw per interval; output
+    // in between waits for the next one.
+    fn redraw_within(self: &Rc<Self>, handles: &Handles, interval: Duration, revision: State<u64>) {
+        let since = self.last.get().map(|last| last.elapsed());
+        if since.is_none_or(|since| since >= interval) {
+            self.last.set(Some(Instant::now()));
+            redraw(revision);
+        } else if !self.deferred.replace(true) {
+            let cadence = self.clone();
+            handles.after(interval - since.unwrap_or_default(), move || {
+                cadence.deferred.set(false);
+                cadence.last.set(Some(Instant::now()));
+                redraw(revision);
+            });
+        }
+    }
+}
+
+// PTYSession.m -updateCadenceControllerState and iTermUpdateCadenceController.m -updateCadence:
+// with Maximize Throughput, outside the alternate screen, a session whose output is not between
+// zero and the threshold redraws at the slow rate.
+fn redraw_interval(handles: &Handles, ids: &[SessionId]) -> Option<Duration> {
+    if !handles.defaults.peek().maximize_throughput {
+        return None;
+    }
+    let advanced = advanced::current();
+    let now = Instant::now();
+    let busy = ids
+        .iter()
+        .filter_map(|id| handles.sessions.peek().get(id).cloned())
+        .filter(|session| !session.mode().contains(TermMode::ALT_SCREEN))
+        .any(|session| {
+            let estimate = session.extras().throughput.estimate(now);
+            !(estimate > 0.0 && estimate < advanced.adaptive_frame_rate_throughput_threshold)
+        });
+    Some(if busy {
+        advanced.slow_frame_interval()
+    } else {
+        advanced.fast_frame_interval()
+    })
 }
 
 fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: State<u64>) {

@@ -185,6 +185,12 @@ fn general_pane(defaults: &Defaults) -> Rect {
                 tr!("copy-on-select"),
                 defaults.copy_on_select,
                 |defaults, on| defaults.copy_on_select = on,
+            )))
+            // PreferencePanel.xib General › Magic.
+            .section(Section::titled(tr!("section-magic")).row(switch(
+                tr!("maximize-throughput"),
+                defaults.maximize_throughput,
+                |defaults, on| defaults.maximize_throughput = on,
             ))),
     )
 }

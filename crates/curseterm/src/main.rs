@@ -54,6 +54,7 @@ mod styled;
 mod tab_groups;
 mod terminal;
 mod theme;
+mod throughput;
 mod triggers;
 mod windows;
 mod workspace;

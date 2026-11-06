@@ -3812,3 +3812,63 @@ runner del kit (BK-047); el fundido usa `Timers`.
 
 **No probado:** «reducir movimiento»; el alto contraste en modo oscuro; un
 cambio de `contrast` con la ventana abierta (BK-046).
+
+## Decisión — El renderizador GPU
+
+iTerm2 tiene dos renderizadores: el clásico, que dibuja con Core Graphics en
+la CPU, y el de Metal, que sube los glifos a páginas de texturas
+(`iTermTextureArray.m`) y los dibuja por lotes (`iTermTextRenderer.mm`).
+«GPU rendering» elige entre ellos.
+
+CurseTerm solo tiene el segundo caso: BarrierKit dibuja con Skia sobre Vulkan
+(ADR 0056 de barrierkit), y Skia pinta el texto desde su propio atlas de
+glifos en la GPU. Se probaron dos renderizadores más en sway sin pantalla con
+lavapipe, con la pantalla llena de texto:
+
+| Variante | Mediana por fotograma | Resultado |
+|---|---|---|
+| Actual, `draw_str` por celda | 2,2 ms | — |
+| Atlas propio con `Canvas::draw_atlas` | 6 ms con glifos nuevos, 2 ms sin ellos | Peor: cada glifo nuevo sube la página entera |
+| Un `TextBlob` por racha de fila, color y estilo | 2,4 ms | Igual |
+
+Ninguno mejora, así que no se añade: un segundo camino sin ganancia incumple
+«nada por si acaso». Por lo mismo no hay casilla «GPU rendering» ni «Disable
+GPU renderer when disconnected from power»: no hay camino de CPU al que volver.
+«Maximize throughput», que en iTerm2 ya no depende del renderizador, sí se
+porta (fase 88).
+
+## Fase 88 — Maximize throughput
+
+### Plan
+
+`iTermUpdateCadenceController.m`, `iTermThroughputEstimator.m` y
+`PTYSession.m -updateCadenceControllerState`:
+
+1. Cada sesión estima sus bytes por segundo con cinco cubos de 1/30 s, el más
+   reciente con más peso (`TokenExecutor.swift`).
+2. Con **General › Magic › Maximize throughput at the cost of higher latency**
+   (activo por omisión), fuera de la pantalla alternativa, una sesión cuya
+   salida no está entre 0 y el umbral repinta a la tasa lenta; si no, a la
+   máxima. Entre dos repintados, la salida espera al siguiente.
+3. **Advanced › Drawing**: el umbral (10 000 B/s), la tasa lenta (30 fps,
+   `metalSlowFrameRate`) y la máxima (60 fps).
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit tal cual. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado |
+|---|---|
+| El estimador da el caudal de un flujo constante y cae a 0 en silencio (test) | ✓ |
+| `yes` durante 6 s con la tasa lenta a 5 fps: ~10 repintados por segundo | ✓ |
+| Lo mismo sin el ajuste: ~38 repintados por segundo | ✓ |
+| Con la tasa lenta a 5 fps la terminal consume un 27 % más de bytes | ✓ |
+
+**No probado:** en una pantalla real de 60 Hz o más, donde la tasa lenta por
+omisión ahorra repintados; aquí el compositor sin pantalla ya los limita a
+unos 34 por segundo.
+
+**Difiere de iTerm2:** la cadencia es por ventana y la decide la sesión más
+activa entre las que produjeron salida; no hay modo de bajo consumo ni
+ProMotion.

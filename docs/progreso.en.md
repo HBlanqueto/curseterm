@@ -3784,3 +3784,64 @@ kit's runner (BK-047); the fade uses `Timers`.
 
 **Not tested:** “reduce motion”; high contrast in dark mode; a `contrast`
 change with the window open (BK-046).
+
+## Decision — The GPU renderer
+
+iTerm2 has two renderers: the classic one, which draws with Core Graphics on
+the CPU, and the Metal one, which uploads glyphs into texture pages
+(`iTermTextureArray.m`) and draws them in batches (`iTermTextRenderer.mm`).
+“GPU rendering” picks between them.
+
+CurseTerm only has the second case: BarrierKit draws with Skia on Vulkan
+(barrierkit ADR 0056), and Skia paints text from its own GPU glyph atlas. Two
+more renderers were tried in headless sway with lavapipe, with the screen full
+of text:
+
+| Variant | Median per frame | Result |
+|---|---|---|
+| Current, `draw_str` per cell | 2.2 ms | — |
+| Own atlas with `Canvas::draw_atlas` | 6 ms with new glyphs, 2 ms without | Worse: every new glyph uploads the whole page |
+| One `TextBlob` per run of row, colour and style | 2.4 ms | Same |
+
+Neither improves, so neither is added: a second path with no gain breaks
+“nothing just in case”. For the same reason there is no “GPU rendering” box
+nor “Disable GPU renderer when disconnected from power”: there is no CPU path
+to fall back to. “Maximize throughput”, which in iTerm2 no longer depends on
+the renderer, is ported (phase 88).
+
+## Phase 88 — Maximize throughput
+
+### Plan
+
+`iTermUpdateCadenceController.m`, `iTermThroughputEstimator.m` and
+`PTYSession.m -updateCadenceControllerState`:
+
+1. Each session estimates its bytes per second with five 1/30 s buckets, the
+   newest weighing most (`TokenExecutor.swift`).
+2. With **General › Magic › Maximize throughput at the cost of higher
+   latency** (on by default), outside the alternate screen, a session whose
+   output is not between 0 and the threshold redraws at the slow rate;
+   otherwise, at the maximum one. Between two redraws, output waits for the
+   next.
+3. **Advanced › Drawing**: the threshold (10,000 B/s), the slow rate (30 fps,
+   `metalSlowFrameRate`) and the maximum (60 fps).
+
+### Result (2026-11-06)
+
+Tested in headless sway with the kit as is. `./dev.sh check` clean in both
+modes.
+
+| Test | Result |
+|---|---|
+| The estimator gives a steady stream's rate and falls to 0 in silence (test) | ✓ |
+| `yes` for 6 s with the slow rate at 5 fps: ~10 redraws per second | ✓ |
+| The same without the setting: ~38 redraws per second | ✓ |
+| With the slow rate at 5 fps the terminal takes in 27 % more bytes | ✓ |
+
+**Not tested:** on a real 60 Hz or faster display, where the default slow rate
+saves redraws; here the headless compositor already limits them to about 34
+per second.
+
+**Differs from iTerm2:** the cadence is per window and the busiest session
+among those that produced output decides it; there is no low-power mode nor
+ProMotion.
