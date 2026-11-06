@@ -4,6 +4,8 @@ use barrier_kit_next::tokens::{
     TAB_STYLE_LIGHT, TAB_STYLE_LIGHT_HIGH_CONTRAST, TITLE_BAR, TabStyle,
 };
 use barrier_kit_next::views::tab_bar::brightness;
+use freya_core::prelude::{State, try_consume_root_context, use_memo};
+use vow_appearance::Resolved;
 use vow_design::Rgba;
 
 use crate::config::Theme;
@@ -18,11 +20,16 @@ pub fn compact(theme: Theme) -> bool {
 // line (PseudoTerminal.m -updateTabBarStyle).
 pub fn tab_style(
     theme: Theme,
-    system_dark: bool,
+    system: (bool, bool),
     background: Rgb,
     compact_window: bool,
 ) -> TabStyle {
+    let (system_dark, system_contrast) = system;
     let style = match theme {
+        Theme::Regular | Theme::Compact if system_contrast && system_dark => {
+            TAB_STYLE_DARK_HIGH_CONTRAST
+        }
+        Theme::Regular | Theme::Compact if system_contrast => TAB_STYLE_LIGHT_HIGH_CONTRAST,
         Theme::Regular | Theme::Compact if system_dark => TAB_STYLE_DARK,
         Theme::Regular | Theme::Compact => TAB_STYLE_LIGHT,
         Theme::Light => TAB_STYLE_LIGHT,
@@ -38,6 +45,20 @@ pub fn tab_style(
         };
     }
     style
+}
+
+// NSAppearance+iTerm.m -it_mojaveTabStyle: the system's increased contrast picks the
+// high-contrast style. BK-046: the kit keeps `contrast` out of `Resolved`, so it is read again
+// whenever the appearance changes.
+pub fn use_system_contrast() -> bool {
+    let root = try_consume_root_context::<State<Resolved>>();
+    let contrast = use_memo(move || {
+        if let Some(root) = root {
+            root.read();
+        }
+        vow_appearance::load_appearance().contrast
+    });
+    *contrast.read()
 }
 
 // PSMMinimalTabStyle.m, for an opaque terminal: the selected tab is the terminal background and
@@ -169,18 +190,23 @@ mod tests {
     #[test]
     fn minimal_tabs_are_the_terminal_background_and_unselected_ones_darker_unless_nearly_black() {
         let solarized = Rgb { r: 0, g: 43, b: 54 };
-        let style = tab_style(Theme::Minimal, false, solarized, true);
+        let style = tab_style(Theme::Minimal, (false, false), solarized, true);
         assert_eq!(style.selected, Rgba::rgba8(0, 43, 54, 1.0));
         assert_eq!(style.height, TAB_STRIP.minimal_height);
         assert!(style.unselected.b < style.selected.b);
-        let black = tab_style(Theme::Minimal, false, Rgb { r: 0, g: 0, b: 0 }, true);
+        let black = tab_style(
+            Theme::Minimal,
+            (false, false),
+            Rgb { r: 0, g: 0, b: 0 },
+            true,
+        );
         assert!(black.unselected.r > black.selected.r);
         let paper = Rgb {
             r: 250,
             g: 250,
             b: 250,
         };
-        let style = tab_style(Theme::Minimal, true, paper, false);
+        let style = tab_style(Theme::Minimal, (true, false), paper, false);
         assert!(style.unselected.r < style.selected.r);
         assert_eq!(style.text_selected.r, MINIMAL_TABS.text_light);
     }

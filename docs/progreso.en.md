@@ -3753,3 +3753,34 @@ pick a pane in another window; the menu has no Pin Tab nor Tab Color, which
 CurseTerm lacks; the question does not list the jobs nor read “Confirm closing
 multiple sessions”; the new window takes the profile's size instead of fitting
 the tab.
+
+## Phase 87 — Animated tab hover and automatic high contrast
+
+### Plan
+
+1. **Hover** (`PSMTabBarCell.m -highlightAmount`, `-setHighlighted:`): on
+   entering or leaving a tab, its background goes from the normal colour to the
+   hover one in 0.2 s, linearly, with a redraw every 1/60 s. The close button
+   takes that amount as its alpha (`PSMYosemiteTabStyle.m`). With “reduce
+   motion” the change is immediate.
+2. **High contrast** (`NSAppearance+iTerm.m -it_mojaveTabStyle`): with the
+   Regular and Compact themes, if the system asks for more contrast
+   (`contrast` in `appearance.domain`, BK-046), the tabs use the Light or Dark
+   High Contrast style. Minimal does not change, as in iTerm2.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the kit as is. `./dev.sh check` clean in both
+modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| The hover rises from 0 to 1 in ~0.2 s at about 60 frames per second | ✓ | — |
+| On leaving it falls from 1 to 0 the same way | ✓ | — |
+| `contrast = true` sets the high-contrast style | ✓ | `fase87-alto-contraste.png` |
+
+Also: freya-animation's `use_animation_transition` did not advance in the
+kit's runner (BK-047); the fade uses `Timers`.
+
+**Not tested:** “reduce motion”; high contrast in dark mode; a `contrast`
+change with the window open (BK-046).

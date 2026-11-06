@@ -3781,3 +3781,34 @@ Session to Split Pane un panel de otra ventana; el menú no tiene Pin Tab ni
 Tab Color, que CurseTerm no tiene; la pregunta no lista los trabajos ni mira
 «Confirm closing multiple sessions»; la ventana nueva toma el tamaño del
 perfil en lugar de ajustarse a la pestaña.
+
+## Fase 87 — Hover animado de las pestañas y alto contraste automático
+
+### Plan
+
+1. **Hover** (`PSMTabBarCell.m -highlightAmount`, `-setHighlighted:`): al
+   entrar o salir de una pestaña, su fondo pasa del color normal al de hover
+   en 0,2 s, de forma lineal, con un repintado cada 1/60 s. El botón de cerrar
+   toma esa cantidad como alfa (`PSMYosemiteTabStyle.m`). Con «reducir
+   movimiento» el cambio es inmediato.
+2. **Alto contraste** (`NSAppearance+iTerm.m -it_mojaveTabStyle`): con los
+   temas Regular y Compact, si el sistema pide más contraste
+   (`contrast` en `appearance.domain`, BK-046), las pestañas usan el estilo
+   Light o Dark High Contrast. Minimal no cambia, como en iTerm2.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit tal cual. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| El hover sube de 0 a 1 en ~0,2 s a unos 60 fotogramas por segundo | ✓ | — |
+| Al salir baja de 1 a 0 igual | ✓ | — |
+| `contrast = true` pone el estilo de alto contraste | ✓ | `fase87-alto-contraste.png` |
+
+Además: `use_animation_transition` de freya-animation no avanzaba en el
+runner del kit (BK-047); el fundido usa `Timers`.
+
+**No probado:** «reducir movimiento»; el alto contraste en modo oscuro; un
+cambio de `contrast` con la ventana abierta (BK-046).

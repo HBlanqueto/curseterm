@@ -75,6 +75,8 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-043 | controls | `TextField` cannot open with its text selected | low | No workaround: ⌃A selects it |
 | BK-044 | views | No floating view that moves and resizes inside the window | medium | Block tested: `views::floating_pane` |
 | BK-045 | platform | No freedesktop Secret Service client | medium | Block tested: `secrets` |
+| BK-046 | appearance | `Resolved` does not carry the contrast preference | low | Workaround tested: `theme::use_system_contrast` |
+| BK-047 | platform / animation | `freya-animation` animations get no frames | medium | Workaround tested: a fade with `Timers` |
 
 ## Gaps
 
@@ -1007,6 +1009,45 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Proposed kit API**: that of `Secrets`, with `Item`.
 - **Severity**: medium
 - **How to reproduce**: not applicable; it is a missing service.
+
+### BK-046 — `Resolved` does not carry the contrast preference
+- **Area**: appearance
+- **What CurseTerm needed**: the high-contrast tab style when the system asks
+  for it, like `-it_mojaveTabStyle` in `NSAppearance+iTerm.m`.
+- **What BarrierKit offers today**: `AppearanceConfig::contrast` in
+  `vow-appearance`, read from `appearance.domain`.
+- **What is missing**: `vow_appearance::Resolved` does not copy `contrast`,
+  and the runner only notifies when `Resolved` changes
+  (`platform/runtime.rs:261`).
+- **How I solved it in CurseTerm**: `theme::use_system_contrast` reads
+  `load_appearance().contrast` again whenever `Resolved` changes.
+- **Cost of the workaround**: a change of `contrast` alone does not show until
+  another appearance change or until the window opens.
+- **Proposed kit API**: `Resolved::contrast: bool`.
+- **Severity**: low
+- **How to reproduce**: write `contrast = true` in `appearance.domain` with a
+  window open: `resolved()` does not change.
+
+### BK-047 — `freya-animation` animations get no frames
+- **Area**: platform / animation
+- **What CurseTerm needed**: the 0.2 s fade of the tab hover
+  (`PSMTabBarCell.m -highlightAmount`).
+- **What BarrierKit offers today**: the runner sends the `RenderingTicker`
+  after each `present` (`platform/surface.rs:231`).
+- **What is missing**: with `use_animation_transition` inside a component, the
+  animation does not advance after the first redraw: there are no more draws
+  until another event, and then it jumps to the end.
+- **How I solved it in CurseTerm**: like iTerm2, the tab keeps the moment of
+  the change and asks for a redraw every 16 ms with `Timers::after` while it
+  lasts.
+- **Cost of the workaround**: one timer per frame instead of the animation
+  clock.
+- **Proposed kit API**: that `UserEvent::RequestRedraw` produces a frame even
+  when the tree does not change.
+- **Severity**: medium
+- **How to reproduce**: a `rect` whose colour comes from
+  `use_animation_transition` over a `State<bool>`; change the state with the
+  mouse still: the colour does not change until the mouse moves.
 
 ## Things that worked well
 

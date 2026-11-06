@@ -75,6 +75,8 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-043 | controles | `TextField` no puede abrirse con el texto seleccionado | baja | Sin workaround: ⌃A lo selecciona |
 | BK-044 | vistas | Sin vista flotante que se mueva y redimensione dentro de la ventana | media | Bloque probado: `views::floating_pane` |
 | BK-045 | plataforma | Sin cliente del Secret Service de freedesktop | media | Bloque probado: `secrets` |
+| BK-046 | apariencia | `Resolved` no lleva la preferencia de contraste | baja | Workaround probado: `theme::use_system_contrast` |
+| BK-047 | plataforma / animación | Las animaciones de `freya-animation` no reciben fotogramas | media | Workaround probado: fundido con `Timers` |
 
 ## Gaps
 
@@ -1011,6 +1013,44 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **API propuesta para el kit**: la de `Secrets`, con `Item`.
 - **Gravedad**: media
 - **Cómo reproducirlo**: no aplica; es un servicio que falta.
+
+### BK-046 — `Resolved` no lleva la preferencia de contraste
+- **Área**: apariencia
+- **Qué necesitaba CurseTerm**: el estilo de pestañas de alto contraste
+  cuando el sistema lo pide, como `-it_mojaveTabStyle` de
+  `NSAppearance+iTerm.m`.
+- **Qué ofrece hoy BarrierKit**: `AppearanceConfig::contrast` en
+  `vow-appearance`, que se lee de `appearance.domain`.
+- **Qué falta**: `vow_appearance::Resolved` no copia `contrast`, y el runner
+  solo avisa cuando cambia `Resolved` (`platform/runtime.rs:261`).
+- **Cómo lo resolví en CurseTerm**: `theme::use_system_contrast` vuelve a leer
+  `load_appearance().contrast` cada vez que cambia `Resolved`.
+- **Coste del workaround**: un cambio de solo `contrast` no se ve hasta otro
+  cambio de apariencia o hasta abrir la ventana.
+- **API propuesta para el kit**: `Resolved::contrast: bool`.
+- **Gravedad**: baja
+- **Cómo reproducirlo**: escribir `contrast = true` en `appearance.domain` con
+  una ventana abierta: `resolved()` no cambia.
+
+### BK-047 — Las animaciones de `freya-animation` no reciben fotogramas
+- **Área**: plataforma / animación
+- **Qué necesitaba CurseTerm**: el fundido de 0,2 s del hover de las pestañas
+  (`PSMTabBarCell.m -highlightAmount`).
+- **Qué ofrece hoy BarrierKit**: el runner envía el `RenderingTicker` tras cada
+  `present` (`platform/surface.rs:231`).
+- **Qué falta**: con `use_animation_transition` dentro de un componente, la
+  animación no avanza tras el primer repintado: no hay más dibujos hasta otro
+  evento, y entonces salta al final.
+- **Cómo lo resolví en CurseTerm**: como iTerm2, la pestaña guarda el instante
+  del cambio y pide un repintado cada 16 ms con `Timers::after` mientras dura.
+- **Coste del workaround**: un temporizador por fotograma en lugar del reloj de
+  animación.
+- **API propuesta para el kit**: que `UserEvent::RequestRedraw` produzca un
+  fotograma aunque el árbol no cambie.
+- **Gravedad**: media
+- **Cómo reproducirlo**: un `rect` cuyo color sale de
+  `use_animation_transition` sobre un `State<bool>`; cambiar el estado con el
+  ratón quieto: el color no cambia hasta mover el ratón.
 
 ## Cosas que funcionaron bien
 

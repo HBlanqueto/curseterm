@@ -1,9 +1,14 @@
 //! Document tabs drawn like PSMTabBarControl: equal tabs that fill the bar, a close button on
 //! the left on hover and the colors of a `TabStyle`.
 
+use std::cell::Cell;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
+
 use barrier_kit::context_menu::context_menu;
 use barrier_kit::interaction::use_interaction;
 use barrier_kit::menu::MenuItem;
+use barrier_kit::platform::Timers;
 use barrier_kit::style::text;
 use barrier_kit::symbol::{Symbol, symbol};
 use barrier_kit::theme::color;
@@ -349,15 +354,52 @@ impl Component for Tab {
         let style = self.style;
         let interaction = use_interaction();
         let hovered = interaction.hovered();
+        // PSMTabBarCell.m -highlightAmount and -setHighlighted:: the hover fades linearly,
+        // redrawn 60 times a second.
+        let mut change = use_state(|| (hovered, None::<Instant>));
+        if change.peek().0 != hovered {
+            change.set((hovered, Some(Instant::now())));
+        }
+        let frame = use_state(|| 0u64);
+        frame.read();
+        let alive = use_hook(|| Rc::new(Cell::new(true)));
+        use_drop({
+            let alive = alive.clone();
+            move || alive.set(false)
+        });
+        let duration = if barrier_kit::theme::resolved().reduced_motion {
+            Duration::ZERO
+        } else {
+            Duration::from_millis(TAB_STRIP.highlight_ms)
+        };
+        let target = f32::from(u8::from(hovered));
+        let started = change.peek().1;
+        let amount = match started.map(|at| at.elapsed()) {
+            Some(elapsed) if elapsed < duration => {
+                Timers::get().after(
+                    Duration::from_millis(TAB_STRIP.highlight_frame_ms),
+                    move || {
+                        if alive.get() {
+                            let mut frame = frame;
+                            *frame.write() += 1;
+                        }
+                    },
+                );
+                let progress = elapsed.as_secs_f32() / duration.as_secs_f32();
+                target * progress + (1.0 - target) * (1.0 - progress)
+            }
+            _ => target,
+        };
         let index = self.index;
         let on_select = self.on_select.clone();
         let on_close = self.on_close.clone();
-        let fill = match (self.selected, hovered) {
-            (true, false) => style.selected,
-            (true, true) => style.selected_hover,
-            (false, false) => style.unselected,
-            (false, true) => style.unselected_hover,
+        let (rest, hover) = if self.selected {
+            (style.selected, style.selected_hover)
+        } else {
+            (style.unselected, style.unselected_hover)
         };
+        let mut fill = rest.mix(hover, amount);
+        fill.a = rest.a + (hover.a - rest.a) * amount;
         let ink = match (self.selected, self.active) {
             (true, true) => style.text_selected,
             (false, true) => style.text_unselected,
@@ -374,24 +416,29 @@ impl Component for Tab {
         if !self.active {
             close_ink.a *= TAB_STRIP.inactive_close_alpha;
         }
-        let close = hovered.then(|| {
-            rect()
-                .position(
-                    Position::new_absolute()
-                        .left(TAB_STRIP.close_x)
-                        .top((style.height - 1.0 - TAB_STRIP.close) / 2.0),
-                )
-                .layer(1)
-                .a11y_role(AccessibilityRole::Button)
-                .a11y_alt(self.close_label)
-                .on_press(move |event: Event<PressEventData>| {
-                    event.stop_propagation();
-                    if let Some(on_close) = &on_close {
-                        on_close.call(index);
-                    }
-                })
-                .child(symbol(Symbol::XMark, TAB_STRIP.close, close_ink))
-        });
+        // PSMYosemiteTabStyle.m: a suppressed close button takes the highlight as its alpha.
+        close_ink.a *= amount;
+        // Always in the tree: adding it mid-hover makes freya report a pointer leave.
+        let close_shown = amount > 0.0;
+        let close = rect()
+            .position(
+                Position::new_absolute()
+                    .left(TAB_STRIP.close_x)
+                    .top((style.height - 1.0 - TAB_STRIP.close) / 2.0),
+            )
+            .layer(1)
+            .a11y_role(AccessibilityRole::Button)
+            .a11y_alt(self.close_label)
+            .on_press(move |event: Event<PressEventData>| {
+                if !close_shown {
+                    return;
+                }
+                event.stop_propagation();
+                if let Some(on_close) = &on_close {
+                    on_close.call(index);
+                }
+            })
+            .child(symbol(Symbol::XMark, TAB_STRIP.close, close_ink));
         let shadow = (style.shadow && !self.selected).then(|| {
             rect()
                 .position(Position::new_absolute().top(0.0).left(0.0))
@@ -485,7 +532,7 @@ impl Component for Tab {
                     )
                     .child(text(self.title.clone(), font, ink)),
             )
-            .maybe_child(close);
+            .child(close);
         let tab = match self.menu.clone() {
             Some((items, menu)) => {
                 context_menu(tab, items, move |id| menu.on_activate.call((index, id)))

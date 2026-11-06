@@ -356,6 +356,8 @@ pub const TAB_STRIP: TabStripMetrics = TabStripMetrics {
     title_font_size: 13.0,
     title_alpha: 0.65,
     inactive_close_alpha: 0.5,
+    highlight_ms: 200,
+    highlight_frame_ms: 16,
     shadow: [
         Rgba::rgba8(0, 0, 0, 70.0 / 255.0),
         Rgba::rgba8(0, 0, 0, 47.0 / 255.0),
@@ -366,6 +368,8 @@ pub const TAB_STRIP: TabStripMetrics = TabStripMetrics {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TabStripMetrics {
+    pub highlight_ms: u64,
+    pub highlight_frame_ms: u64,
     pub min_tab_width: f32,
     pub add_width: f32,
     pub close: f32,

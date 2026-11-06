@@ -619,7 +619,12 @@ impl App for Terminal {
                 defaults.read().scheme(&profile, dark).background
             })
             .unwrap_or_default();
-        let tab_style = theme::tab_style(theme, dark, terminal_background, compact);
+        let tab_style = theme::tab_style(
+            theme,
+            (dark, theme::use_system_contrast()),
+            terminal_background,
+            compact,
+        );
         let palette = Palette::current();
         let state = workspace.read();
         let title = state.window_title().to_string();
