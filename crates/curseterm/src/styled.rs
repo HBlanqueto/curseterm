@@ -17,6 +17,8 @@ pub struct Styled {
     pub underline: bool,
 }
 
+// BK-035: only patch 0011 can offer text/html.
+#[cfg(feature = "kit-parcheado")]
 pub fn html(lines: &[Vec<Styled>], background: Rgb, family: &str) -> String {
     let mut out = format!(
         "<pre style=\"font-family:'{family}',monospace;background:{};margin:0\">",
@@ -56,6 +58,35 @@ pub fn html(lines: &[Vec<Styled>], background: Rgb, family: &str) -> String {
         }
     }
     out.push_str("</pre>");
+    out
+}
+
+// PTYTextView -copyWithControlSequences:: the text with the SGR that draws it.
+pub fn control_sequences(lines: &[Vec<Styled>]) -> String {
+    let mut out = String::new();
+    for (index, line) in lines.iter().enumerate() {
+        if index > 0 {
+            out.push('\n');
+        }
+        for run in line.chunk_by(same_style) {
+            let first = run[0];
+            let (fg, bg) = (first.fg, first.bg);
+            out.push_str(&format!(
+                "\x1b[0;38;2;{};{};{};48;2;{};{};{}{}{}{}m",
+                fg.r,
+                fg.g,
+                fg.b,
+                bg.r,
+                bg.g,
+                bg.b,
+                if first.bold { ";1" } else { "" },
+                if first.italic { ";3" } else { "" },
+                if first.underline { ";4" } else { "" },
+            ));
+            out.extend(run.iter().map(|cell| cell.c));
+        }
+        out.push_str("\x1b[0m");
+    }
     out
 }
 
@@ -108,11 +139,12 @@ fn same_style(a: &Styled, b: &Styled) -> bool {
     (a.fg, a.bg, a.bold, a.italic, a.underline) == (b.fg, b.bg, b.bold, b.italic, b.underline)
 }
 
+#[cfg(feature = "kit-parcheado")]
 fn hex(rgb: Rgb) -> String {
     format!("#{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "kit-parcheado"))]
 mod tests {
     use super::*;
 

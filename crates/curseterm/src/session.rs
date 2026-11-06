@@ -766,6 +766,23 @@ impl Session {
     }
 
     // PTYTextView.m -scrollLineNumberRangeIntoView: centers a range that is not on screen.
+    // PTYTextView -scrollToSelection.
+    pub fn jump_to_selection(&self) {
+        let lines = {
+            let term = self.term.lock();
+            let history = term.history_size() as i64;
+            term.selection
+                .as_ref()
+                .and_then(|selection| selection.to_range(&term))
+                .map(|range| {
+                    history + i64::from(range.start.line.0)..=history + i64::from(range.end.line.0)
+                })
+        };
+        if let Some(lines) = lines {
+            self.scroll_into_view(lines);
+        }
+    }
+
     fn scroll_into_view(&self, lines: RangeInclusive<i64>) {
         let mut term = self.term.lock();
         let history = term.history_size() as i64;

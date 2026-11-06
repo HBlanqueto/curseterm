@@ -39,6 +39,9 @@ use vow_design::{
     TITLEBAR,
 };
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
+
 use crate::add_trigger::AddTriggerSheet;
 use crate::advanced_paste::{AdvancedPaste, advanced_paste_sheet};
 use crate::arrangement::{self, Arrangement, TabLayout};
@@ -1268,6 +1271,8 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::USE_SELECTION_FOR_FIND.id, selection);
     use_menu_enabled(menu::OPEN_SELECTION.id, selection);
     use_menu_enabled(menu::COPY_STYLED.id, selection);
+    use_menu_enabled(menu::COPY_CONTROL_SEQUENCES.id, selection);
+    use_menu_enabled(menu::JUMP_TO_SELECTION.id, selection);
     use_menu_enabled(menu::PASTE_SELECTION.id, selection);
     let logging = handles.active().is_some_and(|session| session.logging());
     use_menu_enabled(menu::LOG_START.id, !logging);
@@ -3763,6 +3768,41 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         }
         _ if id == menu::PASTE_SELECTION.id => {
             if let Some(text) = active.and_then(|session| session.selected_text()) {
+                paste_text(handles, text);
+            }
+        }
+        _ if id == menu::COPY_CONTROL_SEQUENCES.id => {
+            if let Some(session) = &active {
+                let defaults = handles.defaults.peek();
+                let profile = defaults.profile(&session.profile());
+                let scheme = defaults.scheme(&profile, handles.dark.get());
+                drop(defaults);
+                if let Some(lines) = crate::styled::selection(session, &scheme) {
+                    copy_text(handles, crate::styled::control_sequences(&lines));
+                }
+            }
+        }
+        _ if id == menu::JUMP_TO_SELECTION.id => {
+            if let Some(session) = &active {
+                session.jump_to_selection();
+                let mut revision = revision;
+                *revision.write() += 1;
+            }
+        }
+        // PTYTextView -pasteBase64Encoded: the first file on the clipboard, 77 characters a line.
+        _ if id == menu::PASTE_FILE_BASE64.id => {
+            let file = clipboard_text(handles.clipboard).and_then(|text| {
+                let first = text.lines().next()?.trim().to_string();
+                let path = first.strip_prefix("file://").unwrap_or(&first).to_string();
+                std::fs::read(path).ok()
+            });
+            if let Some(data) = file {
+                let encoded = STANDARD.encode(data);
+                let mut text = String::new();
+                for chunk in encoded.as_bytes().chunks(77) {
+                    text.push_str(&String::from_utf8_lossy(chunk));
+                    text.push('\r');
+                }
                 paste_text(handles, text);
             }
         }

@@ -45,7 +45,6 @@ mod smart_selection;
 mod snippets;
 mod snippets_pane;
 mod status;
-#[cfg(feature = "kit-parcheado")]
 mod styled;
 mod terminal;
 mod theme;

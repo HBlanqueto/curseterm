@@ -3103,3 +3103,36 @@ Probado en sway sin pantalla con el kit parcheado y el menú por D-Bus.
 **Difiere de iTerm2:** la hoja no tiene nombre ni los dos colores (se cambian
 luego en Ajustes) ni la opción de añadirlo solo a la sesión; sin Enable All y
 Disable All, que aquí es la casilla Enable Triggers.
+
+## Fase 69 — Copy with Control Sequences, Paste File Base64-Encoded y Jump to Selection
+
+### Plan
+
+1. **Edit › Copy with Control Sequences** (`PTYTextView
+   -copyWithControlSequences:`): la selección con el SGR que la dibuja
+   (colores RGB, negrita, cursiva y subrayado); funciona también con el kit
+   tal cual porque es texto plano.
+2. **Edit › Paste Special › Paste File Base64-Encoded** (`PTYTextView
+   -pasteBase64Encoded:`): el primer archivo del portapapeles (una ruta o un
+   `file://`) en base64, en trozos de 77 caracteres terminados en `\r`, como
+   `NSData+iTerm.m -stringWithBase64EncodingWithLineBreak:`.
+3. **Edit › Find › Jump to Selection** (⌘J): la vista vuelve a la selección.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado y el menú por D-Bus.
+`./dev.sh check` limpio en los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| «rojo» en rojo y « normal»: el portapapeles lleva `ESC[0;38;2;196;48;43;48;2;251;251;252mrojo` y luego el color normal | ✓ | — |
+| Copiar la ruta de 300 bytes aleatorios, `base64 -d > out.dat` y Paste File Base64-Encoded: `cmp` dice que son iguales | ✓ | — |
+| Seleccionar «300», subir con ⇧PgUp y ⌘J: la vista vuelve a «300» | ✓ | `fase69-ir-a-la-seleccion.png` |
+
+**No probado:** con el kit tal cual.
+
+**Difiere de iTerm2:** el SGR usa siempre colores RGB, no los índices de la
+paleta que tenía la celda; Copy with Control Sequences es un elemento propio,
+no la alternativa de Copy with Styles al pulsar ⌥; el archivo se lee de una
+ruta escrita en el portapapeles, no de un archivo copiado en el gestor de
+archivos (`text/uri-list`).

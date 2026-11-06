@@ -3081,3 +3081,36 @@ Tested in headless sway with the patched kit and the D-Bus menu.
 **Differs from iTerm2:** the sheet has no name nor the two colours (they are
 changed later in Settings) nor the option to add it to the session only; no
 Enable All and Disable All, which here is the Enable Triggers checkbox.
+
+## Phase 69 — Copy with Control Sequences, Paste File Base64-Encoded and Jump to Selection
+
+### Plan
+
+1. **Edit › Copy with Control Sequences** (`PTYTextView
+   -copyWithControlSequences:`): the selection with the SGR that draws it (RGB
+   colours, bold, italic and underline); it also works with the kit as is,
+   since it is plain text.
+2. **Edit › Paste Special › Paste File Base64-Encoded** (`PTYTextView
+   -pasteBase64Encoded:`): the clipboard's first file (a path or a `file://`)
+   in base64, in 77-character pieces ended by `\r`, as
+   `NSData+iTerm.m -stringWithBase64EncodingWithLineBreak:` does.
+3. **Edit › Find › Jump to Selection** (⌘J): the view goes back to the
+   selection.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit and the D-Bus menu.
+`./dev.sh check` clean in both modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| «rojo» in red and « normal»: the clipboard holds `ESC[0;38;2;196;48;43;48;2;251;251;252mrojo` and then the normal colour | ✓ | — |
+| Copying the path of 300 random bytes, `base64 -d > out.dat` and Paste File Base64-Encoded: `cmp` says they are equal | ✓ | — |
+| Selecting «300», going up with ⇧PgUp and ⌘J: the view goes back to «300» | ✓ | `fase69-ir-a-la-seleccion.png` |
+
+**Not tested:** the kit as is.
+
+**Differs from iTerm2:** the SGR always uses RGB colours, not the palette
+indices the cell had; Copy with Control Sequences is its own item, not Copy
+with Styles' ⌥ alternate; the file is read from a path written to the
+clipboard, not from a file copied in the file manager (`text/uri-list`).

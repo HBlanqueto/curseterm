@@ -61,6 +61,11 @@ pub const CLOSE_PANES: Action =
 pub const COPY: Action = Action::new("copy", || tr!("copy")).shortcut(super_key('c'));
 pub const COPY_STYLED: Action =
     Action::new("copy-styled", || tr!("copy-styled")).shortcut(super_with(Modifiers::ALT, 'c'));
+pub const COPY_CONTROL_SEQUENCES: Action =
+    Action::new("copy-control-sequences", || tr!("copy-control-sequences"));
+pub const PASTE_FILE_BASE64: Action = Action::new("paste-file-base64", || tr!("paste-file-base64"));
+pub const JUMP_TO_SELECTION: Action =
+    Action::new("jump-to-selection", || tr!("jump-to-selection")).shortcut(super_key('j'));
 pub const PASTE: Action = Action::new("paste", || tr!("paste")).shortcut(super_key('v'));
 pub const CLEAR_BUFFER: Action =
     Action::new("clear-buffer", || tr!("clear-buffer")).shortcut(super_key('k'));
@@ -362,6 +367,7 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
             vec![
                 COPY.item(false),
                 COPY_STYLED.item(false),
+                COPY_CONTROL_SEQUENCES.item(false),
                 COPY_MODE.item_with(true, CheckState::Checkbox(false)),
                 PASTE.item(true),
                 submenu(
@@ -372,6 +378,7 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
                         PASTE_SLOWLY.item(true),
                         PASTE_ESCAPED.item(true),
                         PASTE_SELECTION.item(false),
+                        PASTE_FILE_BASE64.item(true),
                         MenuItem::Separator,
                         MenuItem::action(WARN_MULTI_LINE_PASTE, tr!("warn-multi-line-paste"))
                             .with_check(CheckState::Checkbox(true)),
@@ -398,6 +405,7 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
                         FIND_NEXT.item(true),
                         FIND_PREVIOUS.item(true),
                         USE_SELECTION_FOR_FIND.item(false),
+                        JUMP_TO_SELECTION.item(false),
                         CLEAR_FIND.item(false),
                         FIND_GLOBALLY.item(true),
                         SELECT_MATCHES.item(false),
