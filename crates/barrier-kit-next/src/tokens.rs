@@ -690,6 +690,23 @@ pub const HIGHLIGHT_COLORS: [Rgba; 14] = [
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PasswordManagerMetrics {
+    pub width: f32,
+    pub table_height: f32,
+    pub password_field: f32,
+    pub generated_length: usize,
+}
+
+// iTermPasswordManager.xib: an 860 × 360 window around an 820 × 261 table;
+// iTermPasswordManagerWindowController.m +randomPassword makes 16 characters.
+pub const PASSWORD_MANAGER: PasswordManagerMetrics = PasswordManagerMetrics {
+    width: 820.0,
+    table_height: 261.0,
+    password_field: 300.0,
+    generated_length: 16,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TriggerEditorMetrics {
     pub action_width: f32,
     pub parameter_width: f32,

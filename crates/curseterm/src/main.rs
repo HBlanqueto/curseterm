@@ -36,6 +36,7 @@ mod note_view;
 mod osc;
 mod pane_view;
 mod panes;
+mod password_manager;
 mod paste_history;
 mod paste_transform;
 mod paste_warning;

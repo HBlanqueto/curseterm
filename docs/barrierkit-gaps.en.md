@@ -74,6 +74,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-042 | controls | `PopUpButton` has no pull-down mode | low | Workaround tested: remount with `key` |
 | BK-043 | controls | `TextField` cannot open with its text selected | low | No workaround: ⌃A selects it |
 | BK-044 | views | No floating view that moves and resizes inside the window | medium | Block tested: `views::floating_pane` |
+| BK-045 | platform | No freedesktop Secret Service client | medium | Block tested: `secrets` |
 
 ## Gaps
 
@@ -984,6 +985,26 @@ Each gap says how it is solved (CurseTerm ADR 0001):
   `on_raise`.
 - **Severity**: medium
 - **How to reproduce**: not applicable; it is a missing view.
+
+### BK-045 — No freedesktop Secret Service client
+- **Area**: platform
+- **What CurseTerm needed**: iTerm2's password manager, which keeps accounts
+  in the macOS Keychain (`KeychainPasswordDataSource.swift`). On Linux the
+  counterpart is the Secret Service (`org.freedesktop.secrets`).
+- **What BarrierKit offers today**: `password::PasswordField` and
+  `SecureField` to type a password, but nothing to keep it.
+- **What is missing**: searching, reading, creating, changing and deleting
+  Secret Service items.
+- **How I solved it in CurseTerm**: `barrier_kit_next::secrets` speaks the
+  protocol over zbus: `OpenSession` with the `plain` algorithm, `SearchItems`,
+  `Unlock`, `GetSecret`, `CreateItem` in the `default` alias, `SetSecret` and
+  `Delete`. If the service asks to unlock, it shows its own window and
+  returns `Error::Locked`.
+- **Cost of the workaround**: it does not wait for the prompt's `Completed`
+  signal; reload after unlocking.
+- **Proposed kit API**: that of `Secrets`, with `Item`.
+- **Severity**: medium
+- **How to reproduce**: not applicable; it is a missing service.
 
 ## Things that worked well
 

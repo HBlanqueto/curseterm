@@ -1273,6 +1273,7 @@ pub fn trigger_action_title(action: TriggerAction) -> &'static str {
         TriggerAction::HighlightLine => tr!("trigger-highlight-line"),
         TriggerAction::Highlight => tr!("trigger-highlight"),
         TriggerAction::Hyperlink => tr!("trigger-hyperlink"),
+        TriggerAction::PasswordManager => tr!("trigger-password-manager"),
         TriggerAction::Notification => tr!("trigger-notification"),
         TriggerAction::PromptDetected => tr!("trigger-prompt-detected"),
         TriggerAction::ReportDirectory => tr!("trigger-report-directory"),
@@ -1298,6 +1299,7 @@ pub fn trigger_placeholder(action: TriggerAction) -> &'static str {
         TriggerAction::ReportDirectory => tr!("trigger-report-directory-placeholder"),
         TriggerAction::SetTitle => tr!("trigger-set-title-placeholder"),
         TriggerAction::Hyperlink => tr!("trigger-hyperlink-placeholder"),
+        TriggerAction::PasswordManager => tr!("account-name"),
         _ => tr!("trigger-send-text-placeholder"),
     }
 }

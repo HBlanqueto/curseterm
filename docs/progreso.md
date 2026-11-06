@@ -3681,3 +3681,53 @@ con una ruta escrita.
 **Difiere de iTerm2:** no hay panel de abrir ni guardar del sistema, sino una
 hoja con la ruta; el formato es JSON propio, no el plist de iTerm2; el
 contenido no guarda marcas ni anotaciones.
+
+## Fase 85 — Gestor de contraseñas
+
+### Plan
+
+`iTermPasswordManagerWindowController.m` con el Keychain de macOS; en Linux,
+el Secret Service de freedesktop (BK-045):
+
+1. **Window › Password Manager** (⌥⌘F) abre una hoja de 820 de ancho
+   (`iTermPasswordManager.xib`): búsqueda, la tabla Account Name, User Name y
+   Password (oculta), + − Edit, Reveal Password, Reload Items, «Automatically
+   Send Return Key after Password», Broadcast, y Close, Enter User Name y Enter
+   Password.
+2. Cada cuenta es un elemento del servicio con los atributos `service =
+   CurseTerm`, `account` y `user`, y la cuenta como etiqueta
+   (`KeychainPasswordDataSource.swift`).
+3. **+** pide cuenta, usuario y contraseña; Generate crea 16 caracteres del
+   alfabeto de `+randomPassword` con `/dev/urandom`. **Edit** cambia la
+   contraseña. **−** pregunta «Are you sure you want to delete this password?».
+4. **Enter Password** (`-enterPassword:`): si la pty hace eco (termios `ECHO`,
+   en lugar de la sonda de `iTermEchoProbe.m`), pregunta «Are you really at a
+   password prompt?…»; si no, envía la contraseña, con Return si la casilla
+   está activa, a la sesión o, con Broadcast, a las que la escuchan.
+   **Enter User Name** envía el usuario y un salto de línea
+   (`-enterUsername:`).
+5. El trigger **Open Password Manager…** (`PasswordTrigger.m`) la abre con la
+   cuenta del parámetro elegida.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado y `gnome-keyring` 50.
+`./dev.sh check` limpio en los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| ⌥⌘F lista la cuenta guardada con `secret-tool` | ✓ | `fase85-contrasenas.png` |
+| Enter Password con `read -s` entrega la contraseña y el Return | ✓ | — |
+| + con Generate guarda la cuenta en el servicio, con sus atributos | ✓ | — |
+| − y Delete la borran del servicio | ✓ | — |
+| Enter Password en un prompt con eco pregunta antes | ✓ | `fase85-contrasenas.png` |
+
+Además: cambiar de modo dentro de la hoja hacía saltar un `unwrap` de
+freya-core 0.4.3 (`runner.rs:793`); una `key` por modo lo evita.
+
+**No probado:** con el kit tal cual; Edit; Reveal Password; Broadcast; el
+trigger; un llavero bloqueado.
+
+**Difiere de iTerm2:** sin 1Password, LastPass ni las otras integraciones,
+ni autenticación al abrir, ni OTP, ni exportar o importar; el mensaje
+«Password sent.» no aparece.

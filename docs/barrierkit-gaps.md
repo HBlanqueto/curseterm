@@ -74,6 +74,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-042 | controles | `PopUpButton` no tiene modo desplegable (pull-down) | baja | Workaround probado: remontar con `key` |
 | BK-043 | controles | `TextField` no puede abrirse con el texto seleccionado | baja | Sin workaround: ⌃A lo selecciona |
 | BK-044 | vistas | Sin vista flotante que se mueva y redimensione dentro de la ventana | media | Bloque probado: `views::floating_pane` |
+| BK-045 | plataforma | Sin cliente del Secret Service de freedesktop | media | Bloque probado: `secrets` |
 
 ## Gaps
 
@@ -988,6 +989,26 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
   `on_raise`.
 - **Gravedad**: media
 - **Cómo reproducirlo**: no aplica; es una vista que falta.
+
+### BK-045 — Sin cliente del Secret Service de freedesktop
+- **Área**: plataforma
+- **Qué necesitaba CurseTerm**: el gestor de contraseñas de iTerm2, que guarda
+  las cuentas en el Keychain de macOS (`KeychainPasswordDataSource.swift`).
+  En Linux el equivalente es el Secret Service (`org.freedesktop.secrets`).
+- **Qué ofrece hoy BarrierKit**: `password::PasswordField` y `SecureField`
+  para escribir una contraseña, pero nada para guardarla.
+- **Qué falta**: buscar, leer, crear, cambiar y borrar elementos del Secret
+  Service.
+- **Cómo lo resolví en CurseTerm**: `barrier_kit_next::secrets` habla el
+  protocolo por zbus: `OpenSession` con el algoritmo `plain`, `SearchItems`,
+  `Unlock`, `GetSecret`, `CreateItem` en el alias `default`, `SetSecret` y
+  `Delete`. Si el servicio pide desbloquear, muestra su propia ventana y
+  devuelve `Error::Locked`.
+- **Coste del workaround**: no espera la señal `Completed` del aviso; hay que
+  recargar tras desbloquear.
+- **API propuesta para el kit**: la de `Secrets`, con `Item`.
+- **Gravedad**: media
+- **Cómo reproducirlo**: no aplica; es un servicio que falta.
 
 ## Cosas que funcionaron bien
 

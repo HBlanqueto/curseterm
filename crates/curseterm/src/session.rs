@@ -293,6 +293,15 @@ impl Session {
         self.feed(format!("\x1b[={bits};1u").as_bytes());
     }
 
+    // iTermEchoProbe.m asks the terminal whether typing echoes; the pty's own termios says it.
+    pub fn echoes(&self) -> bool {
+        rustix::termios::tcgetattr(self.pty.borrow().file()).is_ok_and(|termios| {
+            termios
+                .local_modes
+                .contains(rustix::termios::LocalModes::ECHO)
+        })
+    }
+
     pub fn write(&self, bytes: impl Into<Cow<'static, [u8]>>) {
         let bytes = bytes.into();
         if bytes.is_empty() || self.ended.get() {

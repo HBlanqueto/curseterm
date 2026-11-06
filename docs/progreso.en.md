@@ -3654,3 +3654,52 @@ path.
 **Differs from iTerm2:** no system open or save panel, but a sheet with the
 path; the format is CurseTerm's own JSON, not iTerm2's plist; the contents
 keep no marks nor annotations.
+
+## Phase 85 — Password manager
+
+### Plan
+
+`iTermPasswordManagerWindowController.m` with the macOS Keychain; on Linux,
+the freedesktop Secret Service (BK-045):
+
+1. **Window › Password Manager** (⌥⌘F) opens an 820-wide sheet
+   (`iTermPasswordManager.xib`): search, the Account Name, User Name and
+   Password (hidden) table, + − Edit, Reveal Password, Reload Items,
+   “Automatically Send Return Key after Password”, Broadcast, and Close, Enter
+   User Name and Enter Password.
+2. Each account is a service item with the attributes `service = CurseTerm`,
+   `account` and `user`, and the account as label
+   (`KeychainPasswordDataSource.swift`).
+3. **+** asks for account, user and password; Generate makes 16 characters of
+   `+randomPassword`'s alphabet from `/dev/urandom`. **Edit** changes the
+   password. **−** asks “Are you sure you want to delete this password?”.
+4. **Enter Password** (`-enterPassword:`): if the pty echoes (termios `ECHO`,
+   instead of `iTermEchoProbe.m`'s probe), it asks “Are you really at a
+   password prompt?…”; otherwise it sends the password, with Return when the
+   box is checked, to the session or, with Broadcast, to those that hear it.
+   **Enter User Name** sends the user and a newline (`-enterUsername:`).
+5. The **Open Password Manager…** trigger (`PasswordTrigger.m`) opens it with
+   the parameter's account chosen.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit and `gnome-keyring` 50.
+`./dev.sh check` clean in both modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| ⌥⌘F lists the account saved with `secret-tool` | ✓ | `fase85-contrasenas.png` |
+| Enter Password at `read -s` delivers the password and Return | ✓ | — |
+| + with Generate stores the account in the service, with its attributes | ✓ | — |
+| − and Delete remove it from the service | ✓ | — |
+| Enter Password at an echoing prompt asks first | ✓ | `fase85-contrasenas.png` |
+
+Also: switching modes inside the sheet tripped an `unwrap` in freya-core
+0.4.3 (`runner.rs:793`); a key per mode avoids it.
+
+**Not tested:** the kit as is; Edit; Reveal Password; Broadcast; the trigger;
+a locked keyring.
+
+**Differs from iTerm2:** no 1Password, LastPass nor the other integrations,
+no authentication on open, no OTP, no export or import; the “Password sent.”
+message does not appear.

@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 barrier-kit.workspace = true
 freya-components.workspace = true
+serde.workspace = true
 freya-core.workspace = true
 freya-edit.workspace = true
 freya-engine.workspace = true
@@ -17,3 +18,4 @@ torin.workspace = true
 tracing.workspace = true
 vow-design.workspace = true
 zbus.workspace = true
+zeroize.workspace = true

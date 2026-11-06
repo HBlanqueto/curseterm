@@ -239,6 +239,8 @@ pub const EDIT_TAB_TITLE: Action = Action::new("edit-tab-title", || tr!("edit-ta
 pub const EDIT_WINDOW_TITLE: Action = Action::new("edit-window-title", || tr!("edit-window-title"));
 pub const COPY_MODE_KEYS: Action = Action::new("copy-mode-keys", || tr!("copy-mode-keys"));
 pub const LOCK_LAYOUT: Action = Action::new("lock-layout", || tr!("lock-layout"));
+pub const PASSWORD_MANAGER: Action = Action::new("password-manager", || tr!("password-manager"))
+    .shortcut(super_with(Modifiers::ALT, 'f'));
 pub const MINIMIZE: Action = Action::new("minimize", || tr!("minimize")).shortcut(super_key('m'));
 pub const ZOOM: &str = "zoom";
 pub const TAB_MENU: &str = "tab-menu";
@@ -621,6 +623,7 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
             vec![
                 MINIMIZE.item(true),
                 LOCK_LAYOUT.item_with(true, CheckState::Checkbox(false)),
+                PASSWORD_MANAGER.item(true),
                 keyed(ZOOM, tr!("zoom"), "Super+Shift+)"),
                 MenuItem::Separator,
                 MenuItem::action(ARRANGE_EVENLY, tr!("arrange-evenly")).with_enabled(false),

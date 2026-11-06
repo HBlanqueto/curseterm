@@ -43,6 +43,7 @@ pub struct Defaults {
     pub snippets: Vec<Snippet>,
     pub advanced: Advanced,
     pub recent_archives: Vec<PathBuf>,
+    pub send_return_after_password: bool,
     pub key_bindings: Vec<Binding>,
     pub actions: Vec<NamedAction>,
     pub show_tabs_in_fullscreen: bool,
@@ -74,6 +75,7 @@ impl Default for Defaults {
             snippets: Vec::new(),
             advanced: Advanced::default(),
             recent_archives: Vec::new(),
+            send_return_after_password: false,
             key_bindings: Vec::new(),
             actions: Vec::new(),
             // iTermPreferences.m: ShowFullScreenTabBar YES.
@@ -314,6 +316,7 @@ pub enum TriggerAction {
     #[default]
     Highlight,
     Hyperlink,
+    PasswordManager,
     Notification,
     PromptDetected,
     ReportDirectory,
@@ -328,11 +331,12 @@ pub enum TriggerAction {
 }
 
 impl TriggerAction {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::Annotate,
         Self::HighlightLine,
         Self::Highlight,
         Self::Hyperlink,
+        Self::PasswordManager,
         Self::Notification,
         Self::PromptDetected,
         Self::ReportDirectory,

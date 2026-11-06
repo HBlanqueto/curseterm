@@ -367,10 +367,12 @@ dependencies = [
  "freya-core",
  "freya-edit",
  "freya-engine",
+ "serde",
  "torin",
  "tracing",
  "vow-design",
  "zbus",
+ "zeroize",
 ]
 
 [[package]]
@@ -674,6 +676,7 @@ dependencies = [
  "tracing",
  "vow-appearance",
  "vow-design",
+ "zeroize",
 ]
 
 [[package]]

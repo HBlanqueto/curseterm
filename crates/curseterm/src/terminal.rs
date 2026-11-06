@@ -5,6 +5,8 @@ use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::{Duration, Instant, SystemTime};
 
+use zeroize::Zeroizing;
+
 use alacritty_terminal::event::{Event as TermEvent, WindowSize};
 use alacritty_terminal::grid::{Row, Scroll};
 use alacritty_terminal::index::Direction as SearchDirection;
@@ -75,6 +77,7 @@ use crate::menu;
 use crate::note_view::NoteEvent;
 use crate::pane_view::{self, TerminalPane};
 use crate::panes::{Axis, Pane, Toward};
+use crate::password_manager::{self, PasswordManager};
 use crate::paste_history;
 use crate::paste_transform::Transform;
 use crate::paste_warning::{self, Warning};
@@ -144,12 +147,15 @@ struct Handles {
     question: State<Option<Question>>,
     layout_locked: State<bool>,
     body_size: State<(f32, f32)>,
+    password_broadcast: State<bool>,
+    password_select: State<Option<String>>,
 }
 
 #[derive(Clone, PartialEq)]
 enum Question {
     TriggerAlert(TriggerAlert),
     StuckKeys(SessionId),
+    PasswordEchoes(Zeroizing<String>),
 }
 
 #[derive(Clone, PartialEq)]
@@ -173,6 +179,7 @@ enum Sheet {
     NewTabGroup,
     SaveArchive(SessionId),
     RestoreArchive,
+    PasswordManager,
     NamedMark(SessionId),
     CopyModeKeys,
     AdvancedPaste,
@@ -384,6 +391,8 @@ impl App for Terminal {
         let question = use_state(|| None);
         let layout_locked = use_state(|| false);
         let body_size = use_state(|| (0.0, 0.0));
+        let password_broadcast = use_state(|| false);
+        let password_select = use_state(|| None::<String>);
         let editing = use_state(|| false);
         let hints = use_state(|| None::<Hints>);
         let replay = use_state(|| None::<(SessionId, usize)>);
@@ -455,6 +464,8 @@ impl App for Terminal {
             question,
             layout_locked,
             body_size,
+            password_broadcast,
+            password_select,
         });
         handles.dark.set(dark);
         use_drop({
@@ -751,6 +762,7 @@ impl App for Terminal {
             Sheet::Pick(picker) => pick_sheet(&handles, picker, revision),
             Sheet::CopyModeKeys => copy_mode_keys_sheet(&handles),
             Sheet::PasteWarning(_) | Sheet::PasteTabs => paste_question_sheet(&handles, open),
+            Sheet::PasswordManager => password_manager_sheet(&handles),
             Sheet::AddTrigger(of) => {
                 let adding = handles.clone();
                 AddTriggerSheet {
@@ -3800,6 +3812,11 @@ fn trigger_fired(handles: &Handles, session: &Session, fired: Fired) {
                 tr!("trigger-fired-notification", name = name, tab = tab),
             );
         }
+        Fired::PasswordManager(account) => {
+            let mut select = handles.password_select;
+            select.set(Some(account));
+            open_sheet(handles, Sheet::PasswordManager)
+        }
         Fired::Alert { trigger, message } => ask(
             handles,
             Question::TriggerAlert(TriggerAlert {
@@ -3822,6 +3839,14 @@ fn question_sheet(handles: &Handles, question: Question) -> Element {
                 (tr!("mark-alert-ok"), Answer::Dismiss),
                 (tr!("trigger-alert-show-session"), Answer::ShowSession),
                 (tr!("trigger-alert-disable"), Answer::DisableTrigger),
+            ],
+        ),
+        // PTYSession.m -sendPasswordAfterGettingPermission.
+        Question::PasswordEchoes(_) => (
+            tr!("password-echoes").to_string(),
+            vec![
+                (tr!("close-cancel"), Answer::Dismiss),
+                (tr!("enter-password"), Answer::EnterPassword),
             ],
         ),
         Question::StuckKeys(_) => (
@@ -3893,6 +3918,9 @@ fn answer_question(handles: &Handles, question: &Question, answer: Answer) {
                 session.reset_key_reporting();
             }
         }
+        (Question::PasswordEchoes(password), Answer::EnterPassword) => {
+            send_password(handles, password)
+        }
         (Question::StuckKeys(_), Answer::NeverResetKeys) => {
             change_defaults(|defaults| defaults.reset_key_reporting = Some(false))
         }
@@ -3908,6 +3936,7 @@ enum Answer {
     ResetKeys,
     AlwaysResetKeys,
     NeverResetKeys,
+    EnterPassword,
 }
 
 // MovePaneController.m -dropInSession:half:atPoint:; a click on the moving pane cancels.
@@ -3993,6 +4022,66 @@ fn archive_on_close(handles: &Handles, id: SessionId) {
             id,
             archive::path_for(&directory, &title, SystemTime::now()),
         );
+    }
+}
+
+// iTermPasswordManagerWindowController.m delegate calls on the window controller.
+fn password_manager_sheet(handles: &Handles) -> Element {
+    let (closing, users, passwords) = (handles.clone(), handles.clone(), handles.clone());
+    let broadcast = handles.password_broadcast;
+    PasswordManager {
+        send_return: handles.defaults.read().send_return_after_password,
+        broadcast: *broadcast.read(),
+        select: handles.password_select.read().clone(),
+        on_send_return: Callback::new(|on| {
+            change_defaults(|defaults| defaults.send_return_after_password = on)
+        }),
+        on_broadcast: Callback::new(move |on| {
+            let mut broadcast = broadcast;
+            broadcast.set(on);
+        }),
+        on_user_name: Callback::new(move |name: String| {
+            for session in password_targets(&users) {
+                session.write(format!("{name}\n").into_bytes());
+            }
+        }),
+        on_password: Callback::new(move |account| match password_manager::password(&account) {
+            Ok(password) => {
+                let mut sheet = passwords.sheet;
+                sheet.set(None);
+                // PTYSession.m -enterPassword: and iTermEchoProbe.m: ask first when typing echoes.
+                if passwords.active().is_some_and(|session| session.echoes()) {
+                    ask(&passwords, Question::PasswordEchoes(password));
+                } else {
+                    send_password(&passwords, &password);
+                }
+            }
+            Err(error) => tracing::warn!(%error, "could not read the password"),
+        }),
+        on_close: Callback::new(move |_| {
+            let mut sheet = closing.sheet;
+            sheet.set(None);
+        }),
+    }
+    .into_element()
+}
+
+fn password_targets(handles: &Handles) -> Vec<Rc<Session>> {
+    if *handles.password_broadcast.peek() {
+        handles.receivers()
+    } else {
+        handles.active().into_iter().collect()
+    }
+}
+
+// PTYSession.m -echoProbe:writeString:, with Return when the setting asks for it.
+fn send_password(handles: &Handles, password: &Zeroizing<String>) {
+    let mut bytes = Zeroizing::new(password.as_bytes().to_vec());
+    if handles.defaults.peek().send_return_after_password {
+        bytes.push(b'\r');
+    }
+    for session in password_targets(handles) {
+        session.write(bytes.to_vec());
     }
 }
 
@@ -4261,6 +4350,11 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         _ if id == menu::REMOVE_TAB_FROM_GROUP.id => workspace.write().remove_active_from_group(),
         menu::NEXT_TAB_GROUP => workspace.write().step_tab_group(1),
         menu::PREVIOUS_TAB_GROUP => workspace.write().step_tab_group(-1),
+        _ if id == menu::PASSWORD_MANAGER.id => {
+            let mut select = handles.password_select;
+            select.set(None);
+            open_sheet(handles, Sheet::PasswordManager)
+        }
         _ if id == menu::SAVE_ARCHIVE.id => {
             if let Some(session) = &active {
                 let title = workspace.peek().title(session.id).to_string();

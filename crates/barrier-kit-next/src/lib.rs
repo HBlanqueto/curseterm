@@ -4,5 +4,6 @@
 pub mod app_menu;
 pub mod canvas;
 pub mod notifications;
+pub mod secrets;
 pub mod tokens;
 pub mod views;

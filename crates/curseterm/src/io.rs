@@ -46,6 +46,7 @@ pub enum Fired {
     Alert { trigger: usize, message: String },
     Notification(String),
     Coprocess(String),
+    PasswordManager(String),
 }
 
 pub type AnnotationId = u64;
@@ -750,6 +751,8 @@ fn perform(
         }
         TriggerAction::RunCommand => run_command(&parameter),
         TriggerAction::Coprocess => extras.fired.push(Fired::Coprocess(parameter)),
+        // PasswordTrigger.m: opens the password manager with that account chosen.
+        TriggerAction::PasswordManager => extras.fired.push(Fired::PasswordManager(parameter)),
         TriggerAction::Alert if popup => {
             extras.fired.push(Fired::Alert {
                 trigger: trigger.index,
