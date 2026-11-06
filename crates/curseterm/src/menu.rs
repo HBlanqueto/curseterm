@@ -81,6 +81,8 @@ pub const WARN_MULTI_LINE_PASTE: &str = "warn-multi-line-paste";
 pub const LIMIT_PASTE_WARNING: &str = "limit-paste-warning";
 pub const WARN_ONE_LINE_PASTE: &str = "warn-one-line-paste";
 pub const PASTE_SLOWLY: Action = Action::new("paste-slowly", || tr!("paste-slowly"));
+pub const ADVANCED_PASTE: Action = Action::new("advanced-paste", || tr!("advanced-paste-menu"))
+    .shortcut(super_with(Modifiers::ALT, 'v'));
 pub const PASTE_ESCAPED: Action = Action::new("paste-escaped", || tr!("paste-escaped"));
 pub const PASTE_SELECTION: Action = Action::new("paste-selection", || tr!("paste-selection"));
 pub const LOG_MENU: &str = "log-menu";
@@ -274,6 +276,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                     PASTE_SPECIAL_MENU,
                     tr!("paste-special-menu"),
                     vec![
+                        ADVANCED_PASTE.item(true),
                         PASTE_SLOWLY.item(true),
                         PASTE_ESCAPED.item(true),
                         PASTE_SELECTION.item(false),

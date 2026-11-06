@@ -2125,3 +2125,45 @@ casos de una línea con salto final (están en el test).
 preguntar» (BK-037); Paste Slowly y Paste Escaped no avisan; con una shell
 que solo emite `133;B` la sesión se queda «en el prompt» también mientras
 corre un comando.
+
+## Fase 47 — Advanced Paste
+
+### Plan
+
+Edit › Paste Special › Advanced Paste… (⌥⌘V) de iTerm2
+(`iTermPasteSpecialViewController.xib` y `iTermPasteHelper.m
++sanitizePasteEvent:encoding:`):
+
+1. **Transformaciones** en el orden de iTerm2, en un módulo puro con tests
+   (`paste_transform.rs`): quitar o convertir los saltos de línea a CR,
+   puntuación Unicode a ASCII (comillas y rayas), quitar los códigos de
+   control salvo tab, LF, FF y CR, tabuladores (tal cual, ^V o 4 espacios),
+   escapar la shell con `\` (sin tocar los tabuladores escapados con ^V),
+   sustitución con expresión regular (`$1` y `\n`, `\t`, `\r`, `\\` como
+   en vim) y Base64 en líneas de 77 con CR.
+2. **El panel**, con los valores por defecto de iTerm2 (CR y quitar códigos de
+   control activos), el modo de pegado entre corchetes, la vista previa del
+   resultado y Cancel o Paste.
+3. **Prueba** y documentación.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos; dos tests nuevos para las transformaciones.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `echo “hola mundo”<tab>—fin` en el portapapeles y ⌥⌘V: panel con CR y códigos de control activos | ✓ | `fase47-pegado-avanzado.png` |
+| Puntuación Unicode y «Convert tabs to 4 spaces»: la vista previa pasa a `echo "hola mundo"    -fin` | ✓ | `fase47-resultado.png` (arriba) |
+| Paste escribe eso mismo en la shell | ✓ | `fase47-resultado.png` (abajo) |
+
+**No probado:** con el kit tal cual; Base64, la expresión regular y el
+escape de la shell desde el panel (están en los tests).
+
+**Difiere de iTerm2:** sin la sección Speed (tamaño de bloque y pausa) ni
+«Wait for shell prompt before pasting each line»; el texto original no se
+edita en el panel; el número de espacios es fijo (4), sin el control para
+cambiarlo; la expresión regular es la del crate `regex`, no la de ICU; las
+opciones no se recuerdan entre usos.

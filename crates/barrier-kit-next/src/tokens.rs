@@ -473,3 +473,21 @@ pub struct MinimalTabMetrics {
     pub text_light: f32,
     pub unselected_text_alpha: f32,
 }
+
+// iTermPasteSpecialViewController.xib: four spaces per tab by default.
+pub const ADVANCED_PASTE: AdvancedPasteMetrics = AdvancedPasteMetrics {
+    width: 560.0,
+    height: 560.0,
+    preview_height: 120.0,
+    preview_chars: 4000,
+    spaces: 4,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AdvancedPasteMetrics {
+    pub width: f32,
+    pub height: f32,
+    pub preview_height: f32,
+    pub preview_chars: usize,
+    pub spaces: usize,
+}

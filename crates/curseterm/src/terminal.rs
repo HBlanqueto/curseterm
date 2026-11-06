@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use alacritty_terminal::event::{Event as TermEvent, WindowSize};
 use alacritty_terminal::grid::Scroll;
 use alacritty_terminal::index::Direction as SearchDirection;
+use alacritty_terminal::term::TermMode;
 use barrier_kit::app::use_menu_action;
 use barrier_kit::app_menu::MenuHandle;
 use barrier_kit::controls::{Button, ButtonStyle, SearchField, Slider, TextField};
@@ -36,6 +37,7 @@ use vow_design::{
     TITLEBAR,
 };
 
+use crate::advanced_paste::{AdvancedPaste, advanced_paste_sheet};
 use crate::arrangement::{self, Arrangement, TabLayout};
 use crate::clock::{local_date_time, local_time};
 use crate::composer_view::ComposerEvent;
@@ -56,6 +58,7 @@ use crate::note_view::NoteEvent;
 use crate::pane_view::{self, TerminalPane};
 use crate::panes::{Axis, Pane, Toward};
 use crate::paste_history;
+use crate::paste_transform::Transform;
 use crate::paste_warning::{self, Warning};
 use crate::pick;
 use crate::session::{
@@ -110,6 +113,7 @@ struct Handles {
     buried: State<Option<Buried>>,
     pastes: State<Vec<String>>,
     pending_paste: State<Option<String>>,
+    advanced: AdvancedPaste,
     picker: PickerState,
     sheet: State<Option<Sheet>>,
     draft: State<String>,
@@ -129,6 +133,7 @@ enum Sheet {
     SaveArrangement,
     NamedMark(SessionId),
     CopyModeKeys,
+    AdvancedPaste,
 }
 
 struct Buried {
@@ -303,6 +308,13 @@ impl App for Terminal {
         let buried = use_state(|| None::<Buried>);
         let pastes = paste_history::shared();
         let pending_paste = use_state(|| None::<String>);
+        let advanced = AdvancedPaste {
+            text: use_state(String::new),
+            transform: use_state(Transform::default),
+            regex: use_state(String::new),
+            substitution: use_state(String::new),
+            bracketed: use_state(|| true),
+        };
         let sheet = use_state(|| None::<Sheet>);
         let mut held = use_state(Modifiers::empty);
         let transparency = use_state(|| true);
@@ -361,6 +373,7 @@ impl App for Terminal {
             buried,
             pastes,
             pending_paste,
+            advanced,
             picker,
             sheet,
             draft,
@@ -571,6 +584,17 @@ impl App for Terminal {
         let sheet_view = (*sheet.read()).map(|open| match open {
             Sheet::Pick(picker) => pick_sheet(&handles, picker, revision),
             Sheet::CopyModeKeys => copy_mode_keys_sheet(&handles),
+            Sheet::AdvancedPaste => {
+                let (pasting, cancelling) = (handles.clone(), handles.clone());
+                advanced_paste_sheet(
+                    handles.advanced,
+                    move |text, bracketed| paste_advanced(&pasting, text, bracketed),
+                    move || {
+                        let mut sheet = cancelling.sheet;
+                        sheet.set(None);
+                    },
+                )
+            }
             _ => field_sheet(&handles, open),
         });
         rect()
@@ -1162,6 +1186,25 @@ fn copy_styled(handles: &Handles, session: &Session) {
     drop(defaults);
     remember_paste(handles, text.clone());
     handles.controls.copy_rich(text, html);
+}
+
+// iTermPasteHelper.m -pasteString:…: the transformed text goes out as is, bracketed when asked
+// and the program wants it. BK-027: the sheet closes one loop later.
+fn paste_advanced(handles: &Handles, text: String, bracketed: bool) {
+    let later = handles.clone();
+    handles.after(Duration::ZERO, move || {
+        let mut sheet = later.sheet;
+        sheet.set(None);
+        for session in later.receivers() {
+            let bytes = if bracketed && session.mode().contains(TermMode::BRACKETED_PASTE) {
+                session.pasted_bytes(&text)
+            } else {
+                text.clone().into_bytes()
+            };
+            session.write(bytes);
+        }
+        remember_paste(&later, text.clone());
+    });
 }
 
 fn remember_paste(handles: &Handles, text: String) {
@@ -2775,6 +2818,12 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         _ if id == menu::LOG_STOP.id => {
             if let Some(session) = active {
                 session.stop_log();
+            }
+        }
+        _ if id == menu::ADVANCED_PASTE.id => {
+            if let Some(text) = clipboard_text(handles.clipboard) {
+                handles.advanced.open(text);
+                open_sheet(handles, Sheet::AdvancedPaste);
             }
         }
         _ if id == menu::PASTE_SLOWLY.id => {

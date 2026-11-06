@@ -2114,3 +2114,44 @@ one-line-with-newline cases (they are in the test).
 again» (BK-037); Paste Slowly and Paste Escaped do not warn; with a shell
 that only emits `133;B` the session stays «at the prompt» while a command
 runs too.
+
+## Phase 47 — Advanced Paste
+
+### Plan
+
+iTerm2's Edit › Paste Special › Advanced Paste… (⌥⌘V)
+(`iTermPasteSpecialViewController.xib` and `iTermPasteHelper.m
++sanitizePasteEvent:encoding:`):
+
+1. **Transforms** in iTerm2's order, in a pure module with tests
+   (`paste_transform.rs`): remove newlines or convert them to CR, Unicode
+   punctuation to ASCII (quotes and dashes), remove control codes except
+   tab, LF, FF and CR, tabs (as is, ^V or 4 spaces), escape the shell with
+   `\` (leaving tabs escaped with ^V alone), regular-expression substitution
+   (`$1`, and `\n`, `\t`, `\r`, `\\` as in vim) and Base64 in 77-character
+   lines with CR.
+2. **The panel**, with iTerm2's defaults (CR and removing control codes on),
+   bracketed paste mode, a preview of the result and Cancel or Paste.
+3. **Test** and documentation.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the patched kit. `./dev.sh check` clean in both
+modes; two new tests for the transforms.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `echo “hola mundo”<tab>—fin` on the clipboard and ⌥⌘V: panel with CR and control codes on | ✓ | `fase47-pegado-avanzado.png` |
+| Unicode punctuation and «Convert tabs to 4 spaces»: the preview becomes `echo "hola mundo"    -fin` | ✓ | `fase47-resultado.png` (top) |
+| Paste writes exactly that into the shell | ✓ | `fase47-resultado.png` (bottom) |
+
+**Not tested:** the kit as is; Base64, the regular expression and shell
+escaping from the panel (they are in the tests).
+
+**Differs from iTerm2:** no Speed section (chunk size and delay) nor «Wait
+for shell prompt before pasting each line»; the original text cannot be
+edited in the panel; the number of spaces is fixed (4), with no control to
+change it; the regular expression is the `regex` crate's, not ICU's; the
+options are not remembered between uses.
