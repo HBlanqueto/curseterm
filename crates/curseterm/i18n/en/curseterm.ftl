@@ -132,6 +132,7 @@ find-previous = Find Previous
 use-selection-for-find = Use Selection for Find
 clear-find = Clear Find
 find-globally = Find Globally…
+select-matches = Select Matches
 find-globally-title = Find Globally
 global-search-smart-case = Substring — Automatic
 global-search-case-sensitive = Substring — Case Sensitive

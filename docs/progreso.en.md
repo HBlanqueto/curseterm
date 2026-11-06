@@ -2303,3 +2303,38 @@ is a line of our own.
 window, and it cannot be moved (BK-039). It searches only the sessions of its
 window, all at once rather than bit by bit, without a progress bar. It does
 not include the alternate screen nor folded content.
+
+## Phase 52 — Select Matches
+
+### Plan
+
+iTerm2's Edit › Find › Select Matches (`PTYTextView+ARC.m
+-convertMatchesToSelections` and `iTermSelection.m
+-enumerateSelectedAbsoluteRanges:`):
+
+1. **Selections:** each result of the current search, over the whole history,
+   becomes a selection. `alacritty_terminal` has only one selection, so the
+   others are kept in the session and painted as selected while there is no
+   other selection.
+2. **Copy:** ⌘C joins the selections, each on its own line.
+3. **Clear:** starting another selection, typing or resetting the session
+   removes them.
+4. **Menu:** enabled only with a search in progress, like Pick Result to
+   Open.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| ⌘F `red` and Select Matches through the D-Bus menu: all six `red` selected | ✓ | `fase52-selecciones.png` |
+| ⌘C: `wl-paste` gives six `red` lines | ✓ | — |
+| Typing a letter removes the selections | ✓ | — |
+
+**Not tested:** the kit as is; Copy with Styles with several selections.
+
+**Differs from iTerm2:** Copy with Styles copies only the normal selection;
+the selections do not follow the text when the history drops lines, they are
+cleared.

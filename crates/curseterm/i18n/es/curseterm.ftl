@@ -132,6 +132,7 @@ find-previous = Buscar anterior
 use-selection-for-find = Usar la selección para buscar
 clear-find = Borrar la búsqueda
 find-globally = Buscar en todas las sesiones…
+select-matches = Seleccionar los resultados
 find-globally-title = Buscar en todas las sesiones
 global-search-smart-case = Texto — Automático
 global-search-case-sensitive = Texto — Distingue mayúsculas

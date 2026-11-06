@@ -4,6 +4,7 @@ use std::ops::RangeInclusive;
 use std::time::Duration;
 
 use alacritty_terminal::grid::Dimensions;
+use alacritty_terminal::index::Point;
 use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::term::color::Colors;
 use alacritty_terminal::term::search::Match;
@@ -272,8 +273,19 @@ pub fn draw(
         ctx.canvas.restore();
         return;
     }
+    let history = term.history_size() as i64;
+    let sub_selected = |point: Point| {
+        let at = (history + i64::from(point.line.0), point.column.0);
+        selection.is_none()
+            && overlay
+                .extras
+                .sub_selections
+                .iter()
+                .any(|(start, end)| *start <= at && at <= *end)
+    };
     for indexed in display_iter {
-        let selected = selection.is_some_and(|range| range.contains(indexed.point));
+        let selected = selection.is_some_and(|range| range.contains(indexed.point))
+            || sub_selected(indexed.point);
         let line = indexed.point.line.0 + offset;
         draw_cell(
             ctx,

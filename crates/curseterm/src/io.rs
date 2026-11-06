@@ -99,6 +99,7 @@ pub struct Extras {
     pub command: Option<((i64, usize), (i64, usize))>,
     pub alert_on_next_mark: bool,
     pub notifications: Vec<Notification>,
+    pub sub_selections: Vec<((i64, usize), (i64, usize))>,
     triggers: Vec<Trigger>,
     compiled: Vec<Compiled>,
 }
@@ -210,6 +211,7 @@ impl Extras {
         self.images.clear();
         self.highlights.clear();
         self.annotations.clear();
+        self.sub_selections.clear();
     }
 
     fn anchored_lines(&mut self) -> impl Iterator<Item = &mut i64> {
@@ -245,6 +247,7 @@ impl Extras {
         self.highlights.retain(|highlight| kept(highlight.line));
         self.annotations
             .retain(|annotation| kept(annotation.start.0) && kept(annotation.end.0));
+        self.sub_selections.clear();
         let removed = lines.end - lines.start;
         self.anchored_lines()
             .filter(|anchored| **anchored >= lines.end)

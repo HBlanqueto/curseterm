@@ -1093,6 +1093,7 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::ANNOTATE_SELECTION.id, selection);
     let searching = *handles.find.open.read() && !handles.find.query.read().is_empty();
     use_menu_enabled(menu::PICK_RESULT.id, searching);
+    use_menu_enabled(menu::SELECT_MATCHES.id, searching);
     use_menu_enabled(menu::CLEAR_FIND.id, !handles.find.query.read().is_empty());
     use_menu_checked(menu::TOOLBELT.id, *handles.toolbelt.shown.read());
     for state in TerminalState::ALL {
@@ -3166,6 +3167,12 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         _ if id == menu::FIND_GLOBALLY.id => {
             let mut open = handles.global.open;
             open.set(true);
+        }
+        _ if id == menu::SELECT_MATCHES.id => {
+            let pattern = handles.find.pattern(&handles.defaults.peek());
+            if let Some((session, pattern)) = active.as_ref().zip(pattern) {
+                session.select_matches(&pattern);
+            }
         }
         _ if id == menu::CLEAR_FIND.id => {
             let mut query = handles.find.query;

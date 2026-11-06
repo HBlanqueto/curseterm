@@ -2318,3 +2318,38 @@ subrayado es una línea propia.
 flotante, y no se puede mover (BK-039). Busca solo en las sesiones de su
 ventana, de una vez y no poco a poco, sin barra de progreso. No incluye la
 pantalla alternativa ni el contenido plegado.
+
+## Fase 52 — Select Matches
+
+### Plan
+
+Edit › Find › Select Matches de iTerm2 (`PTYTextView+ARC.m
+-convertMatchesToSelections` e `iTermSelection.m
+-enumerateSelectedAbsoluteRanges:`):
+
+1. **Selecciones:** cada resultado de la búsqueda en curso, en todo el
+   historial, pasa a ser una selección. `alacritty_terminal` solo tiene una
+   selección, así que las demás se guardan en la sesión y se pintan como
+   seleccionadas mientras no haya otra selección.
+2. **Copiar:** ⌘C une las selecciones, cada una en su línea.
+3. **Borrar:** empezar otra selección, escribir o reiniciar la sesión las
+   quita.
+4. **Menú:** activo solo con una búsqueda en curso, como Pick Result to Open.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| ⌘F `red` y Select Matches por el menú D-Bus: los seis `red` seleccionados | ✓ | `fase52-selecciones.png` |
+| ⌘C: `wl-paste` da seis líneas `red` | ✓ | — |
+| Escribir una letra quita las selecciones | ✓ | — |
+
+**No probado:** con el kit tal cual; Copy with Styles con varias
+selecciones.
+
+**Difiere de iTerm2:** Copy with Styles solo copia la selección normal; las
+selecciones no siguen al texto cuando el historial descarta líneas, se
+borran.

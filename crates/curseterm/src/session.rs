@@ -367,8 +367,43 @@ impl Session {
         format!("{}\n", text.trim_end())
     }
 
+    // iTermSelection.m -enumerateSelectedAbsoluteRanges: each sub-selection ends its own line.
     pub fn selected_text(&self) -> Option<String> {
-        self.term.lock().selection_to_string()
+        let term = self.term.lock();
+        if let Some(text) = term.selection_to_string() {
+            return Some(text);
+        }
+        let extras = self.extras();
+        let history = term.history_size() as i64;
+        let point = |(line, column): (i64, usize)| {
+            Point::new(Line((line - history) as i32), Column(column))
+        };
+        (!extras.sub_selections.is_empty()).then(|| {
+            extras
+                .sub_selections
+                .iter()
+                .map(|(start, end)| term.bounds_to_string(point(*start), point(*end)))
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+    }
+
+    // PTYTextView+ARC.m -convertMatchesToSelections
+    pub fn select_matches(&self, pattern: &str) {
+        let mut term = self.term.lock();
+        let start = Point::new(Line(-(term.history_size() as i32)), Column(0));
+        let end = Point::new(
+            Line(term.screen_lines() as i32 - 1),
+            Column(term.columns() - 1),
+        );
+        let history = term.history_size() as i64;
+        let absolute = |point: &Point| (history + i64::from(point.line.0), point.column.0);
+        let ranges = matches_between(&term, pattern, start, end)
+            .iter()
+            .map(|found| (absolute(found.start()), absolute(found.end())))
+            .collect();
+        term.selection = None;
+        self.extras().sub_selections = ranges;
     }
 
     pub fn select_all(&self) {
@@ -385,6 +420,7 @@ impl Session {
 
     pub fn start_selection(&self, kind: SelectionType, point: Point, side: Side) {
         self.term.lock().selection = Some(Selection::new(kind, point, side));
+        self.extras().sub_selections.clear();
     }
 
     pub fn extend_selection(&self, point: Point, side: Side) {
@@ -394,7 +430,9 @@ impl Session {
     }
 
     pub fn clear_selection(&self) {
-        self.term.lock().selection = None;
+        let mut term = self.term.lock();
+        term.selection = None;
+        self.extras().sub_selections.clear();
     }
 
     pub fn reset(&self) {
