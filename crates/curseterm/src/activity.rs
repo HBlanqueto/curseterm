@@ -1,7 +1,6 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-// iTermAdvancedSettingsModel.m idleTimeSeconds (2) plus the second PTYSession.m -isIdle adds.
-pub const IDLE_AFTER: Duration = Duration::from_secs(3);
+use crate::advanced;
 
 #[derive(Clone, Copy, Default)]
 pub struct Activity {
@@ -33,7 +32,7 @@ impl Activity {
     pub fn idle(&mut self, at: Instant, may_notify: bool) -> bool {
         let idle = self
             .last_output
-            .is_some_and(|last| at.duration_since(last) >= IDLE_AFTER);
+            .is_some_and(|last| at.duration_since(last) >= advanced::current().idle_after());
         if !self.new_output || !idle || self.posted_idle || !may_notify {
             return false;
         }
@@ -43,12 +42,15 @@ impl Activity {
     }
 
     pub fn idle_at(&self) -> Option<Instant> {
-        self.last_output.map(|last| last + IDLE_AFTER)
+        self.last_output
+            .map(|last| last + advanced::current().idle_after())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
 
     #[test]
@@ -58,9 +60,9 @@ mod tests {
         assert!(activity.output(start, false, true));
         assert!(!activity.output(start, false, true));
         assert!(!activity.idle(start + Duration::from_secs(1), true));
-        assert!(activity.idle(start + IDLE_AFTER, true));
-        assert!(!activity.idle(start + IDLE_AFTER * 2, true));
-        assert!(activity.output(start + IDLE_AFTER * 2, false, true));
+        assert!(activity.idle(start + advanced::current().idle_after(), true));
+        assert!(!activity.idle(start + advanced::current().idle_after() * 2, true));
+        assert!(activity.output(start + advanced::current().idle_after() * 2, false, true));
     }
 
     #[test]
@@ -68,6 +70,6 @@ mod tests {
         let start = Instant::now();
         let mut activity = Activity::default();
         assert!(!activity.output(start, true, true));
-        assert!(!activity.idle(start + IDLE_AFTER, true));
+        assert!(!activity.idle(start + advanced::current().idle_after(), true));
     }
 }

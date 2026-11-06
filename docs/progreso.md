@@ -3413,3 +3413,45 @@ los dos modos.
 **Difiere de iTerm2:** la vista ampliada no se desplaza ni se puede
 seleccionar ni buscar en ella; si la selección no cabe, se ven sus primeras
 líneas.
+
+## Fase 79 — Ajustes › Advanced
+
+### Plan
+
+`iTermAdvancedSettingsViewController.m` muestra los ajustes de
+`iTermAdvancedSettingsModel.m` en una tabla con búsqueda. Solo entran los que
+ya tienen comportamiento en CurseTerm, con el valor por defecto de iTerm2:
+
+| Sección | Ajuste | Antes |
+|---|---|---|
+| General | `idleTimeSeconds` (2 s, más el segundo de `-isIdle`) | 3 s fijos |
+| General | `alertTriggerRateLimit` (1 s) | 1 s fijo |
+| General | `userNotificationTriggerRateLimit` (0 s) | 1 s, distinto de iTerm2 |
+| Tabs | `moveLeftAfterClosingTab` (no) | siempre a la derecha |
+| Terminal | `findUrlsRegex` | constante |
+| Terminal | `timeBetweenBlinks` (0,5 s) | token |
+| Pasteboard | `slowPasteBytesPerCall` (16) | 16 fijos |
+| Pasteboard | `slowPasteDelayBetweenCalls` (0,125 s) | 30 ms, distinto de iTerm2 |
+| Pasteboard | `pasteHistoryMaxOptions` (20) | 20 fijos |
+
+1. Los valores viven en `Defaults.advanced` (`[advanced]` en el `.domain`).
+2. La búsqueda exige cada palabra en la sección o en la descripción; «Show only
+   non-default values» deja los cambiados. Orden: sección y luego descripción.
+3. Un número se guarda cuando se puede leer como número.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| El panel muestra las cuatro secciones ordenadas | ✓ | — |
+| Idle a 5 y Move Left activado se guardan en `[advanced]` | ✓ | — |
+| «Show only non-default values» deja esos dos | ✓ | `fase79-avanzado.png` |
+| Con Move Left, cerrar la pestaña B de A·B·C selecciona A | ✓ | — |
+
+**No probado:** con el kit tal cual; el resto de ajustes en marcha.
+
+**Difiere de iTerm2:** solo están los ajustes con comportamiento en CurseTerm;
+el icono repite el de General (BK-024).

@@ -5,12 +5,11 @@ use barrier_kit_next::tokens::HIGHLIGHT_COLORS;
 use regex::Regex;
 use vow_design::Rgba;
 
+use crate::advanced;
 use crate::config::{Trigger, TriggerAction};
 
 // PTYTriggerEvaluator.m kMinimumPartialLineTriggerCheckInterval.
 pub const PARTIAL_LINE_INTERVAL: Duration = Duration::from_millis(500);
-// iTermAdvancedSettingsModel alertTriggerRateLimit and userNotificationTriggerRateLimit.
-const POPUP_RATE_LIMIT: Duration = Duration::from_secs(1);
 // iTermAddTriggerViewController defaultBackgroundColor: a new highlight paints red behind the text.
 const DEFAULT_HIGHLIGHT_SWATCH: usize = 5;
 
@@ -65,10 +64,16 @@ impl Compiled {
         true
     }
 
+    // iTermAdvancedSettingsModel alertTriggerRateLimit and userNotificationTriggerRateLimit.
     pub fn popup_allowed(&mut self, now: Instant) -> bool {
+        let advanced = advanced::current();
+        let limit = match self.action {
+            TriggerAction::Alert => advanced.alert_rate_limit(),
+            _ => advanced.notification_rate_limit(),
+        };
         let allowed = self
             .last_popup
-            .is_none_or(|last| now.duration_since(last) >= POPUP_RATE_LIMIT);
+            .is_none_or(|last| now.duration_since(last) >= limit);
         if allowed {
             self.last_popup = Some(now);
         }

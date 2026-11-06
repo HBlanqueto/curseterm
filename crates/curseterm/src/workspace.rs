@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::advanced;
 use crate::config::APP_NAME;
 use crate::panes::{Axis, Pane, Toward};
 use crate::session::SessionId;
@@ -202,9 +203,13 @@ impl Workspace {
         sessions
     }
 
+    // iTermAdvancedSettingsModel moveLeftAfterClosingTab: closing the active tab selects its left
+    // neighbour instead of the right one.
     fn remove_tab(&mut self, index: usize) {
         self.tabs.remove(index);
-        if self.active > index || self.active == self.tabs.len() {
+        let move_left =
+            self.active == index && index > 0 && advanced::current().move_left_after_closing_tab;
+        if self.active > index || self.active == self.tabs.len() || move_left {
             self.active = self.active.saturating_sub(1);
         }
         self.hear_active_tab();

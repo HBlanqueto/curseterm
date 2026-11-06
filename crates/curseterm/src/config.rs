@@ -5,6 +5,7 @@ use alacritty_terminal::vte::ansi::Rgb;
 use barrier_kit_next::tokens::{MONO, TERMINAL};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use crate::advanced::Advanced;
 use crate::arrangement::Arrangement;
 use crate::find_mode::FindMode;
 use crate::key_bindings::{Binding, NamedAction};
@@ -40,6 +41,7 @@ pub struct Defaults {
     pub filter_mode: FindMode,
     pub global_search_mode: FindMode,
     pub snippets: Vec<Snippet>,
+    pub advanced: Advanced,
     pub key_bindings: Vec<Binding>,
     pub actions: Vec<NamedAction>,
     pub show_tabs_in_fullscreen: bool,
@@ -69,6 +71,7 @@ impl Default for Defaults {
             filter_mode: FindMode::default(),
             global_search_mode: FindMode::default(),
             snippets: Vec::new(),
+            advanced: Advanced::default(),
             key_bindings: Vec::new(),
             actions: Vec::new(),
             // iTermPreferences.m: ShowFullScreenTabBar YES.

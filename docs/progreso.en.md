@@ -3390,3 +3390,46 @@ modes.
 
 **Differs from iTerm2:** the zoomed view does not scroll and cannot be
 selected or searched; if the selection does not fit, its first lines show.
+
+## Phase 79 — Settings › Advanced
+
+### Plan
+
+`iTermAdvancedSettingsViewController.m` shows the settings of
+`iTermAdvancedSettingsModel.m` in a searchable table. Only those CurseTerm
+already has behaviour for are in, with iTerm2's defaults:
+
+| Section | Setting | Before |
+|---|---|---|
+| General | `idleTimeSeconds` (2 s, plus the second of `-isIdle`) | fixed 3 s |
+| General | `alertTriggerRateLimit` (1 s) | fixed 1 s |
+| General | `userNotificationTriggerRateLimit` (0 s) | 1 s, unlike iTerm2 |
+| Tabs | `moveLeftAfterClosingTab` (off) | always to the right |
+| Terminal | `findUrlsRegex` | constant |
+| Terminal | `timeBetweenBlinks` (0.5 s) | token |
+| Pasteboard | `slowPasteBytesPerCall` (16) | fixed 16 |
+| Pasteboard | `slowPasteDelayBetweenCalls` (0.125 s) | 30 ms, unlike iTerm2 |
+| Pasteboard | `pasteHistoryMaxOptions` (20) | fixed 20 |
+
+1. The values live in `Defaults.advanced` (`[advanced]` in the `.domain`).
+2. The search needs every word in the section or the description; “Show only
+   non-default values” keeps the changed ones. Order: section, then
+   description.
+3. A number is saved once it reads as a number.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| The pane shows the four sections in order | ✓ | — |
+| Idle at 5 and Move Left on are saved in `[advanced]` | ✓ | — |
+| “Show only non-default values” keeps those two | ✓ | `fase79-avanzado.png` |
+| With Move Left, closing tab B of A·B·C selects A | ✓ | — |
+
+**Not tested:** the kit as is; the other settings at run time.
+
+**Differs from iTerm2:** only the settings with behaviour in CurseTerm are
+there; the icon repeats General's (BK-024).

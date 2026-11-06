@@ -25,7 +25,7 @@ use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu
 use barrier_kit_next::notifications::{self, Notice};
 use barrier_kit_next::tokens::{
     ANNOTATION, PASTE_HISTORY_SIZE, PASTE_QUESTION_WIDTH, RENAME_WIDTH, SHORTCUT_LABEL, TAB_STRIP,
-    TERMINAL, TITLE_BAR, TOOLBELT_WIDTH, TabStyle, TitleBarColors,
+    TITLE_BAR, TOOLBELT_WIDTH, TabStyle, TitleBarColors,
 };
 use barrier_kit_next::views::split_panes::SplitPanes;
 use barrier_kit_next::views::tab_bar::{Badge, TabBar};
@@ -43,6 +43,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 
 use crate::add_trigger::AddTriggerSheet;
+use crate::advanced;
 use crate::advanced_paste::{AdvancedPaste, advanced_paste_sheet};
 use crate::arrangement::{self, Arrangement, TabLayout};
 use crate::clock::{local_date_time, local_time};
@@ -89,8 +90,6 @@ const INITIAL_GRID: (u16, u16) = (80, 24);
 const QUICK_EXIT: Duration = Duration::from_secs(1);
 const DIVIDER_STEP: f32 = 0.05;
 const UNDO_CLOSE: Duration = Duration::from_secs(5);
-const SLOW_PASTE_CHUNK: usize = 16;
-const SLOW_PASTE_PAUSE: Duration = Duration::from_millis(30);
 
 type Sessions = HashMap<SessionId, Rc<Session>>;
 type ClipboardState = State<Option<Box<dyn ClipboardProvider>>>;
@@ -1358,6 +1357,7 @@ fn use_live_menu(handles: &Handles) {
         .active()
         .is_some_and(|session| session.extras().triggers_enabled);
     use_menu_checked(menu::TRIGGERS_ENABLED.id, triggers);
+    advanced::store(&handles.defaults.read().advanced);
     let soft_boundaries = handles.defaults.read().selection_respects_soft_boundaries;
     session::SOFT_BOUNDARIES.store(soft_boundaries, std::sync::atomic::Ordering::Relaxed);
     use_menu_checked(menu::SOFT_BOUNDARIES.id, soft_boundaries);
@@ -2095,11 +2095,12 @@ fn start_coprocess(handles: &Handles, of: SessionId, command: &str) {
 }
 
 fn paste_slowly(handles: &Handles, text: String) {
+    let advanced = advanced::current();
     for session in handles.receivers() {
         let bytes = session.pasted_bytes(&text);
-        for (index, chunk) in bytes.chunks(SLOW_PASTE_CHUNK).enumerate() {
+        for (index, chunk) in bytes.chunks(advanced.slow_paste_chunk()).enumerate() {
             let (session, chunk) = (session.clone(), chunk.to_vec());
-            handles.after(SLOW_PASTE_PAUSE * index as u32, move || {
+            handles.after(advanced.slow_paste_pause() * index as u32, move || {
                 session.write(chunk.clone())
             });
         }
@@ -2439,14 +2440,9 @@ fn cursor_blink_off(handles: &Handles, revision: State<u64>) -> bool {
     if !session.term.lock().cursor_style().blinking {
         return false;
     }
-    let period = TERMINAL.cursor_blink_ms;
-    repaint_after(
-        handles,
-        revision,
-        &handles.blink_armed,
-        Duration::from_millis(period),
-    );
-    (session.started.elapsed().as_millis() / u128::from(period)) % 2 == 1
+    let period = advanced::current().blink_period();
+    repaint_after(handles, revision, &handles.blink_armed, period);
+    (session.started.elapsed().as_millis() / period.as_millis()) % 2 == 1
 }
 
 fn status_bar(handles: &Handles, revision: State<u64>) -> Option<Element> {
@@ -4089,7 +4085,8 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         }
         _ if id == menu::FIND_URLS.id => {
             if let Some(session) = &active {
-                let found = session::visible_found(&session.term.lock(), hints::URL_PATTERN);
+                let pattern = advanced::current().find_urls_regex;
+                let found = session::visible_found(&session.term.lock(), &pattern);
                 show_hints(handles, session, found, HintAction::Open);
             }
         }

@@ -26,6 +26,7 @@ use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Size};
 use vow_design::{CAPTION, HEADLINE, SIDEBAR, SPACE_1, SPACE_3, WINDOW_MIN_SIZE};
 
+use crate::advanced_pane::AdvancedPane;
 use crate::arrangements_pane::ArrangementsPane;
 use crate::auxiliary::on_action;
 use crate::config::{
@@ -147,6 +148,13 @@ impl App for Settings {
                             tr!("pane-shortcuts"),
                             ShortcutsPane {
                                 defaults: defaults.clone(),
+                            },
+                        )
+                        .tab(
+                            Symbol::SlidersVertical,
+                            tr!("pane-advanced"),
+                            AdvancedPane {
+                                advanced: defaults.advanced.clone(),
                             },
                         )
                         .selected(*tab.read())

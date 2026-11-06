@@ -1,6 +1,6 @@
 use freya_core::prelude::State;
 
-const LIMIT: usize = 20;
+use crate::advanced;
 
 thread_local! {
     static SHARED: State<Vec<String>> = State::create_global(Vec::new());
@@ -16,7 +16,7 @@ pub fn remember(history: &mut Vec<String>, text: String) {
     }
     history.retain(|entry| *entry != text);
     history.insert(0, text);
-    history.truncate(LIMIT);
+    history.truncate(advanced::current().paste_history_limit());
 }
 
 pub fn one_line(text: &str) -> String {
@@ -33,11 +33,11 @@ mod tests {
     #[test]
     fn a_repeated_text_moves_to_the_front_and_the_oldest_falls_off() {
         let mut history = Vec::new();
-        for index in 0..=LIMIT {
+        for index in 0..=advanced::current().paste_history_limit() {
             remember(&mut history, index.to_string());
         }
         remember(&mut history, "5".to_string());
-        assert_eq!(history.len(), LIMIT);
+        assert_eq!(history.len(), advanced::current().paste_history_limit());
         assert_eq!(history[0], "5");
         assert_eq!(history.iter().filter(|entry| *entry == "5").count(), 1);
         assert!(!history.contains(&"0".to_string()));
