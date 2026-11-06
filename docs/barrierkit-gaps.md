@@ -71,6 +71,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-039 | controles / ventanas | Sin vista de contorno ni panel flotante | media | Workaround probado: panel dentro de la ventana |
 | BK-040 | controles | `PopUpButton` no se desplaza ni busca | media | Workaround probado: grupos y filtro |
 | BK-041 | ventanas | Un configure confirmado sale con la geometría vieja | alta | Parche 0012 probado |
+| BK-042 | diálogos | `sheet` y `Alert` redondean sus esquinas | media | Bloque probado: `views::feedback` sin radio |
 
 ## Gaps
 
@@ -933,6 +934,24 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Cómo reproducirlo**: weston 16 con `window_style = "maximized"` en el
   perfil: «xdg_surface geometry (656 x 470) does not match the configured
   maximized state (1100 x 668)».
+
+### BK-042 — `sheet` y `Alert` redondean sus esquinas
+- **Área**: diálogos
+- **Qué necesitaba CurseTerm**: hojas y alertas (cerrar, alerta de trigger,
+  teclas atascadas, Add Trigger, Advanced Paste…) sin esquinas redondeadas.
+  Redondear un diálogo es trabajo del compositor Malaysia, como en macOS lo
+  hace el servidor de ventanas con las hojas.
+- **Qué ofrece hoy BarrierKit**: `views::feedback::sheet` pinta el diálogo
+  con `corner_radius(DIALOG.corner_radius)` y `Alert` lo usa
+  (`views/feedback.rs:47`).
+- **Qué falta**: un diálogo de esquinas rectas; a la larga, que el diálogo
+  sea una superficie propia que el compositor redondee.
+- **Cómo lo resolví en CurseTerm**: `barrier_kit_next::views::feedback`
+  copia `sheet` y `Alert` sin el radio. Find Globally tampoco lo pone.
+- **Coste del workaround**: dos componentes duplicados del kit.
+- **API propuesta para el kit**: quitar `corner_radius` de `sheet`.
+- **Gravedad**: media
+- **Cómo reproducirlo**: un trigger Show Alert; la hoja sale con las esquinas redondeadas.
 
 ## Cosas que funcionaron bien
 

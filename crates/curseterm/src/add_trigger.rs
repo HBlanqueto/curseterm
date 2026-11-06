@@ -1,9 +1,9 @@
 use barrier_kit::controls::{Button, ButtonStyle, Checkbox, TextField};
 use barrier_kit::popup_button::PopUpButton;
 use barrier_kit::style::{Palette, text};
-use barrier_kit::views::feedback::sheet;
 use barrier_kit::views::form::{Form, Row, Section};
 use barrier_kit_next::tokens::KEY_BINDING_EDITOR;
+use barrier_kit_next::views::feedback::sheet;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Direction, Size};
 use vow_design::{HEADLINE, SPACE_2};

@@ -3306,3 +3306,27 @@ guardar disposición decía «Nombre»; ahora usa `save-arrangement-name`.
 **No probado:** con el kit tal cual; Undo, Change Profile, Resize Pane, Swap
 Next/Previous, Move Session, Send Text without Broadcasting con difusión
 activa, Compose, Find Regex, Paste… y Paste or Send.
+
+## Fase 75 — Diálogos sin esquinas redondeadas
+
+### Plan
+
+En macOS el servidor de ventanas redondea las hojas; aquí lo hará el
+compositor Malaysia. CurseTerm no redondea ningún diálogo:
+
+1. `barrier_kit_next::views::feedback` da `sheet` y `Alert` sin radio
+   (BK-042). Todas las hojas y alertas los usan.
+2. Find Globally, que en iTerm2 es una ventana propia, tampoco lleva radio.
+3. El Composer y Session Note siguen redondeados: en iTerm2 son vistas dentro
+   de la ventana, no diálogos.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Trigger Show Alert: la hoja sale con esquinas rectas | ✓ | `fase75-hoja-sin-radio.png` |
+
+**No probado:** con el kit tal cual; Find Globally y las demás hojas.

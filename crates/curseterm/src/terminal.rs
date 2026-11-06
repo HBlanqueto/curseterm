@@ -19,7 +19,6 @@ use barrier_kit::style::{Palette, text};
 use barrier_kit::symbol::Symbol;
 use barrier_kit::theme::color;
 use barrier_kit::titlebar::{window_drag_handler, window_traffic_lights};
-use barrier_kit::views::feedback::{Alert, sheet};
 use barrier_kit::views::table::Table;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
 use barrier_kit_next::notifications::{self, Notice};
@@ -27,6 +26,7 @@ use barrier_kit_next::tokens::{
     ANNOTATION, PASTE_HISTORY_SIZE, PASTE_QUESTION_WIDTH, RENAME_WIDTH, SHORTCUT_LABEL, TAB_STRIP,
     TERMINAL, TITLE_BAR, TOOLBELT_WIDTH, TabStyle, TitleBarColors,
 };
+use barrier_kit_next::views::feedback::{Alert, sheet};
 use barrier_kit_next::views::split_panes::SplitPanes;
 use barrier_kit_next::views::tab_bar::{Badge, TabBar};
 use freya_clipboard::copypasta::ClipboardProvider;
