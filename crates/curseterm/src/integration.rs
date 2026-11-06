@@ -12,6 +12,7 @@ pub enum Report {
     CommandEnd(Option<i32>),
     Image(InlineImage),
     Notification(Notification),
+    RemoteHost { username: String, hostname: String },
 }
 
 #[derive(Debug, Default, PartialEq)]
@@ -55,6 +56,16 @@ pub fn parse(payload: &[u8]) -> Option<Report> {
             let iterm = text?.strip_prefix("1337;")?;
             if let Some(path) = iterm.strip_prefix("CurrentDir=") {
                 return Some(Report::Directory(path.into()));
+            }
+            // iTerm2 shell integration: OSC 1337;RemoteHost=user@host.
+            if let Some((username, hostname)) = iterm
+                .strip_prefix("RemoteHost=")
+                .and_then(|remote| remote.split_once('@'))
+            {
+                return Some(Report::RemoteHost {
+                    username: username.to_string(),
+                    hostname: hostname.to_string(),
+                });
             }
             if iterm == "SetMark" {
                 return Some(Report::Mark);

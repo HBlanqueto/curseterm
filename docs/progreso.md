@@ -2946,3 +2946,51 @@ Defaults; una coincidencia que cruza una línea partida.
 ⌘+clic) ni el banco de pruebas de la hoja; el texto mirado es la línea lógica
 pulsada, no dos líneas por arriba y por abajo; `\b` es de ASCII y la regla
 HTTP URL pierde la rama con look-behind.
+
+## Fase 65 — Automatic Profile Switching
+
+### Plan
+
+El cambio automático de perfil de iTerm2 (`iTermRule.m`,
+`iTermAutomaticProfileSwitcher.m` y `PTYSession.m
+-tryAutoProfileSwitchWithHostname:…`):
+
+1. **Reglas** del perfil con la sintaxis `[!][usuario@][equipo][:ruta][&trabajo]`
+   o `/ruta[&trabajo]`, con `*` y `?`; `!` la hace pegajosa.
+2. **Puntuación** de `iTermRule.m`: equipo exacto 32, equipo con comodín 16 y
+   algo, trabajo 8, usuario 4, ruta exacta 2, `*` solo 1; una parte que no
+   coincide descarta la regla. Gana el perfil con la regla mejor puntuada.
+3. **La pila:** al cambiar se guarda el perfil anterior; si ya ninguna regla
+   coincide, se vuelve al primero de la pila; una regla pegajosa vacía la pila.
+4. **Dónde está la sesión:** equipo y usuario de `OSC 1337;RemoteHost` o, sin
+   él, los de esta máquina; la carpeta; el trabajo en primer plano y su orden.
+   Se mira al llegar salida, como mucho dos veces por segundo, y otra vez al
+   vencer el intervalo si hacía falta.
+5. **Ajustes › Profiles › Advanced › Automatic Profile Switching:** una regla
+   por fila con «−» y «+».
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado y tres perfiles: Default,
+Editor (`&less`, distintivo «EDITOR») y Tmp (`/tmp*`, distintivo «TMP»).
+`./dev.sh check` limpio en los dos modos; tests nuevos de las reglas, la
+puntuación y la vuelta al perfil anterior.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `less /etc/hostname`: aparece «EDITOR» | ✓ | `fase65-editor.png` |
+| `q`: vuelve a Default, sin distintivo | ✓ | — |
+| `cd /tmp`: aparece «TMP»; `cd /`: desaparece | ✓ | `fase65-tmp.png` |
+
+**Fallo encontrado y corregido en la prueba:** `less` no cambiaba el perfil:
+escribe una sola vez al arrancar y esa comprobación caía dentro del medio
+segundo de espera. Ahora una comprobación frenada se repite al vencer el
+intervalo.
+
+**No probado:** con el kit tal cual; `OSC 1337;RemoteHost` y una regla de
+equipo; una regla pegajosa; editar las reglas en Ajustes.
+
+**Difiere de iTerm2:** sin reglas `{expresión}`; la pila guarda solo el
+nombre del perfil, no los cambios de Edit Session; no se guarda al cerrar;
+sin la casilla «Prevent Automatic Profile Switching» ni el registro de
+depuración.

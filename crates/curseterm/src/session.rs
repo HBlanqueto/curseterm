@@ -9,7 +9,7 @@ use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use alacritty_terminal::event::{Event, EventListener, OnResize, WindowSize};
 use alacritty_terminal::grid::{Dimensions, Scroll};
@@ -37,8 +37,10 @@ use crate::jobs;
 use crate::key_report::{KITTY_FLAGS, KeyMode};
 use crate::keys::CopyCommand;
 use crate::links;
+use crate::profile_switching::{Place, Switcher};
 use crate::session_note::SessionNote;
 use crate::smart_selection::{self, Precision};
+use crate::status;
 
 pub type SessionId = u64;
 
@@ -101,6 +103,8 @@ pub enum MarkJump {
     Next,
 }
 
+const PLACE_CHECK_INTERVAL: Duration = Duration::from_millis(500);
+
 pub struct Launch {
     pub profile: String,
     pub command: Option<String>,
@@ -109,7 +113,7 @@ pub struct Launch {
 
 pub struct Session {
     pub id: SessionId,
-    pub profile: String,
+    profile: RefCell<String>,
     pub term: Arc<FairMutex<Term<Listener>>>,
     extras: Arc<Mutex<Extras>>,
     pty: RefCell<tty::Pty>,
@@ -123,6 +127,9 @@ pub struct Session {
     ended: Cell<bool>,
     options: Cell<(usize, CursorStyle, bool)>,
     coprocess: RefCell<Option<Child>>,
+    switcher: RefCell<Switcher>,
+    place_checked: Cell<Instant>,
+    pub place_check_queued: Cell<bool>,
     pub composer: RefCell<Composer>,
     pub note: RefCell<SessionNote>,
     pub activity: Cell<Activity>,
@@ -177,7 +184,7 @@ impl Session {
         let sender = pty_io::start(&mut pty, term.clone(), listener, extras.clone())?;
         Ok(Self {
             id,
-            profile: launch.profile,
+            profile: RefCell::new(launch.profile),
             term,
             extras,
             pty: RefCell::new(pty),
@@ -195,11 +202,24 @@ impl Session {
                 false,
             )),
             coprocess: RefCell::new(None),
+            switcher: RefCell::default(),
+            place_checked: Cell::new(Instant::now() - PLACE_CHECK_INTERVAL),
+            place_check_queued: Cell::new(false),
             composer: RefCell::default(),
             note: RefCell::default(),
             activity: Cell::default(),
             idle_armed: Cell::new(false),
         })
+    }
+
+    pub fn profile(&self) -> String {
+        self.profile.borrow().clone()
+    }
+
+    // PTYSession.m -setProfile:preservingName:: the session takes another profile's settings.
+    pub fn change_profile(&self, profile: &Profile) {
+        *self.profile.borrow_mut() = profile.name.clone();
+        self.apply_profile(profile);
     }
 
     pub fn apply_profile(&self, profile: &Profile) {
@@ -1030,6 +1050,47 @@ impl Session {
             .iter()
             .position(|found| Some(*found.start()) == selected)?;
         Some((current + 1, all.len()))
+    }
+
+    // PTYSession.m -tryAutoProfileSwitchWithHostname:…: where the session is now; without shell
+    // integration, this machine and its user.
+    pub fn place(&self) -> Place {
+        let (username, hostname) = self.extras().remote_host.clone().unwrap_or_else(|| {
+            (
+                std::env::var("USER").unwrap_or_default(),
+                status::host_name().unwrap_or_default(),
+            )
+        });
+        let group = rustix::termios::tcgetpgrp(self.pty.borrow().file()).ok();
+        let read = |file: &str| {
+            group.and_then(|group| {
+                std::fs::read(format!("/proc/{}/{file}", group.as_raw_nonzero())).ok()
+            })
+        };
+        let text = |bytes: Vec<u8>| String::from_utf8_lossy(&bytes).trim().replace('\0', " ");
+        Place {
+            hostname,
+            username,
+            path: self
+                .working_directory()
+                .map(|path| path.display().to_string())
+                .unwrap_or_default(),
+            job: read("comm").map(text).unwrap_or_default(),
+            command_line: read("cmdline").map(text).unwrap_or_default(),
+        }
+    }
+
+    // At most twice a second, since it reads /proc; a check asked for sooner waits for the rest.
+    pub fn place_check_wait(&self) -> Option<Duration> {
+        PLACE_CHECK_INTERVAL.checked_sub(self.place_checked.get().elapsed())
+    }
+
+    pub fn switch_profile_for_place(&self, profiles: &[Profile]) -> Option<String> {
+        self.place_checked.set(Instant::now());
+        self.place_check_queued.set(false);
+        let place = self.place();
+        let current = self.profile();
+        self.switcher.borrow_mut().update(profiles, &current, place)
     }
 
     pub fn foreground_name(&self) -> Option<String> {

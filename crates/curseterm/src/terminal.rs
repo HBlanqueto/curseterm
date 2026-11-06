@@ -307,7 +307,7 @@ impl Handles {
     fn current_profile(&self) -> String {
         self.active().map_or_else(
             || self.defaults.peek().default_profile_name(),
-            |session| session.profile.clone(),
+            |session| session.profile(),
         )
     }
 }
@@ -443,7 +443,7 @@ impl App for Terminal {
                 let defaults = defaults.read().clone();
                 text_zoom.read();
                 for session in sessions.peek().values() {
-                    let profile = defaults.profile(&session.profile);
+                    let profile = defaults.profile(&session.profile());
                     let fonts = handles.fonts_for(&profile);
                     session.refit(fonts.cell_width, fonts.cell_height);
                     session.apply_profile(&profile);
@@ -546,7 +546,7 @@ impl App for Terminal {
         let terminal_background = handles
             .active()
             .map(|session| {
-                let profile = defaults.read().profile(&session.profile);
+                let profile = defaults.read().profile(&session.profile());
                 defaults.read().scheme(&profile, dark).background
             })
             .unwrap_or_default();
@@ -817,7 +817,7 @@ impl App for Terminal {
                 }
                 let binding = {
                     let defaults = keyboard.defaults.peek();
-                    let profile = defaults.profile(&session.profile);
+                    let profile = defaults.profile(&session.profile());
                     key_bindings::find(
                         &profile.key_mappings,
                         &defaults.key_bindings,
@@ -831,7 +831,7 @@ impl App for Terminal {
                     *revision.write() += 1;
                     return;
                 }
-                let alt_key = keyboard.defaults.peek().profile(&session.profile).alt_key;
+                let alt_key = keyboard.defaults.peek().profile(&session.profile()).alt_key;
                 let modifiers = match (&data.key, alt_key) {
                     (Key::Character(_), AltKey::Normal) => {
                         data.modifiers.difference(Modifiers::ALT)
@@ -1099,7 +1099,7 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
         Pane::Leaf(id) => match painting.sessions.get(id) {
             Some(session) => {
                 let mut workspace = painting.workspace;
-                let profile = painting.defaults.profile(&session.profile);
+                let profile = painting.defaults.profile(&session.profile());
                 let pane = TerminalPane {
                     session: session.clone(),
                     fonts: painting.handles.fonts_for(&profile),
@@ -1478,7 +1478,7 @@ fn copy_styled(handles: &Handles, session: &Session) {
 #[cfg(feature = "kit-parcheado")]
 fn copy_styled(handles: &Handles, session: &Session) {
     let defaults = handles.defaults.peek();
-    let profile = defaults.profile(&session.profile);
+    let profile = defaults.profile(&session.profile());
     let scheme = defaults.scheme(&profile, handles.dark.get());
     let (Some(text), Some(lines)) = (
         session.selected_text(),
@@ -1749,7 +1749,7 @@ fn pick_entries(handles: &Handles, picker: Picker) -> Vec<(String, Choice)> {
                 .iter()
                 .flat_map(|tab| tab.root.leaves())
                 .filter_map(|id| {
-                    let profile = &sessions.get(&id)?.profile;
+                    let profile = &sessions.get(&id)?.profile();
                     let label = format!("{} — {profile}", workspace.title(id));
                     Some((label, Choice::Focus(id)))
                 })
@@ -2372,7 +2372,7 @@ fn cursor_blink_off(handles: &Handles, revision: State<u64>) -> bool {
 
 fn status_bar(handles: &Handles, revision: State<u64>) -> Option<Element> {
     let session = handles.active()?;
-    let profile = handles.defaults.read().profile(&session.profile);
+    let profile = handles.defaults.read().profile(&session.profile());
     if !profile.status_bar {
         return None;
     }
@@ -2732,7 +2732,7 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
             );
         }
         TermEvent::Bell => {
-            let profile = handles.defaults.peek().profile(&session.profile);
+            let profile = handles.defaults.peek().profile(&session.profile());
             if profile.bell_icon_in_tabs {
                 workspace.write().ring(id);
             }
@@ -2776,14 +2776,15 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
             if reported {
                 mark_set(handles, &session);
             }
-            let profile = handles.defaults.peek().profile(&session.profile);
+            let profile = handles.defaults.peek().profile(&session.profile());
             for notification in posted {
                 post_escape_sequence_notification(handles, id, &profile, notification);
             }
             note_output(handles, &session, &profile);
+            switch_profile_automatically(handles, &session, revision);
         }
         TermEvent::ChildExit(_) | TermEvent::Exit => {
-            let profile = handles.defaults.peek().profile(&session.profile);
+            let profile = handles.defaults.peek().profile(&session.profile());
             if profile.notify_session_ended && should_post_notification(handles, id, &profile) {
                 let (name, tab) = session_label(&workspace.peek(), id);
                 post_for_session(
@@ -2807,6 +2808,38 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
             }
         }
         _ => {}
+    }
+}
+
+// PTYSession.m -tryAutoProfileSwitchWithHostname:…: the profile whose Automatic Profile
+// Switching rule best fits where the session is.
+fn switch_profile_automatically(handles: &Handles, session: &Session, revision: State<u64>) {
+    let profiles = handles.defaults.peek().profiles();
+    if profiles
+        .iter()
+        .all(|profile| profile.bound_hosts.is_empty())
+    {
+        return;
+    }
+    if let Some(wait) = session.place_check_wait() {
+        if !session.place_check_queued.replace(true) {
+            let (later, id) = (handles.clone(), session.id);
+            handles.after(wait, move || {
+                let session = later.sessions.peek().get(&id).cloned();
+                if let Some(session) = session {
+                    switch_profile_automatically(&later, &session, revision);
+                }
+            });
+        }
+        return;
+    }
+    let Some(name) = session.switch_profile_for_place(&profiles) else {
+        return;
+    };
+    if let Some(profile) = profiles.iter().find(|profile| profile.name == name) {
+        session.change_profile(profile);
+        let mut revision = revision;
+        *revision.write() += 1;
     }
 }
 
@@ -2922,7 +2955,7 @@ fn watch_idle(handles: &Handles, session: Rc<Session>) {
             return;
         }
         session.idle_armed.set(false);
-        let profile = waiting.defaults.peek().profile(&session.profile);
+        let profile = waiting.defaults.peek().profile(&session.profile());
         let may_notify = should_post_notification(&waiting, session.id, &profile);
         let mut activity = session.activity.get();
         if activity.idle(now, may_notify) && profile.notify_idle {
@@ -3076,7 +3109,7 @@ fn tab_layout(handles: &Handles, tab: &Tab) -> Option<TabLayout> {
     let sessions = handles.sessions.peek();
     let describe = |id| {
         let session = sessions.get(&id)?;
-        Some((session.profile.clone(), session.working_directory()))
+        Some((session.profile(), session.working_directory()))
     };
     Some(TabLayout {
         title: tab.title.clone(),
@@ -3132,7 +3165,7 @@ fn split(handles: &Handles, events: &Events, axis: Axis, profile: &str) {
 }
 
 fn restart(handles: &Handles, events: &Events, session: &Session) {
-    let mut launch = handles.launch(&session.profile, None);
+    let mut launch = handles.launch(&session.profile(), None);
     launch.directory = session.working_directory().or(launch.directory);
     if let Some(id) = spawn(handles, events, launch) {
         let mut workspace = handles.workspace;
@@ -3158,7 +3191,7 @@ fn request_close(handles: &Handles, closing: Closing) {
         .iter()
         .filter_map(|id| handles.sessions.peek().get(id).cloned())
         .any(
-            |session| match defaults.profile(&session.profile).prompt_before_closing {
+            |session| match defaults.profile(&session.profile()).prompt_before_closing {
                 ClosePrompt::Always => true,
                 ClosePrompt::Never => false,
                 ClosePrompt::IfJobs => session.has_jobs(),
@@ -3824,7 +3857,7 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
                 let rules = handles
                     .defaults
                     .peek()
-                    .profile(&session.profile)
+                    .profile(&session.profile())
                     .smart_selection_rules;
                 let pattern = smart_selection::combined_pattern(&rules);
                 let found = session::visible_found(&session.term.lock(), &pattern);
@@ -4062,7 +4095,7 @@ fn place_ime_cursor(handles: &Handles) {
     let Some(session) = handles.active() else {
         return;
     };
-    let fonts = handles.fonts_for(&handles.defaults.peek().profile(&session.profile));
+    let fonts = handles.fonts_for(&handles.defaults.peek().profile(&session.profile()));
     let (column, line) = session.cursor_cell();
     let (x, y) = session.origin.get();
     handles.controls.set_ime_cursor_area(

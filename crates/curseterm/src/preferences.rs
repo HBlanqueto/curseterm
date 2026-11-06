@@ -392,6 +392,10 @@ impl Component for ProfilesPane {
                                 .maybe_child(
                                     (*section.read() == 7)
                                         .then(|| smart_selection_table(index, &profile)),
+                                )
+                                .maybe_child(
+                                    (*section.read() == 7)
+                                        .then(|| profile_switching_list(index, &profile)),
                                 ),
                         ),
                     ),
@@ -1103,6 +1107,59 @@ fn smart_selection_table(index: usize, profile: &Profile) -> Rect {
         )
 }
 
+// ProfilesAdvancedPreferencesViewController.m Automatic Profile Switching: one rule per row,
+// [user@][host][:path][&job], with + and −.
+fn profile_switching_list(index: usize, profile: &Profile) -> Rect {
+    let rows = profile
+        .bound_hosts
+        .iter()
+        .enumerate()
+        .map(|(position, rule)| {
+            rect()
+                .width(Size::fill())
+                .direction(Direction::Horizontal)
+                .content(Content::flex())
+                .cross_align(Alignment::Center)
+                .spacing(SPACE_1)
+                .child(rect().width(Size::flex(1.0)).child(ProfileText {
+                    index,
+                    field: Field::BoundHost(position),
+                    value: rule.clone(),
+                }))
+                .child(
+                    IconButton::new(Symbol::Minus, tr!("profile-switching-remove")).on_press(
+                        move |_| {
+                            edit(index, |profile| {
+                                if position < profile.bound_hosts.len() {
+                                    profile.bound_hosts.remove(position);
+                                }
+                            })
+                        },
+                    ),
+                )
+                .into_element()
+        });
+    rect()
+        .width(Size::fill())
+        .direction(Direction::Vertical)
+        .spacing(SPACE_1)
+        .child(text(
+            tr!("section-profile-switching"),
+            HEADLINE,
+            Palette::current().label,
+        ))
+        .child(text(
+            tr!("profile-switching-help"),
+            CAPTION,
+            Palette::current().secondary_label,
+        ))
+        .children(rows)
+        .child(
+            IconButton::new(Symbol::Plus, tr!("profile-switching-add"))
+                .on_press(move |_| edit(index, |profile| profile.bound_hosts.push(String::new()))),
+        )
+}
+
 fn edit_trigger(index: usize, position: usize, change: impl FnOnce(&mut Trigger)) {
     edit(index, |profile| {
         if let Some(trigger) = profile.triggers.get_mut(position) {
@@ -1215,6 +1272,7 @@ enum Field {
     TriggerRegex(usize),
     SmartNotes(usize),
     SmartRegex(usize),
+    BoundHost(usize),
     TriggerParameter(usize, TriggerAction),
     Scrollback,
     Columns,
@@ -1236,6 +1294,7 @@ impl Field {
             Self::Family => tr!("font-family"),
             Self::TriggerRegex(_) | Self::SmartRegex(_) => tr!("trigger-regex"),
             Self::SmartNotes(_) => tr!("smart-selection-notes"),
+            Self::BoundHost(_) => tr!("profile-switching-placeholder"),
             Self::TriggerParameter(_, action) => trigger_placeholder(action),
             Self::Scrollback => tr!("scrollback-lines"),
             Self::Columns => tr!("window-columns"),
@@ -1290,6 +1349,11 @@ impl Field {
                             Self::TriggerRegex(_) => trigger.regex = value.clone(),
                             _ => trigger.parameter = value.clone(),
                         }
+                    }
+                }
+                Self::BoundHost(position) => {
+                    if let Some(rule) = profile.bound_hosts.get_mut(position) {
+                        *rule = value.clone();
                     }
                 }
                 Self::SmartNotes(position) | Self::SmartRegex(position) => {

@@ -2923,3 +2923,50 @@ a match across a wrapped line.
 the sheet's playground; the text looked at is the clicked logical line, not
 two lines above and below; `\b` is ASCII and the HTTP URL rule loses its
 look-behind branch.
+
+## Phase 65 — Automatic Profile Switching
+
+### Plan
+
+iTerm2's automatic profile switching (`iTermRule.m`,
+`iTermAutomaticProfileSwitcher.m` and `PTYSession.m
+-tryAutoProfileSwitchWithHostname:…`):
+
+1. **Rules** in the profile with the syntax `[!][user@][host][:path][&job]`
+   or `/path[&job]`, with `*` and `?`; `!` makes it sticky.
+2. **Scoring** from `iTermRule.m`: exact host 32, host with a wildcard 16 and
+   a bit, job 8, user 4, exact path 2, a lone `*` 1; a part that does not
+   match rules the rule out. The profile with the best-scoring rule wins.
+3. **The stack:** switching saves the previous profile; when no rule matches
+   any more, the first one in the stack comes back; a sticky rule empties the
+   stack.
+4. **Where the session is:** host and user from `OSC 1337;RemoteHost` or,
+   without it, this machine's; the folder; the foreground job and its command
+   line. It is checked as output arrives, at most twice a second, and again
+   when the interval runs out if needed.
+5. **Settings › Profiles › Advanced › Automatic Profile Switching:** one rule
+   per row with «−» and «+».
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit and three profiles: Default,
+Editor (`&less`, badge «EDITOR») and Tmp (`/tmp*`, badge «TMP»).
+`./dev.sh check` clean in both modes; new tests for the rules, the scoring
+and the return to the previous profile.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `less /etc/hostname`: «EDITOR» appears | ✓ | `fase65-editor.png` |
+| `q`: back to Default, without a badge | ✓ | — |
+| `cd /tmp`: «TMP» appears; `cd /`: it goes away | ✓ | `fase65-tmp.png` |
+
+**Bug found and fixed while testing:** `less` did not switch the profile: it
+writes only once when it starts and that check fell inside the half-second
+wait. Now a held-back check runs again when the interval runs out.
+
+**Not tested:** the kit as is; `OSC 1337;RemoteHost` and a host rule; a
+sticky rule; editing the rules in Settings.
+
+**Differs from iTerm2:** no `{expression}` rules; the stack keeps only the
+profile's name, not Edit Session changes; it is not saved on quit; no
+«Prevent Automatic Profile Switching» checkbox nor the debug log.

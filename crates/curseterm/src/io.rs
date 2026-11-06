@@ -81,6 +81,7 @@ pub struct Snapshot {
 #[derive(Default)]
 pub struct Extras {
     pub directory: Option<PathBuf>,
+    pub remote_host: Option<(String, String)>,
     pub marks: Vec<i64>,
     pub named_marks: Vec<(i64, String)>,
     pub output: Option<[i64; 2]>,
@@ -793,6 +794,9 @@ fn apply(term: &mut Term<Listener>, extras: &Mutex<Extras>, report: Report) {
     };
     match report {
         Report::Directory(path) => extras.directory = Some(path),
+        Report::RemoteHost { username, hostname } => {
+            extras.remote_host = Some((username, hostname))
+        }
         Report::Mark => {
             extras.add_mark(absolute_line(term));
             extras.mark_reported = true;

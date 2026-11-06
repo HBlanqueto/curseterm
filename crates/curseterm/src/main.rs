@@ -36,6 +36,7 @@ mod paste_transform;
 mod paste_warning;
 mod pick;
 mod preferences;
+mod profile_switching;
 mod session;
 mod session_note;
 mod smart_selection;
