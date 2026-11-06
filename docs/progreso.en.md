@@ -1218,3 +1218,16 @@ paths with spaces in Recent Directories.
 
 **Differs from iTerm2:** there are no notes, no captured output tool and no
 recent commands tool; the tools cannot be reordered.
+
+## Phase 26 — Status bar
+
+### Plan
+
+1. **Profiles › Session › Status bar:** with the option on, the window shows
+   under the panes a bar with the active session's data: the directory, the
+   foreground process, the directory's git branch, the host name and the
+   time, which updates every second.
+2. **Git branch:** `.git` is looked up walking up from the directory and
+   `HEAD` is read (also when `.git` is a `gitdir:` file), without running
+   `git`.
+3. **Test** on headless sway and documentation in both languages.

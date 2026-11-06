@@ -1224,3 +1224,15 @@ rutas con espacios en Recent Directories.
 
 **Difiere de iTerm2:** no hay notas, ni la herramienta de capturas, ni la de
 órdenes recientes; las herramientas no se pueden reordenar.
+
+## Fase 26 — Barra de estado
+
+### Plan
+
+1. **Profiles › Session › Status bar:** con la opción activa, la ventana
+   muestra bajo los paneles una barra con datos de la sesión activa: el
+   directorio, el proceso en primer plano, la rama de git del directorio, el
+   nombre del equipo y la hora, que se actualiza cada segundo.
+2. **Rama de git:** se busca `.git` subiendo desde el directorio y se lee
+   `HEAD` (también si `.git` es un archivo `gitdir:`), sin ejecutar `git`.
+3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
