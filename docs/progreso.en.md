@@ -1281,3 +1281,30 @@ check` clean in both kit modes.
 **Differs from iTerm2:** typing does not restart the blink with the cursor
 visible; there is no profile cursor color of its own (it comes from the
 scheme), and no Cursor Guide.
+
+## Phase 28 — Send text at start
+
+### Plan
+
+1. **Profiles › General › Send text at start:** the text is written to the
+   shell, followed by Return, each time a session of the profile starts:
+   window, tab, pane or restart.
+2. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the kit as is: it needs no patch. `./dev.sh
+check` clean in both kit modes.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `initial_text = "echo hola-inicio"`: the first tab and a new one (⌘T) show `hola-inicio` after the first prompt | ✓ | `fase28-texto-al-iniciar.png` |
+
+**Not tested:** editing the field from Settings (only from the `.domain`); a
+new pane and the restart when the session ends.
+
+**Differs from iTerm2:** the text's echo shows before the first prompt,
+because it is written as soon as the pty exists, without waiting for the
+shell to ask for it.

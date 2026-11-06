@@ -280,6 +280,15 @@ fn general_section(defaults: &Defaults, index: usize, profile: &Profile) -> Sect
                 }),
         )
         .row(
+            Row::new(tr!("profile-initial-text"))
+                .detail(tr!("profile-initial-text-detail"))
+                .control(ProfileText {
+                    index,
+                    field: Field::InitialText,
+                    value: profile.initial_text.clone(),
+                }),
+        )
+        .row(
             Row::new(tr!("profile-badge"))
                 .detail(tr!("profile-badge-detail"))
                 .control(ProfileText {
@@ -655,6 +664,7 @@ fn trigger_editor(index: usize, position: usize, trigger: &Trigger) -> Rect {
 enum Field {
     Name,
     Command,
+    InitialText,
     Badge,
     Directory,
     Family,
@@ -674,6 +684,7 @@ impl Field {
         match self {
             Self::Name => tr!("profile-name"),
             Self::Command => tr!("profile-command-placeholder"),
+            Self::InitialText => tr!("profile-initial-text-placeholder"),
             Self::Badge => tr!("profile-badge-placeholder"),
             Self::Directory => tr!("directory-path"),
             Self::Family => tr!("font-family"),
@@ -690,7 +701,7 @@ impl Field {
         if value.is_empty()
             && !matches!(
                 self,
-                Self::Command | Self::Badge | Self::TriggerParameter(_)
+                Self::Command | Self::InitialText | Self::Badge | Self::TriggerParameter(_)
             )
         {
             return;
@@ -707,6 +718,7 @@ impl Field {
             match self {
                 Self::Name => profile.name = value.clone(),
                 Self::Command => profile.command = (!value.is_empty()).then(|| value.clone()),
+                Self::InitialText => profile.initial_text = value.clone(),
                 Self::Badge => profile.badge = value.clone(),
                 Self::Directory => {
                     profile.working_directory = WorkingDirectory::Fixed(value.clone().into())

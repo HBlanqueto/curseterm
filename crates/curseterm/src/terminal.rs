@@ -1495,6 +1495,9 @@ fn spawn(handles: &Handles, events: &Events, launch: Launch) -> Option<SessionId
     match Session::spawn(id, size, launch, listener) {
         Ok(session) => {
             session.apply_profile(&profile);
+            if !profile.initial_text.is_empty() {
+                session.write(format!("{}\r", profile.initial_text).into_bytes());
+            }
             let mut sessions = handles.sessions;
             sessions.write().insert(id, Rc::new(session));
             Some(id)

@@ -1287,3 +1287,29 @@ Probado en sway sin pantalla con el kit tal cual: no necesita parche.
 **Difiere de iTerm2:** escribir no reinicia el parpadeo con el cursor
 visible; no hay color de cursor propio del perfil (sale del esquema), ni
 guía de cursor (Cursor Guide).
+
+## Fase 28 — Texto al iniciar
+
+### Plan
+
+1. **Profiles › General › Send text at start:** el texto se escribe en la
+   shell, seguido de Intro, cada vez que arranca una sesión del perfil:
+   ventana, pestaña, panel o reinicio.
+2. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit tal cual: no necesita parche.
+`./dev.sh check` limpio en los dos modos del kit.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `initial_text = "echo hola-inicio"`: la primera pestaña y una nueva (⌘T) muestran `hola-inicio` tras el primer prompt | ✓ | `fase28-texto-al-iniciar.png` |
+
+**No probado:** editar el campo desde Ajustes (solo desde el `.domain`); un
+panel nuevo y el reinicio al terminar la sesión.
+
+**Difiere de iTerm2:** el eco del texto sale antes del primer prompt, porque
+se escribe en cuanto existe el pty, sin esperar a que la shell lo pida.
