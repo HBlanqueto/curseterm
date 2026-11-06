@@ -16,6 +16,7 @@ use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Boundary, Column, Direction, Line, Point, Side};
 use alacritty_terminal::selection::{Selection, SelectionType};
 use alacritty_terminal::sync::FairMutex;
+use alacritty_terminal::term::cell::{Cell as GridCell, Flags};
 use alacritty_terminal::term::search::{Match, RegexSearch};
 use alacritty_terminal::term::test::TermSize;
 use alacritty_terminal::term::{Config, Term, TermMode};
@@ -681,8 +682,13 @@ impl Session {
     // PTYSession.m -textViewRangeOfCurrentCommand: at a prompt, what has been typed after it;
     // otherwise the last command.
     fn current_command(&self) -> Option<((i64, usize), (i64, usize))> {
-        let extras = self.extras();
-        match extras.command_start {
+        // The reader thread takes the terminal before the extras, so the extras guard must be
+        // gone before the terminal is locked.
+        let (command_start, command) = {
+            let extras = self.extras();
+            (extras.command_start, extras.command)
+        };
+        match command_start {
             Some(start) => {
                 let term = self.term.lock();
                 Some((
@@ -693,7 +699,7 @@ impl Session {
                     ),
                 ))
             }
-            None => extras.command,
+            None => command,
         }
         .filter(|(start, end)| end > start)
     }
@@ -714,6 +720,50 @@ impl Session {
         let mut selection = Selection::new(SelectionType::Simple, point(start), Side::Left);
         selection.update(point(end), Side::Left);
         term.selection = Some(selection);
+    }
+
+    // AsyncFilter.swift: whole logical lines holding the query, case-sensitive only when it has a
+    // capital (smart case), keeping as many of the newest as the screen holds.
+    pub fn filtered_rows(&self, query: &str) -> Vec<Vec<GridCell>> {
+        let term = self.term.lock();
+        let sensitive = query.chars().any(char::is_uppercase);
+        let fold = |text: &str| {
+            if sensitive {
+                text.to_string()
+            } else {
+                text.to_lowercase()
+            }
+        };
+        let needle = fold(query);
+        let mut rows = Vec::new();
+        let mut logical: Vec<Vec<GridCell>> = Vec::new();
+        let mut text = String::new();
+        let top = -(term.history_size() as i32);
+        for line in top..term.screen_lines() as i32 {
+            let row: Vec<GridCell> = term.grid()[Line(line)].into_iter().cloned().collect();
+            let wraps = row
+                .last()
+                .is_some_and(|cell| cell.flags.contains(Flags::WRAPLINE));
+            text.extend(
+                row.iter()
+                    .filter(|cell| !cell.flags.contains(Flags::WIDE_CHAR_SPACER))
+                    .map(|cell| cell.c),
+            );
+            logical.push(row);
+            if !wraps {
+                if fold(&text).contains(&needle) {
+                    rows.append(&mut logical);
+                } else {
+                    logical.clear();
+                }
+                text.clear();
+            }
+        }
+        let keep = term.screen_lines();
+        if rows.len() > keep {
+            rows.drain(..rows.len() - keep);
+        }
+        rows
     }
 
     pub fn copy_mode(&self) -> bool {

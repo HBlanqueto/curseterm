@@ -2031,3 +2031,46 @@ copy on select on; continuation prompts (PS2) and the right prompt are not
 taken out of the range; Duplicate Tab activates the first pane, not the one
 that was active; Duplicate Window and Replace Selection (Base64,
 JSON) are not there.
+
+## Phase 45 — Filter
+
+### Plan
+
+iTerm2's Edit › Find › Filter (⌥⇧⌘F) (`PseudoTerminal.m -filter:`,
+`PTYSession.m -setFilter:`, `AsyncFilter.swift`):
+
+1. **Filter field** in a bar under the find bar, focused when it opens;
+   Escape or the button close it and drop the filter.
+2. **The pane** shows only the logical lines (with their wrapping) that hold
+   the text, case-sensitive only when the text has a capital (smart case),
+   the newest at the bottom, and it updates with the output.
+3. **Filter indicator** between Alert and Copy Mode, as in
+   `iTermIndicatorsHelper.m`.
+4. **Test** on sway and documentation.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| 60 `linea N` lines, ⌥⇧⌘F and «linea 1»: `linea 1` and `linea 10`–`19` remain, with the filter indicator | ✓ | `fase45-filtro.png` |
+| With «linea 10» and `(sleep 3; echo linea 1000) &`, the new line shows up by itself with the filter open | ✓ | `fase45-vivo.png` (top) |
+| Escape closes the bar and the normal screen comes back | ✓ | `fase45-vivo.png` (bottom) |
+
+**Bugs found while testing:** the app froze because two functions locked
+`extras` and then the terminal, the other way round from the reader thread:
+`current_command` (phase 44, Select Current Command, which the menu asks on
+every repaint) and the session indicators (phase 42, copy mode). They now
+take the data out of `extras` before locking the terminal.
+
+**Not tested:** the kit as is; a 100,000-line history (the filter walks all
+of it on every repaint).
+
+**Differs from iTerm2:** it is not a separate session: the result cannot be
+scrolled, searched or selected; no regular-expression mode nor progress bar;
+the filter follows the active pane, not the session where it opened; the bar sits under the find bar
+instead of inside the same drop-down.

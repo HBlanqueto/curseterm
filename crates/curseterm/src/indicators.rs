@@ -12,6 +12,7 @@ pub enum Indicator {
     Broadcast,
     Coprocess,
     Alert,
+    Filter,
     CopyMode,
 }
 
@@ -29,6 +30,7 @@ impl Indicator {
             Self::Alert => {
                 "M1.5 8C3 5.2 5.3 3.8 8 3.8s5 1.4 6.5 4.2c-1.5 2.8-3.8 4.2-6.5 4.2S3 10.8 1.5 8M10 8a2 2 0 1 1-4 0a2 2 0 1 1 4 0"
             }
+            Self::Filter => "M8 2a6 6 0 1 1 0 12a6 6 0 1 1 0-12M4.8 6.2h6.4M5.9 8.1h4.2M7.1 10h1.8",
             Self::CopyMode => "M5.5 4V2.5h7.5v9h-1.5M3 4.5h7.5v9H3z",
         }
     }

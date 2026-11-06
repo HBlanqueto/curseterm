@@ -102,6 +102,7 @@ struct Handles {
     clipboard: ClipboardState,
     broadcast: State<Broadcast>,
     find: Find,
+    filter: Find,
     confirm: State<Option<Confirm>>,
     events: Rc<OnceCell<Events>>,
     reveals: Rc<OnceCell<Reveals>>,
@@ -321,6 +322,13 @@ impl App for Terminal {
             position: use_state(|| None),
             field: use_hook(AccessibilityId::new_unique),
         };
+        let filter = Find {
+            open: use_state(|| false),
+            query: use_state(String::new),
+            focused: use_state(|| false),
+            position: use_state(|| None),
+            field: use_hook(AccessibilityId::new_unique),
+        };
         let handles = use_hook(move || Handles {
             workspace,
             sessions,
@@ -342,6 +350,7 @@ impl App for Terminal {
             clipboard: consume_root_context(),
             broadcast,
             find,
+            filter,
             confirm,
             events: Rc::default(),
             reveals: Rc::default(),
@@ -526,6 +535,8 @@ impl App for Terminal {
                 tab: state.active,
                 find: (*find.open.read() && !find.query.read().is_empty())
                     .then(|| Rc::from(find.query.read().as_str())),
+                filter: (*handles.filter.open.read() && !handles.filter.query.read().is_empty())
+                    .then(|| Rc::from(handles.filter.query.read().as_str())),
                 receivers: match *broadcast.read() {
                     Broadcast::Off => Vec::new(),
                     mode => state.receivers(mode),
@@ -549,6 +560,7 @@ impl App for Terminal {
 
         let keyboard = handles.clone();
         let find_bar = (*find.open.read()).then(|| find_bar(&handles, revision));
+        let filter_bar = (*handles.filter.open.read()).then(|| filter_bar(handles.filter));
         let replay_bar = (*replay.read()).map(|(id, index)| replay_bar(&handles, id, index));
         let alert = (*confirm.read()).map(|pending| confirm_alert(&handles, pending));
         let sheet_view = (*sheet.read()).map(|open| match open {
@@ -608,6 +620,13 @@ impl App for Terminal {
                     }
                     return;
                 }
+                let filter = keyboard.filter;
+                if *filter.open.peek() && *filter.focused.peek() {
+                    if data.key == Key::Named(NamedKey::Escape) {
+                        close_filter(filter);
+                    }
+                    return;
+                }
                 let Some(session) = &keyboard.active() else {
                     return;
                 };
@@ -656,6 +675,7 @@ impl App for Terminal {
                 drag,
             ))
             .maybe_child(find_bar)
+            .maybe_child(filter_bar)
             .maybe_child(alert)
             .maybe_child(sheet_view)
             .child(
@@ -800,6 +820,7 @@ struct Painting {
     tab: usize,
     receivers: Vec<SessionId>,
     find: Option<Rc<str>>,
+    filter: Option<Rc<str>>,
     transparent: bool,
     preedit: Option<Rc<str>>,
     replay: Option<(SessionId, usize)>,
@@ -822,6 +843,7 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                     broadcast: painting.receivers.contains(id),
                     maximized: painting.maximized,
                     find: painting.find.clone().filter(|_| *id == painting.active),
+                    filter: painting.filter.clone().filter(|_| *id == painting.active),
                     on_focus: {
                         let mut hints = painting.handles.hints;
                         Callback::new(move |id| {
@@ -1880,6 +1902,37 @@ fn find_bar(handles: &Handles, mut revision: State<u64>) -> Element {
         .into_element()
 }
 
+// iTermFindDriver.m: the Filter field; the session shows only the lines that match until it
+// closes.
+fn filter_bar(filter: Find) -> Element {
+    rect()
+        .background(color(Palette::current().window_background))
+        .width(Size::fill())
+        .direction(Direction::Horizontal)
+        .content(Content::flex())
+        .cross_align(Alignment::Center)
+        .padding(SPACE_1)
+        .spacing(SPACE_1)
+        .child(
+            SearchField::new(filter.query, tr!("filter-placeholder"))
+                .a11y_id(filter.field)
+                .width(Size::flex(1.0))
+                .auto_focus(true)
+                .on_focus_change(move |focused| {
+                    let mut state = filter.focused;
+                    state.set(focused);
+                }),
+        )
+        .child(Button::new(tr!("find-close")).on_press(move |_| close_filter(filter)))
+        .into_element()
+}
+
+fn close_filter(filter: Find) {
+    let mut query = filter.query;
+    query.set(String::new());
+    filter.close();
+}
+
 fn listen(handles: Handles, revision: State<u64>) -> Events {
     let (sender, receiver) = channel();
     let receiver: RefCell<Receiver<(SessionId, TermEvent)>> = RefCell::new(receiver);
@@ -2584,6 +2637,10 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             if let Some(copy) = copy {
                 open_layout(handles, events, copy);
             }
+        }
+        _ if id == menu::FILTER.id => {
+            let mut open = handles.filter.open;
+            open.set(true);
         }
         _ if id == menu::SELECT_CURRENT_COMMAND.id => {
             if let Some(session) = &active {

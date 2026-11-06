@@ -2043,3 +2043,46 @@ copiar al seleccionar; no se quitan del rango los prompts de continuación
 (PS2) ni el prompt de la derecha; Duplicate Tab deja activo el primer panel,
 no el que lo estaba; Duplicate Window y Replace
 Selection (Base64, JSON) no están.
+
+## Fase 45 — Filter
+
+### Plan
+
+Edit › Find › Filter (⌥⇧⌘F) de iTerm2 (`PseudoTerminal.m -filter:`,
+`PTYSession.m -setFilter:`, `AsyncFilter.swift`):
+
+1. **Campo Filter** en una barra bajo la de búsqueda, con el foco al abrirse;
+   Escape o el botón la cierran y quitan el filtro.
+2. **El panel** enseña solo las líneas lógicas (con su ajuste de línea) que
+   tienen el texto, con distinción de mayúsculas solo si el texto lleva
+   alguna (smart case), las más nuevas abajo, y se actualiza con la salida.
+3. **Indicador Filter** entre Alert y Copy Mode, como en
+   `iTermIndicatorsHelper.m`.
+4. **Prueba** en sway y documentación.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| 60 líneas `linea N`, ⌥⇧⌘F y «linea 1»: quedan `linea 1` y `linea 10`–`19`, con el indicador del filtro | ✓ | `fase45-filtro.png` |
+| Con «linea 10» y `(sleep 3; echo linea 1000) &`, la línea nueva aparece sola con el filtro abierto | ✓ | `fase45-vivo.png` (arriba) |
+| Escape cierra la barra y vuelve la pantalla normal | ✓ | `fase45-vivo.png` (abajo) |
+
+**Bugs encontrados al probar:** la app se quedaba congelada porque dos
+funciones bloqueaban `extras` y luego el terminal, al revés que el hilo de
+lectura: `current_command` (fase 44, Select Current Command, que el menú
+consulta en cada repintado) y los indicadores de sesión (fase 42, el modo
+copia). Ahora sacan el dato de `extras` antes de bloquear el terminal.
+
+**No probado:** con el kit tal cual; un historial de 100 000 líneas (el
+filtro recorre todo en cada repintado).
+
+**Difiere de iTerm2:** no es una sesión aparte: no se puede desplazar, buscar
+ni seleccionar dentro del resultado; sin modo de expresión regular ni barra
+de progreso; el filtro sigue al panel activo, no a la sesión donde se abrió; la barra va debajo de
+la búsqueda en vez de dentro del mismo desplegable.

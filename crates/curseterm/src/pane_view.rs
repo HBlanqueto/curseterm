@@ -34,6 +34,7 @@ pub struct TerminalPane {
     pub broadcast: bool,
     pub maximized: bool,
     pub find: Option<Rc<str>>,
+    pub filter: Option<Rc<str>>,
     pub on_focus: Callback<SessionId, ()>,
     pub on_hover: Callback<SessionId, ()>,
     pub on_select: Callback<String, ()>,
@@ -61,6 +62,7 @@ impl PartialEq for TerminalPane {
             && self.broadcast == other.broadcast
             && self.maximized == other.maximized
             && self.find == other.find
+            && self.filter == other.filter
             && self.badge == other.badge
             && self.opacity == other.opacity
             && self.preedit == other.preedit
@@ -91,6 +93,7 @@ impl Component for TerminalPane {
         let focused = self.focused;
         let broadcast = self.broadcast;
         let find = self.find.clone();
+        let filter = self.filter.clone();
         let on_focus = self.on_focus.clone();
         let on_hover = self.on_hover.clone();
         let on_select = self.on_select.clone();
@@ -104,7 +107,8 @@ impl Component for TerminalPane {
         let replay = self.replay;
         let blink_off = self.blink_off;
         let mut size = use_state(|| (0.0, 0.0));
-        let indicators = shown_indicators(&session, self.maximized, broadcast);
+        let indicators =
+            shown_indicators(&session, self.maximized, broadcast, self.filter.is_some());
         let dark = is_dark(scheme.background);
         let notes = notes(
             &session,
@@ -122,7 +126,7 @@ impl Component for TerminalPane {
             *repaint.read(),
             focused,
             broadcast,
-            &find,
+            (&find, &filter),
             &badge,
             opacity.to_bits(),
             &preedit,
@@ -153,6 +157,7 @@ impl Component for TerminalPane {
             let fonts = fonts.clone();
             let scheme = scheme.clone();
             canvas(look.finish(), move |ctx| {
+                let filtered = filter.as_deref().map(|query| session.filtered_rows(query));
                 let term = session.term.lock();
                 let extras = session.extras();
                 let history = term.history_size() as i64;
@@ -180,7 +185,8 @@ impl Component for TerminalPane {
                     preedit: preedit.as_deref(),
                     replay: replay
                         .and_then(|index| extras.replay.get(index))
-                        .map(|snapshot| snapshot.rows.as_slice()),
+                        .map(|snapshot| snapshot.rows.as_slice())
+                        .or(filtered.as_deref()),
                     blink_off,
                 };
                 grid::draw(ctx, &term, &fonts, &scheme, focused, &overlay);
@@ -602,14 +608,22 @@ fn wheel(session: &Session, lines: i32) {
 }
 
 // PTYTextView.m -updateIndicators, for the states CurseTerm has.
-fn shown_indicators(session: &Session, maximized: bool, broadcast: bool) -> Vec<Indicator> {
+fn shown_indicators(
+    session: &Session,
+    maximized: bool,
+    broadcast: bool,
+    filtered: bool,
+) -> Vec<Indicator> {
+    // copy_mode() locks the terminal, which must not happen while the extras are held.
+    let copy_mode = session.copy_mode();
     let extras = session.extras();
     [
         (Indicator::Maximized, maximized),
         (Indicator::Broadcast, broadcast),
         (Indicator::Coprocess, extras.coprocess.is_some()),
         (Indicator::Alert, extras.alert_on_next_mark),
-        (Indicator::CopyMode, session.copy_mode()),
+        (Indicator::Filter, filtered),
+        (Indicator::CopyMode, copy_mode),
     ]
     .into_iter()
     .filter_map(|(indicator, shown)| shown.then_some(indicator))
