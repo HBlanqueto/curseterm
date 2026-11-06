@@ -1060,8 +1060,8 @@ fn matches_between(term: &Term<Listener>, pattern: &str, start: Point, end: Poin
     with_search(pattern, |regex| matches_with(term, regex, start, end)).unwrap_or_default()
 }
 
-fn matches_with(
-    term: &Term<Listener>,
+fn matches_with<T: EventListener>(
+    term: &Term<T>,
     regex: &mut RegexSearch,
     start: Point,
     end: Point,
@@ -1170,7 +1170,7 @@ fn smart_span(term: &Term<Listener>, point: Point) -> Option<(Column, Column)> {
 
 #[cfg(test)]
 mod tests {
-    use super::{paste_bytes, shell_escaped};
+    use super::*;
 
     #[test]
     fn shell_special_characters_get_a_backslash_and_letters_do_not() {
@@ -1188,6 +1188,22 @@ mod tests {
             paste_bytes("ls\x1b[201~rm", true),
             b"\x1b[200~ls[201~rm\x1b[201~".to_vec()
         );
+    }
+
+    #[test]
+    fn a_pattern_that_matches_nothing_still_ends_the_search() {
+        use alacritty_terminal::event::VoidListener;
+        let mut term = Term::new(Config::default(), &TermSize::new(10, 3), VoidListener);
+        Processor::<alacritty_terminal::vte::ansi::StdSyncHandler>::new()
+            .advance(&mut term, b"aaa\r\nbbb");
+        let (start, end) = (
+            Point::new(Line(0), Column(0)),
+            Point::new(Line(2), Column(9)),
+        );
+        for pattern in ["(?i)a*", "(?i)^", "(?i)x?"] {
+            let mut regex = RegexSearch::new(pattern).expect("pattern");
+            assert!(matches_with(&term, &mut regex, start, end).len() <= 30);
+        }
     }
 
     #[test]

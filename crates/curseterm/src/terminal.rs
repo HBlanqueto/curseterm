@@ -2139,14 +2139,17 @@ fn replay_bar(handles: &Handles, id: SessionId, index: usize) -> Element {
         .into_element()
 }
 
-// PTYTextView+ARC.m -sendSnippet: with Option held the snippet opens in Advanced Paste.
-fn send_snippet(handles: &Handles, session: Option<&Session>, snippet: &Snippet) {
+// PTYTextView+ARC.m -sendSnippet: with Option held the snippet opens in Advanced Paste;
+// otherwise PTYSession.m -writeTask: sends it to every session that hears this one.
+fn send_snippet(handles: &Handles, snippet: &Snippet) {
     let text = snippet.escaped();
     if handles.held.peek().contains(Modifiers::ALT) {
         handles.advanced.open(text);
         open_sheet(handles, Sheet::AdvancedPaste);
-    } else if let Some(session) = session {
-        session.write(text.into_bytes());
+        return;
+    }
+    for receiver in handles.receivers() {
+        receiver.write(text.clone().into_bytes());
     }
 }
 
@@ -2979,7 +2982,7 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         .and_then(|index| index.parse::<usize>().ok())
         .and_then(|index| handles.defaults.peek().snippets.get(index).cloned())
     {
-        send_snippet(handles, active.as_deref(), &snippet);
+        send_snippet(handles, &snippet);
         return;
     }
     if let Some(profile) = id

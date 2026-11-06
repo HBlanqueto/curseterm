@@ -2387,3 +2387,25 @@ snippets are edited in Settings.
 typed separated by commas, not in a token field; no Snippets toolbelt tool,
 no per-profile tag filter, no Open Quickly, no drag to reorder and no Actions
 tab.
+
+## Phase 54 — Review: bugs in phases 50 to 53
+
+### Plan
+
+Look for bugs in the latest work, check it against iTerm2's and
+`alacritty_terminal`'s code, and fix what reproduces.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+| Bug | Cause | Fix | Test | Screenshot |
+|---|---|---|---|---|
+| A snippet reached only the active session with Broadcast Input on | `PTYSession.m -writeTask:` broadcasts it (hence `-writeTaskNoBroadcast:`); ours wrote to one session | The snippet goes to every session that hears the active one | Two panes, Broadcast Input to All Panes in Current Tab and `Hola`: it shows in both | `fase54-difusion.png` |
+| A tab was drawn as a box | `alacritty_terminal` (`term/mod.rs`, `put_tab`) keeps a `'\t'` in the first cell so copying gives the tab back, and the grid painted it as a glyph | The grid treats that cell as a space | `printf 'a\tb\tc\n'`: columns without boxes | `fase54-tab.png` |
+
+**Checked, no bug:** a pattern that can match nothing (`a*`, `^`, `x?`) in
+the regex modes does not hang the search; a new test covers it.
+
+**Not tested:** the kit as is.

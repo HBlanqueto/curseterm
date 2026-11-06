@@ -2402,3 +2402,25 @@ al editar los snippets en Ajustes.
 etiquetas se escriben separadas por comas, no en un campo de fichas; sin la
 herramienta Snippets de la barra lateral, sin filtro de etiquetas por perfil,
 sin Open Quickly, sin reordenar arrastrando y sin la pestaña Actions.
+
+## Fase 54 — Revisión: fallos de las fases 50 a 53
+
+### Plan
+
+Buscar fallos en lo último hecho, contrastarlo con el código de iTerm2 y
+`alacritty_terminal`, y corregir lo que se reproduzca.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Fallo | Causa | Arreglo | Prueba | Captura |
+|---|---|---|---|---|
+| Un snippet solo llegaba a la sesión activa con Broadcast Input encendido | `PTYSession.m -writeTask:` lo difunde (por eso existe `-writeTaskNoBroadcast:`); el nuestro escribía en una sola sesión | El snippet va a todas las sesiones que oyen a la activa | Dos paneles, Broadcast Input to All Panes in Current Tab y `Hola`: sale en los dos | `fase54-difusion.png` |
+| Un tabulador se dibujaba como un cuadro | `alacritty_terminal` (`term/mod.rs`, `put_tab`) guarda `'\t'` en la primera celda para que al copiar vuelva el tabulador, y la rejilla lo pintaba como glifo | La rejilla trata esa celda como un espacio | `printf 'a\tb\tc\n'`: columnas sin cuadros | `fase54-tab.png` |
+
+**Comprobado sin fallo:** un patrón que puede no consumir nada (`a*`, `^`,
+`x?`) en los modos regex no cuelga la búsqueda; un test nuevo lo cubre.
+
+**No probado:** con el kit tal cual.

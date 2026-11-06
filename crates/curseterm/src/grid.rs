@@ -653,7 +653,8 @@ fn draw_cell(
         return;
     }
     let ink = paint(fg);
-    if cell.c != ' ' {
+    // alacritty_terminal keeps a '\t' in the tab's first cell so copying gives the tab back.
+    if !matches!(cell.c, ' ' | '\t') {
         draw_char(ctx, fonts, cell.c, cell.flags, x, y, &ink);
     }
     if cell.flags.intersects(Flags::ALL_UNDERLINES) {
@@ -729,7 +730,7 @@ fn draw_cursor(
         }
         _ => {
             ctx.canvas.draw_rect(area, &ink);
-            if cell.c != ' ' {
+            if !matches!(cell.c, ' ' | '\t') {
                 draw_char(
                     ctx,
                     fonts,
