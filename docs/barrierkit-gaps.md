@@ -66,6 +66,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-034 | portapapeles | Sin selección primaria | media | Parche 0010 probado |
 | BK-035 | portapapeles | El portapapeles solo ofrece texto plano | baja | Parche 0011 probado |
 | BK-036 | controles | Sin vista de texto de varias líneas | media | Bloque probado `views::text_view` |
+| BK-037 | plataforma | Sin notificaciones del escritorio ni sonidos de evento | media | Bloque probado `notifications` |
 
 ## Gaps
 
@@ -797,6 +798,32 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Gravedad**: media
 - **Cómo reproducirlo**: buscar en `crates/barrier-kit/src/controls.rs` un
   control que acepte Enter como salto de línea.
+
+### BK-037 — Sin notificaciones del escritorio ni sonidos de evento
+- **Área**: plataforma
+- **Qué necesitaba CurseTerm**: Alerts › Post Notification y Play a Sound de
+  iTerm2, que usan `NSUserNotificationCenter` y `NSSound`
+  (`PTYSession.m -screenDidAddMark:alert:completion:`), y mostrar la sesión
+  al pulsar la notificación.
+- **Qué ofrece hoy BarrierKit**: nada para enviar notificaciones ni sonidos;
+  `zbus` ya está en el árbol por el menú global.
+- **Qué falta**: un cliente de `org.freedesktop.Notifications` que avise de
+  las pulsaciones y un sonido de evento por nombre.
+- **Cómo lo resolví en CurseTerm**: el bloque `notifications` en
+  `barrier-kit-next`. `post(Notice, clicked)` llama a `Notify` en un hilo con
+  la acción `default` y la pista `desktop-entry`; un hilo escucha
+  `ActivationToken`, `ActionInvoked` y `NotificationClosed`, y llama a
+  `clicked` con el token de activación si el servidor lo manda.
+  `play_event_sound(nombre)` lanza `canberra-gtk-play --id nombre` con un
+  nombre de la especificación de sonidos de freedesktop.
+- **Coste del workaround**: `canberra-gtk-play` es un programa externo; si no
+  está, solo queda un aviso en el log.
+- **API propuesta para el kit**: `notifications::post` y
+  `notifications::play_event_sound`, como el bloque, con el nombre y el
+  `desktop-entry` sacados de la app.
+- **Gravedad**: media
+- **Cómo reproducirlo**: buscar `org.freedesktop.Notifications` en
+  `crates/barrier-kit/src`.
 
 ## Cosas que funcionaron bien
 

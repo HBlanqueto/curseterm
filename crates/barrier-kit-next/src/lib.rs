@@ -3,5 +3,6 @@
 
 pub mod app_menu;
 pub mod canvas;
+pub mod notifications;
 pub mod tokens;
 pub mod views;

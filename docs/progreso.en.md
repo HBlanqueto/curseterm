@@ -1771,3 +1771,55 @@ engine has no look-behind, so the HTTP URL rule is the branch that does not
 take a trailing `)`, `[[:letter:]]` and `[[:number:]]` become `\p{L}` and
 `\p{N}`, and word boundaries are ASCII; copying neither selects the text nor
 shows «Copied». No Select Matches (several selections at once).
+
+## Phase 40 — Mark alerts
+
+### Plan
+
+iTerm2's Edit › Marks and Annotations › Alerts (`MainMenu.xib`,
+`PseudoTerminal.m -toggleAlertOnNextMark:`, `PTYSession.m
+-screenDidAddMark:alert:completion:` and `-showMarkSetAlert`,
+`iTermApplicationDelegate.m -markAlertAction`):
+
+1. **Alert on Next Mark (⌥⌘A):** a per-session checkbox; the next mark alerts
+   and clears it.
+2. **Alert on Marks in Offscreen Sessions:** an app setting (off by default);
+   a mark in a tab that is not shown alerts too.
+3. **How to alert** (radio, app setting): Show Modal Alert Box (an «Alert»
+   alert with Reveal and OK), Post Notification (the default; «Mark Set»,
+   «Session … #n had a mark set.», and clicking it reveals the session) and
+   Play a Sound (success or error by the exit code of the previous command,
+   now read from `OSC 133;D;code`).
+4. **Notifications and sounds** in the `notifications` block of
+   `barrier-kit-next` (BK-037).
+5. **Generic test**, without Malaysia: headless sway with `mako` as the
+   notification server, `dbus-monitor` to see the calls and a fake
+   `canberra-gtk-play` that logs what it is asked for.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the patched kit. `./dev.sh check` clean in both
+modes; the `OSC 133` test now checks the exit code. The marks were made by
+hand with `printf '\033]133;D;code\007\033]133;A\007'`.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| D-Bus menu: Alerts with both checkboxes and the three radios, Post Notification checked | ✓ | — |
+| ⌥⌘A checks the box; the next mark unchecks it | ✓ | — |
+| With ⌥⌘A, a mark calls `Notify` with «Mark Set», «Session root@vm: ~ #1 had a mark set.», the `default`/«Reveal» action and `desktop-entry` | ✓ | — |
+| With offscreen marks on, a mark in tab 1 seen from tab 2 shows up in mako | ✓ | `fase40-notificacion.png` |
+| `makoctl invoke` (`ActionInvoked`) goes back to tab 1 | ✓ | `fase40-mostrar.png` |
+| Play a Sound: code 1 asks for `dialog-error` and code 0 for `complete` | ✓ | — |
+| Show Modal Alert Box: «Alert», «Mark set in session “root@vm: ~.”», OK and Reveal; Reveal goes back to tab 1 | ✓ | `fase40-alerta.png` |
+
+**Not tested:** the kit as is; the activation token (mako 1.11 sends no
+`ActivationToken`, so the window is not brought forward); real sound (the lab
+has no audio: `canberra-gtk-play` says «Not available»); Malaysia, which has
+no notification server yet.
+
+**Differs from iTerm2:** the sound file cannot be chosen
+(`successSound`/`errorSound`); there is no alert indicator in the pane corner;
+a session restored from an arrangement does not wait for the first key before
+alerting about offscreen marks; nothing is sent to the iPhone.

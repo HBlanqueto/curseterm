@@ -37,6 +37,7 @@ tracing = "0.1"
 i18n-embed = { version = "0.16", features = ["fluent-system"] }
 i18n-embed-fl = "0.10"
 rust-embed = "8"
+zbus = "5"
 
 [profile.dev]
 opt-level = 0

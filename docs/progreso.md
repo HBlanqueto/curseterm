@@ -1777,3 +1777,56 @@ búsqueda no tiene mirada atrás, así que la regla de URL HTTP es la rama que
 no admite `)` al final, `[[:letter:]]` y `[[:number:]]` pasan a `\p{L}` y
 `\p{N}`, y los límites de palabra son ASCII; al copiar no se selecciona el
 texto ni sale «Copied». Sin Select Matches (varias selecciones a la vez).
+
+## Fase 40 — Alertas de marca
+
+### Plan
+
+Edit › Marks and Annotations › Alerts de iTerm2 (`MainMenu.xib`,
+`PseudoTerminal.m -toggleAlertOnNextMark:`, `PTYSession.m
+-screenDidAddMark:alert:completion:` y `-showMarkSetAlert`,
+`iTermApplicationDelegate.m -markAlertAction`):
+
+1. **Alert on Next Mark (⌥⌘A):** casilla por sesión; la próxima marca avisa y
+   la apaga.
+2. **Alert on Marks in Offscreen Sessions:** ajuste de la app (apagado por
+   defecto); una marca en una pestaña que no se ve también avisa.
+3. **Cómo avisar** (radio, ajuste de la app): Show Modal Alert Box (alerta
+   «Alert» con Reveal y OK), Post Notification (por defecto; «Mark Set»,
+   «Session … #n had a mark set.», y pulsarla muestra la sesión) y Play a
+   Sound (éxito o error según el código de salida del comando anterior, que
+   ahora se lee de `OSC 133;D;código`).
+4. **Notificaciones y sonidos** en el bloque `notifications` de
+   `barrier-kit-next` (BK-037).
+5. **Prueba** genérica, sin Malaysia: sway sin pantalla con `mako` como
+   servidor de notificaciones, `dbus-monitor` para ver las llamadas y un
+   `canberra-gtk-play` falso que apunta lo que se le pide.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos; el test de `OSC 133` comprueba ahora el código de salida. Las
+marcas se hicieron a mano con
+`printf '\033]133;D;código\007\033]133;A\007'`.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Menú D-Bus: Alerts con las dos casillas y los tres radios, Post Notification marcado | ✓ | — |
+| ⌥⌘A marca la casilla; la marca siguiente la desmarca | ✓ | — |
+| Con ⌥⌘A, una marca llama a `Notify` con «Mark Set», «Session root@vm: ~ #1 had a mark set.», la acción `default`/«Reveal» y `desktop-entry` | ✓ | — |
+| Con las marcas fuera de la vista, una marca en la pestaña 1 vista desde la 2 sale en mako | ✓ | `fase40-notificacion.png` |
+| `makoctl invoke` (`ActionInvoked`) vuelve a la pestaña 1 | ✓ | `fase40-mostrar.png` |
+| Play a Sound: código 1 pide `dialog-error` y código 0 `complete` | ✓ | — |
+| Show Modal Alert Box: «Alert», «Mark set in session “root@vm: ~.”», OK y Reveal; Reveal vuelve a la pestaña 1 | ✓ | `fase40-alerta.png` |
+
+**No probado:** con el kit tal cual; el token de activación (mako 1.11 no
+manda `ActivationToken`, así que la ventana no se trae al frente); el sonido
+de verdad (el laboratorio no tiene audio: `canberra-gtk-play` dice «Not
+available»); Malaysia, que aún no tiene servidor de notificaciones.
+
+**Difiere de iTerm2:** no se puede elegir el archivo de sonido
+(`successSound`/`errorSound`); no hay indicador de alerta en la esquina del
+panel; una sesión restaurada de una disposición no espera a la primera tecla
+antes de avisar de marcas fuera de la vista; no se manda al iPhone.

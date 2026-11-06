@@ -66,6 +66,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-034 | clipboard | No primary selection | medium | Patch 0010 tested |
 | BK-035 | clipboard | The clipboard only offers plain text | low | Patch 0011 tested |
 | BK-036 | controls | No multi-line text view | medium | Tested block `views::text_view` |
+| BK-037 | platform | No desktop notifications nor event sounds | medium | Tested block `notifications` |
 
 ## Gaps
 
@@ -793,6 +794,32 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Severity**: medium
 - **How to reproduce**: look in `crates/barrier-kit/src/controls.rs` for a
   control that takes Enter as a line break.
+
+### BK-037 — No desktop notifications nor event sounds
+- **Area**: platform
+- **What CurseTerm needed**: iTerm2's Alerts › Post Notification and Play a
+  Sound, which use `NSUserNotificationCenter` and `NSSound`
+  (`PTYSession.m -screenDidAddMark:alert:completion:`), and revealing the
+  session when the notification is clicked.
+- **What BarrierKit offers today**: nothing to post notifications or play
+  sounds; `zbus` is already in the tree through the global menu.
+- **What is missing**: an `org.freedesktop.Notifications` client that reports
+  clicks, and an event sound by name.
+- **How CurseTerm solves it**: the `notifications` block in
+  `barrier-kit-next`. `post(Notice, clicked)` calls `Notify` on a thread with
+  the `default` action and the `desktop-entry` hint; one thread listens for
+  `ActivationToken`, `ActionInvoked` and `NotificationClosed`, and calls
+  `clicked` with the activation token when the server sends one.
+  `play_event_sound(name)` runs `canberra-gtk-play --id name` with a name
+  from the freedesktop sound naming specification.
+- **Cost of the workaround**: `canberra-gtk-play` is an external program;
+  without it only a warning is logged.
+- **Proposed kit API**: `notifications::post` and
+  `notifications::play_event_sound`, like the block, with the name and the
+  `desktop-entry` taken from the app.
+- **Severity**: medium
+- **How to reproduce**: search `crates/barrier-kit/src` for
+  `org.freedesktop.Notifications`.
 ## Things that worked well
 
 Checked in phase 1 (headless sway, lavapipe):

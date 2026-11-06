@@ -8,7 +8,7 @@ pub enum Report {
     Directory(PathBuf),
     Mark,
     OutputStart,
-    CommandEnd,
+    CommandEnd(Option<i32>),
     Image(InlineImage),
 }
 
@@ -34,7 +34,11 @@ pub fn parse(payload: &[u8]) -> Option<Report> {
         [b'7', b';', url @ ..] => file_url(std::str::from_utf8(url).ok()?).map(Report::Directory),
         [b'1', b'3', b'3', b';', b'A', ..] => Some(Report::Mark),
         [b'1', b'3', b'3', b';', b'C', ..] => Some(Report::OutputStart),
-        [b'1', b'3', b'3', b';', b'D', ..] => Some(Report::CommandEnd),
+        [b'1', b'3', b'3', b';', b'D', rest @ ..] => {
+            Some(Report::CommandEnd(std::str::from_utf8(rest).ok().and_then(
+                |rest| rest.strip_prefix(';')?.split(';').next()?.parse().ok(),
+            )))
+        }
         _ => {
             let iterm = text?.strip_prefix("1337;")?;
             if let Some(path) = iterm.strip_prefix("CurrentDir=") {
@@ -135,7 +139,9 @@ mod tests {
         assert_eq!(parse(b"133;A"), Some(Report::Mark));
         assert_eq!(parse(b"1337;SetMark"), Some(Report::Mark));
         assert_eq!(parse(b"133;C"), Some(Report::OutputStart));
-        assert_eq!(parse(b"133;D;0"), Some(Report::CommandEnd));
+        assert_eq!(parse(b"133;D;0"), Some(Report::CommandEnd(Some(0))));
+        assert_eq!(parse(b"133;D;127"), Some(Report::CommandEnd(Some(127))));
+        assert_eq!(parse(b"133;D"), Some(Report::CommandEnd(None)));
         assert_eq!(parse(b"133;B"), None);
     }
 

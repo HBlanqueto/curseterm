@@ -19,6 +19,7 @@ use barrier_kit::titlebar::Titlebar;
 use barrier_kit::views::feedback::{Alert, sheet};
 use barrier_kit::views::table::Table;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
+use barrier_kit_next::notifications::{self, Notice};
 use barrier_kit_next::tokens::{
     ANNOTATION, PASTE_HISTORY_SIZE, RENAME_WIDTH, SHORTCUT_LABEL, TERMINAL, TOOLBELT_WIDTH,
 };
@@ -37,7 +38,8 @@ use crate::arrangement::{self, Arrangement, TabLayout};
 use crate::clock::{local_date_time, local_time};
 use crate::composer_view::ComposerEvent;
 use crate::config::{
-    APP_ID, AltKey, ClosePrompt, Defaults, Profile, SessionEnd, WorkingDirectory, change_defaults,
+    APP_ID, APP_NAME, AltKey, ClosePrompt, Defaults, MarkAlert, Profile, SessionEnd,
+    WorkingDirectory, change_defaults,
 };
 use crate::grid::Fonts;
 use crate::hint_view;
@@ -69,6 +71,7 @@ const SLOW_PASTE_PAUSE: Duration = Duration::from_millis(30);
 type Sessions = HashMap<SessionId, Rc<Session>>;
 type ClipboardState = State<Option<Box<dyn ClipboardProvider>>>;
 type Events = Rc<(Sender<(SessionId, TermEvent)>, WakeHandle)>;
+type Reveals = (Sender<(SessionId, Option<String>)>, WakeHandle);
 type FontCache = Rc<RefCell<HashMap<(String, i32), Rc<Fonts>>>>;
 
 // Menu actions and wake-ups run outside Freya's context (BK-017): they use handles taken in render.
@@ -96,6 +99,7 @@ struct Handles {
     find: Find,
     confirm: State<Option<Confirm>>,
     events: Rc<OnceCell<Events>>,
+    reveals: Rc<OnceCell<Reveals>>,
     buried: State<Option<Buried>>,
     pastes: State<Vec<String>>,
     picker: PickerState,
@@ -159,6 +163,7 @@ struct PickerState {
 enum Confirm {
     Close(Closing),
     RemoveAnnotation(SessionId, AnnotationId),
+    MarkSet(SessionId),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -326,6 +331,7 @@ impl App for Terminal {
             find,
             confirm,
             events: Rc::default(),
+            reveals: Rc::default(),
             buried,
             pastes,
             picker,
@@ -375,6 +381,7 @@ impl App for Terminal {
             move || {
                 let events = listen(handles.clone(), revision);
                 let _ = handles.events.set(events.clone());
+                let _ = handles.reveals.set(listen_reveals(handles.clone()));
                 events
             }
         });
@@ -852,6 +859,17 @@ fn use_live_menu(handles: &Handles) {
     use_submenu_items(
         menu::NAMED_MARKS_MENU,
         menu::indexed_items(menu::NAMED_MARK_PREFIX, &named_marks),
+    );
+    let next_mark = handles
+        .active()
+        .is_some_and(|session| session.extras().alert_on_next_mark);
+    let (offscreen, action) = {
+        let defaults = handles.defaults.read();
+        (defaults.alert_on_offscreen_marks, defaults.mark_alert)
+    };
+    use_submenu_items(
+        menu::ALERTS_MENU,
+        menu::alert_items(next_mark, offscreen, action),
     );
     use_submenu_items(
         menu::BROADCAST_MENU,
@@ -1764,6 +1782,11 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
                 });
             }
         }
+        TermEvent::Wakeup => {
+            if std::mem::take(&mut session.extras().mark_reported) {
+                mark_set(handles, &session);
+            }
+        }
         TermEvent::ChildExit(_) | TermEvent::Exit => {
             match handles
                 .defaults
@@ -1784,6 +1807,77 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
             }
         }
         _ => {}
+    }
+}
+
+fn listen_reveals(handles: Handles) -> Reveals {
+    let (sender, receiver) = channel();
+    let timers = handles.timers.clone();
+    let wake = timers.wakeup(move || {
+        if handles.alive.get() {
+            for (id, token) in receiver.try_iter() {
+                reveal(&handles, id, token);
+            }
+        }
+    });
+    (sender, wake)
+}
+
+fn reveal(handles: &Handles, id: SessionId, token: Option<String>) {
+    let mut workspace = handles.workspace;
+    workspace.write().focus(id);
+    if let Some(token) = token {
+        handles.controls.present(token);
+    }
+}
+
+// PTYSession.m -screenDidAddMark:alert:completion:
+fn mark_set(handles: &Handles, session: &Session) {
+    let defaults = handles.defaults.peek();
+    let workspace = handles.workspace.peek();
+    let offscreen =
+        defaults.alert_on_offscreen_marks && workspace.tab_of(session.id) != Some(workspace.active);
+    let mut extras = session.extras();
+    if !std::mem::take(&mut extras.alert_on_next_mark) && !offscreen {
+        return;
+    }
+    match defaults.mark_alert {
+        MarkAlert::ModalAlert => {
+            let mut confirm = handles.confirm;
+            if confirm.peek().is_none() {
+                confirm.set(Some(Confirm::MarkSet(session.id)));
+            }
+        }
+        MarkAlert::PostNotification => {
+            let Some((sender, wake)) = handles.reveals.get().cloned() else {
+                return;
+            };
+            let id = session.id;
+            let notice = Notice {
+                app_name: APP_NAME,
+                desktop_entry: APP_ID,
+                summary: tr!("mark-set-title").to_string(),
+                body: tr!(
+                    "mark-set-notification",
+                    name = workspace.title(id),
+                    tab = workspace.tab_of(id).map_or(0, |index| index + 1)
+                ),
+                action: tr!("reveal").to_string(),
+            };
+            notifications::post(notice, move |token| {
+                if sender.send((id, token)).is_ok() {
+                    wake.wake();
+                }
+            });
+        }
+        // The freedesktop names for iTerm2's success-sound and error-sound.
+        MarkAlert::PlaySound => notifications::play_event_sound(
+            if extras.last_status.is_none_or(|status| status == 0) {
+                "complete"
+            } else {
+                "dialog-error"
+            },
+        ),
     }
 }
 
@@ -2046,10 +2140,18 @@ fn confirm_alert(handles: &Handles, pending: Confirm) -> Alert {
             tr!("remove-annotation-title"),
             tr!("remove-annotation-message"),
         ),
+        Confirm::MarkSet(id) => {
+            let name = handles.workspace.peek().title(id).to_string();
+            Alert::new(
+                tr!("mark-alert-title"),
+                tr!("mark-alert-message", name = name),
+            )
+        }
     };
-    let label = match pending {
-        Confirm::Close(_) => tr!("close-confirm"),
-        Confirm::RemoveAnnotation(..) => tr!("remove-annotation-confirm"),
+    let (label, dismiss) = match pending {
+        Confirm::Close(_) => (tr!("close-confirm"), tr!("close-cancel")),
+        Confirm::RemoveAnnotation(..) => (tr!("remove-annotation-confirm"), tr!("close-cancel")),
+        Confirm::MarkSet(_) => (tr!("reveal"), tr!("mark-alert-ok")),
     };
     alert
         .confirm(label, move |_| {
@@ -2061,9 +2163,10 @@ fn confirm_alert(handles: &Handles, pending: Confirm) -> Alert {
                         session.remove_annotation(note);
                     }
                 }
+                Confirm::MarkSet(id) => reveal(&handles, id, None),
             });
         })
-        .cancel(tr!("close-cancel"), move |_| dismiss_later(&cancel, || {}))
+        .cancel(dismiss, move |_| dismiss_later(&cancel, || {}))
 }
 
 fn close_session(handles: &Handles, id: SessionId) {
@@ -2381,6 +2484,24 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             if let Some(session) = &active {
                 session.toggle_annotations();
             }
+        }
+        menu::ALERT_ON_NEXT_MARK => {
+            if let Some(session) = &active {
+                let mut extras = session.extras();
+                extras.alert_on_next_mark = !extras.alert_on_next_mark;
+            }
+        }
+        menu::ALERT_OFFSCREEN_MARKS => change_defaults(|defaults| {
+            defaults.alert_on_offscreen_marks = !defaults.alert_on_offscreen_marks
+        }),
+        menu::MARK_ALERT_MODAL => {
+            change_defaults(|defaults| defaults.mark_alert = MarkAlert::ModalAlert)
+        }
+        menu::MARK_ALERT_NOTIFICATION => {
+            change_defaults(|defaults| defaults.mark_alert = MarkAlert::PostNotification)
+        }
+        menu::MARK_ALERT_SOUND => {
+            change_defaults(|defaults| defaults.mark_alert = MarkAlert::PlaySound)
         }
         _ if id == menu::CURSOR_GUIDE.id => {
             if let Some(session) = &active {

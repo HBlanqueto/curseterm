@@ -93,6 +93,9 @@ pub struct Extras {
     pub coprocess: Option<ChildStdin>,
     pub cursor_spotlight: Option<Instant>,
     pub triggers_enabled: bool,
+    pub mark_reported: bool,
+    pub last_status: Option<i32>,
+    pub alert_on_next_mark: bool,
     triggers: Vec<Trigger>,
     compiled: Vec<Compiled>,
 }
@@ -481,9 +484,13 @@ fn apply(term: &mut Term<Listener>, extras: &Mutex<Extras>, report: Report) {
     };
     match report {
         Report::Directory(path) => extras.directory = Some(path),
-        Report::Mark => extras.add_mark(absolute_line(term)),
+        Report::Mark => {
+            extras.add_mark(absolute_line(term));
+            extras.mark_reported = true;
+        }
         Report::OutputStart => extras.output_start = Some(absolute_line(term)),
-        Report::CommandEnd => {
+        Report::CommandEnd(status) => {
+            extras.last_status = status;
             extras.end_output(absolute_line(term), term.grid().cursor.point.column.0)
         }
         Report::Image(image) => {

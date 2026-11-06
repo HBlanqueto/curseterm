@@ -4,7 +4,7 @@ use barrier_kit::menu::{CheckState, MenuItem};
 use barrier_kit_next::app_menu::submenu;
 use freya_core::prelude::Modifiers;
 
-use crate::config::APP_NAME;
+use crate::config::{APP_NAME, MarkAlert};
 use crate::localize::tr;
 use crate::session::TerminalState;
 use crate::workspace::Broadcast;
@@ -116,6 +116,12 @@ pub const PREVIOUS_ANNOTATION: &str = "previous-annotation";
 pub const SET_NAMED_MARK: Action = Action::new("set-named-mark", || tr!("set-named-mark"))
     .shortcut(super_with(Modifiers::ALT.union(Modifiers::SHIFT), 'm'));
 pub const NAMED_MARKS_MENU: &str = "named-marks-menu";
+pub const ALERTS_MENU: &str = "alerts-menu";
+pub const ALERT_ON_NEXT_MARK: &str = "alert-on-next-mark";
+pub const ALERT_OFFSCREEN_MARKS: &str = "alert-offscreen-marks";
+pub const MARK_ALERT_MODAL: &str = "mark-alert-modal";
+pub const MARK_ALERT_NOTIFICATION: &str = "mark-alert-notification";
+pub const MARK_ALERT_SOUND: &str = "mark-alert-sound";
 pub const NAMED_MARK_PREFIX: &str = "named-mark:";
 pub const SHOW_COMPOSER: &str = "show-composer";
 pub const SHOW_ANNOTATIONS: Action =
@@ -304,6 +310,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                             tr!("previous-annotation"),
                             "Super+Alt+Shift+Up",
                         ),
+                        submenu(ALERTS_MENU, tr!("alerts-menu"), Vec::new()),
                     ],
                 ),
                 SET_NAMED_MARK.item(true),
@@ -473,6 +480,35 @@ pub fn broadcast_items(current: Broadcast) -> Vec<MenuItem> {
         }
     })
     .collect()
+}
+
+// MainMenu.xib Marks and Annotations › Alerts.
+pub fn alert_items(next_mark: bool, offscreen: bool, action: MarkAlert) -> Vec<MenuItem> {
+    let radio = |id: &'static str, label: &str, mode: MarkAlert| {
+        MenuItem::action(id, label).with_check(CheckState::Radio(mode == action))
+    };
+    vec![
+        keyed(ALERT_ON_NEXT_MARK, tr!("alert-on-next-mark"), "Super+Alt+a")
+            .with_check(CheckState::Checkbox(next_mark)),
+        MenuItem::action(ALERT_OFFSCREEN_MARKS, tr!("alert-offscreen-marks"))
+            .with_check(CheckState::Checkbox(offscreen)),
+        MenuItem::Separator,
+        radio(
+            MARK_ALERT_MODAL,
+            tr!("mark-alert-modal"),
+            MarkAlert::ModalAlert,
+        ),
+        radio(
+            MARK_ALERT_NOTIFICATION,
+            tr!("mark-alert-notification"),
+            MarkAlert::PostNotification,
+        ),
+        radio(
+            MARK_ALERT_SOUND,
+            tr!("mark-alert-sound"),
+            MarkAlert::PlaySound,
+        ),
+    ]
 }
 
 pub fn select_tab_items(titles: &[String], active: usize) -> Vec<MenuItem> {

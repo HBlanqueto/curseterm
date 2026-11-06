@@ -23,6 +23,8 @@ pub struct Defaults {
     pub copy_on_select: bool,
     pub focus_follows_mouse: bool,
     pub arrangements: Vec<Arrangement>,
+    pub mark_alert: MarkAlert,
+    pub alert_on_offscreen_marks: bool,
 }
 
 impl Default for Defaults {
@@ -35,6 +37,8 @@ impl Default for Defaults {
             copy_on_select: true,
             focus_follows_mouse: false,
             arrangements: Vec::new(),
+            mark_alert: MarkAlert::default(),
+            alert_on_offscreen_marks: false,
         }
     }
 }
@@ -64,6 +68,16 @@ pub struct Profile {
     pub cursor: CursorType,
     pub blinking_cursor: bool,
     pub cursor_guide: bool,
+}
+
+// iTermApplicationDelegate.m -markAlertAction: posting a notification is the default.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MarkAlert {
+    ModalAlert,
+    #[default]
+    PostNotification,
+    PlaySound,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
