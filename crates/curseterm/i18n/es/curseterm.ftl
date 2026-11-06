@@ -654,3 +654,4 @@ advanced-time-between-blinks = Velocidad de parpadeo del cursor (segundos).
 advanced-slow-paste-bytes-per-call = Bytes de cada bloque al pegar despacio.
 advanced-slow-paste-delay-between-calls = Pausa en segundos entre bloques al pegar despacio.
 advanced-paste-history-max-options = Número de entradas que guarda el historial de pegado.
+lock-layout = Bloquear la disposición

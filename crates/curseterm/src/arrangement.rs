@@ -9,6 +9,8 @@ use crate::session::SessionId;
 pub struct Arrangement {
     pub name: String,
     pub tabs: Vec<TabLayout>,
+    #[serde(default)]
+    pub layout_locked: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

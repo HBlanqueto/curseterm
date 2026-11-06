@@ -3455,3 +3455,43 @@ los dos modos.
 
 **Difiere de iTerm2:** solo están los ajustes con comportamiento en CurseTerm;
 el icono repite el de General (BK-024).
+
+## Fase 80 — Lock Layout
+
+### Plan
+
+`PseudoTerminal.m -toggleLayoutLocked:` congela la disposición de la ventana
+(notas de iTerm2 3.7.0beta4):
+
+1. Window › Lock Layout, con marca, por ventana.
+2. Bloqueada, no se divide, no se añaden, cierran ni reordenan pestañas, y no
+   se cierran, mueven, entierran ni intercambian paneles. Esas entradas del
+   menú se deshabilitan y la acción se ignora también desde combinaciones, la
+   barra de pestañas y «+». Una sola lista, `menu::LAYOUT_CHANGES`.
+3. Redimensionar paneles, abrir ventanas y cerrar la ventana siguen
+   funcionando.
+4. La disposición guardada recuerda el bloqueo (`layout_locked`,
+   `TERMINAL_ARRANGEMENT_LAYOUT_LOCKED`) y la ventana restaurada nace
+   bloqueada.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado |
+|---|---|
+| Bloqueada: New Tab deshabilitado; ⌘T, ⌘D y ⌘W no cambian la ventana | ✓ |
+| Desbloqueada: ⌘T abre la pestaña | ✓ |
+| Guardar «Bloq» bloqueada escribe `layout_locked = true` | ✓ |
+| `--arrangement Bloq` abre la ventana con Lock Layout marcado | ✓ |
+
+**No probado:** con el kit tal cual; las combinaciones de intercambio con la
+ventana bloqueada.
+
+## Decisión — Pause Pane (2026-11-06)
+
+`PseudoTerminal.m -toggleTmuxPausePane:` solo se activa en una sesión cliente
+de tmux con el modo pausa de la pasarela (`tmuxController.gateway
+.pauseModeEnabled`). Sin la integración de tmux no hay nada que pausar; queda
+con ella.

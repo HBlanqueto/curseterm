@@ -226,6 +226,7 @@ pub const TEXT_SMALLER: Action =
 pub const EDIT_TAB_TITLE: Action = Action::new("edit-tab-title", || tr!("edit-tab-title"));
 pub const EDIT_WINDOW_TITLE: Action = Action::new("edit-window-title", || tr!("edit-window-title"));
 pub const COPY_MODE_KEYS: Action = Action::new("copy-mode-keys", || tr!("copy-mode-keys"));
+pub const LOCK_LAYOUT: Action = Action::new("lock-layout", || tr!("lock-layout"));
 pub const MINIMIZE: Action = Action::new("minimize", || tr!("minimize")).shortcut(super_key('m'));
 pub const ZOOM: &str = "zoom";
 pub const TAB_MENU: &str = "tab-menu";
@@ -244,6 +245,34 @@ pub const ARRANGEMENT_TABS_PREFIX: &str = "arrangement-tabs:";
 pub const SAVE_ARRANGEMENT: Action = Action::new("save-arrangement", || tr!("save-arrangement"))
     .shortcut(super_with(Modifiers::ALT.union(Modifiers::SHIFT), 's'));
 pub const PROFILE_PREFIX: &str = "profile:";
+
+// docs/notes-3.7.0beta4.txt: Lock Layout stops splitting, adding, closing and reordering tabs, and
+// closing or moving panes; resizing panes, new windows and closing the window still work.
+pub const LAYOUT_CHANGES: [&str; 15] = [
+    NEW_TAB.id,
+    NEW_TAB_PROFILE.id,
+    DUPLICATE_TAB.id,
+    DUPLICATE_SESSION.id,
+    SPLIT_VERTICALLY.id,
+    SPLIT_HORIZONTALLY.id,
+    CLOSE.id,
+    CLOSE_PANES.id,
+    UNDO_CLOSE.id,
+    MOVE_TAB_LEFT.id,
+    MOVE_TAB_RIGHT.id,
+    MOVE_SESSION_TO_TAB.id,
+    MOVE_SESSION_TO_PANE.id,
+    BURY_SESSION.id,
+    RESTORE_ARRANGEMENT_TABS,
+];
+const LAYOUT_CHANGE_PREFIXES: [&str; 3] = [PROFILE_PREFIX, ARRANGEMENT_TABS_PREFIX, BURIED_PREFIX];
+
+pub fn changes_layout(id: &str) -> bool {
+    LAYOUT_CHANGES.contains(&id)
+        || LAYOUT_CHANGE_PREFIXES
+            .iter()
+            .any(|prefix| id.starts_with(prefix))
+}
 pub const SPLIT_PANE: &str = "split-pane";
 pub const NEXT_PANE: Action =
     Action::new("next-pane", || tr!("next-pane")).shortcut(super_key(']'));
@@ -545,6 +574,7 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
             tr!("menu-window"),
             vec![
                 MINIMIZE.item(true),
+                LOCK_LAYOUT.item_with(true, CheckState::Checkbox(false)),
                 keyed(ZOOM, tr!("zoom"), "Super+Shift+)"),
                 MenuItem::Separator,
                 MenuItem::action(ARRANGE_EVENLY, tr!("arrange-evenly")).with_enabled(false),

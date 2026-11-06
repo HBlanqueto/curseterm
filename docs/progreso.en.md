@@ -3433,3 +3433,41 @@ modes.
 
 **Differs from iTerm2:** only the settings with behaviour in CurseTerm are
 there; the icon repeats General's (BK-024).
+
+## Phase 80 — Lock Layout
+
+### Plan
+
+`PseudoTerminal.m -toggleLayoutLocked:` freezes the window's layout (iTerm2
+3.7.0beta4 notes):
+
+1. Window › Lock Layout, checkable, per window.
+2. Locked, nothing splits, no tab is added, closed or reordered, and no pane
+   is closed, moved, buried or swapped. Those menu items are disabled and the
+   action is ignored from bindings, the tab bar and “+” too. One list,
+   `menu::LAYOUT_CHANGES`.
+3. Resizing panes, opening windows and closing the window still work.
+4. A saved arrangement remembers the lock (`layout_locked`,
+   `TERMINAL_ARRANGEMENT_LAYOUT_LOCKED`) and the restored window starts
+   locked.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+| Test | Result |
+|---|---|
+| Locked: New Tab disabled; ⌘T, ⌘D and ⌘W leave the window unchanged | ✓ |
+| Unlocked: ⌘T opens the tab | ✓ |
+| Saving “Bloq” while locked writes `layout_locked = true` | ✓ |
+| `--arrangement Bloq` opens the window with Lock Layout checked | ✓ |
+
+**Not tested:** the kit as is; the swap bindings with the window locked.
+
+## Decision — Pause Pane (2026-11-06)
+
+`PseudoTerminal.m -toggleTmuxPausePane:` is only enabled in a tmux client
+session with the gateway's pause mode (`tmuxController.gateway
+.pauseModeEnabled`). Without tmux integration there is nothing to pause; it
+comes with it.

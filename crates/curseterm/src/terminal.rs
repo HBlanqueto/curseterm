@@ -137,6 +137,7 @@ struct Handles {
     held: State<Modifiers>,
     transparency: State<bool>,
     question: State<Option<Question>>,
+    layout_locked: State<bool>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -372,6 +373,7 @@ impl App for Terminal {
         let pressed = use_hook(|| Rc::new(RefCell::new(Vec::<Code>::new())));
         let transparency = use_state(|| true);
         let question = use_state(|| None);
+        let layout_locked = use_state(|| false);
         let editing = use_state(|| false);
         let hints = use_state(|| None::<Hints>);
         let replay = use_state(|| None::<(SessionId, usize)>);
@@ -441,6 +443,7 @@ impl App for Terminal {
             held,
             transparency,
             question,
+            layout_locked,
         });
         handles.dark.set(dark);
         use_drop({
@@ -497,7 +500,18 @@ impl App for Terminal {
             let arrangement = self.arrangement.clone();
             let layout = self.layout.clone();
             move || {
-                if arrangement.is_some_and(|name| restore_arrangement(&handles, &events, &name)) {
+                if let Some(name) = arrangement
+                    && restore_arrangement(&handles, &events, &name)
+                {
+                    // PseudoTerminal.m -loadArrangement: TERMINAL_ARRANGEMENT_LAYOUT_LOCKED.
+                    let locked = handles
+                        .defaults
+                        .peek()
+                        .arrangements
+                        .iter()
+                        .any(|saved| saved.name == name && saved.layout_locked);
+                    let mut layout_locked = handles.layout_locked;
+                    layout_locked.set(locked);
                     return;
                 }
                 if layout.is_some_and(|layout| open_layouts(&handles, &events, layout.tabs)) {
@@ -1404,9 +1418,14 @@ fn use_live_menu(handles: &Handles) {
     );
     let workspace = handles.workspace.read();
     let several = workspace.receivers(Broadcast::AllTabs).len() > 1;
-    use_menu_enabled(menu::BURY_SESSION.id, several);
-    use_menu_enabled(menu::MOVE_SESSION_TO_TAB.id, several);
-    use_menu_enabled(menu::MOVE_SESSION_TO_PANE.id, several);
+    let unlocked = !*handles.layout_locked.read();
+    use_menu_checked(menu::LOCK_LAYOUT.id, !unlocked);
+    for id in menu::LAYOUT_CHANGES {
+        use_menu_enabled(id, unlocked);
+    }
+    use_menu_enabled(menu::BURY_SESSION.id, several && unlocked);
+    use_menu_enabled(menu::MOVE_SESSION_TO_TAB.id, several && unlocked);
+    use_menu_enabled(menu::MOVE_SESSION_TO_PANE.id, several && unlocked);
     let buried: Vec<(SessionId, String)> = handles
         .interred
         .read()
@@ -1438,14 +1457,17 @@ fn use_live_menu(handles: &Handles) {
         .active()
         .is_some_and(|session| session.has_scrollback());
     use_menu_enabled(menu::CLEAR_SCROLLBACK.id, scrollback);
-    use_menu_enabled(menu::CLOSE_PANES.id, split);
+    use_menu_enabled(menu::CLOSE_PANES.id, split && unlocked);
     use_menu_enabled(menu::ARRANGE_EVENLY, split);
     let warnings = handles.defaults.read().paste_warnings;
     use_menu_checked(menu::WARN_MULTI_LINE_PASTE, warnings.multi_line);
     use_menu_checked(menu::LIMIT_PASTE_WARNING, warnings.only_at_prompt);
     use_menu_enabled(menu::LIMIT_PASTE_WARNING, warnings.multi_line);
     use_menu_checked(menu::WARN_ONE_LINE_PASTE, warnings.one_line_at_prompt);
-    use_menu_enabled(menu::UNDO_CLOSE.id, handles.buried.read().is_some());
+    use_menu_enabled(
+        menu::UNDO_CLOSE.id,
+        handles.buried.read().is_some() && unlocked,
+    );
     use_menu_enabled(menu::PASTE_HISTORY.id, !handles.pastes.read().is_empty());
     let current = handles.active();
     use_menu_enabled(
@@ -1471,8 +1493,8 @@ fn use_live_menu(handles: &Handles) {
     );
     use_menu_enabled(menu::NEXT_TAB, tabs > 1);
     use_menu_enabled(menu::PREVIOUS_TAB, tabs > 1);
-    use_menu_enabled(menu::MOVE_TAB_LEFT.id, active > 0);
-    use_menu_enabled(menu::MOVE_TAB_RIGHT.id, active + 1 < tabs);
+    use_menu_enabled(menu::MOVE_TAB_LEFT.id, active > 0 && unlocked);
+    use_menu_enabled(menu::MOVE_TAB_RIGHT.id, active + 1 < tabs && unlocked);
     use_menu_enabled(menu::SPLIT_PANE, split);
     use_submenu_items(menu::SELECT_TAB, menu::select_tab_items(&titles, active));
     let profiles = handles.defaults.read().profiles();
@@ -2593,18 +2615,25 @@ fn perform_binding(
         BindingAction::IncreaseHeight => menu(menu::DIVIDER_DOWN),
         BindingAction::DecreaseWidth => menu(menu::DIVIDER_LEFT),
         BindingAction::IncreaseWidth => menu(menu::DIVIDER_RIGHT),
-        BindingAction::SwapPaneAbove => swap_pane(handles, Toward::Up),
-        BindingAction::SwapPaneBelow => swap_pane(handles, Toward::Down),
-        BindingAction::SwapPaneLeft => swap_pane(handles, Toward::Left),
-        BindingAction::SwapPaneRight => swap_pane(handles, Toward::Right),
+        BindingAction::SwapPaneAbove => {
+            swap_active(handles, |root, active| root.neighbor(active, Toward::Up))
+        }
+        BindingAction::SwapPaneBelow => {
+            swap_active(handles, |root, active| root.neighbor(active, Toward::Down))
+        }
+        BindingAction::SwapPaneLeft => {
+            swap_active(handles, |root, active| root.neighbor(active, Toward::Left))
+        }
+        BindingAction::SwapPaneRight => {
+            swap_active(handles, |root, active| root.neighbor(active, Toward::Right))
+        }
         BindingAction::SwapWithNextPane | BindingAction::SwapWithPreviousPane => {
             let step = if binding.action == BindingAction::SwapWithNextPane {
                 1
             } else {
                 -1
             };
-            let mut workspace = handles.workspace;
-            workspace.write().swap_active(|root, active| {
+            swap_active(handles, |root, active| {
                 Some(root.cycle(active, step)).filter(|other| *other != active)
             });
         }
@@ -2641,11 +2670,12 @@ fn perform_binding(
     }
 }
 
-fn swap_pane(handles: &Handles, toward: Toward) {
+fn swap_active(handles: &Handles, other: impl FnOnce(&Pane, SessionId) -> Option<SessionId>) {
+    if *handles.layout_locked.peek() {
+        return;
+    }
     let mut workspace = handles.workspace;
-    workspace
-        .write()
-        .swap_active(|root, active| root.neighbor(active, toward));
+    workspace.write().swap_active(other);
 }
 
 // PTYTextView+ARC.m -sendSnippet: with Option held the snippet opens in Advanced Paste;
@@ -3218,6 +3248,7 @@ fn save_arrangement(handles: &Handles, name: &str) {
         defaults.save_arrangement(Arrangement {
             name: name.to_string(),
             tabs,
+            layout_locked: *handles.layout_locked.peek(),
         })
     });
 }
@@ -3279,6 +3310,9 @@ fn open_layout(handles: &Handles, events: &Events, tab: TabLayout) -> bool {
 }
 
 fn new_tab(handles: &Handles, events: &Events, profile: &str, directory: Option<PathBuf>) {
+    if *handles.layout_locked.peek() {
+        return;
+    }
     let previous = handles
         .active()
         .and_then(|session| session.working_directory());
@@ -3293,6 +3327,9 @@ fn new_tab(handles: &Handles, events: &Events, profile: &str, directory: Option<
 }
 
 fn split(handles: &Handles, events: &Events, axis: Axis, profile: &str) {
+    if *handles.layout_locked.peek() {
+        return;
+    }
     let previous = handles
         .active()
         .and_then(|session| session.working_directory());
@@ -3315,6 +3352,9 @@ fn restart(handles: &Handles, events: &Events, session: &Session) {
 }
 
 fn request_close(handles: &Handles, closing: Closing) {
+    if *handles.layout_locked.peek() && !matches!(closing, Closing::Window) {
+        return;
+    }
     let workspace = handles.workspace.peek();
     let ids = match closing {
         Closing::Session(id) => vec![id],
@@ -3660,6 +3700,9 @@ fn close_tab(handles: &Handles, index: usize) {
 }
 
 fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>) {
+    if *handles.layout_locked.peek() && menu::changes_layout(id) {
+        return;
+    }
     let mut workspace = handles.workspace;
     let active = handles.active();
     let toward = match id {
@@ -3745,6 +3788,11 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         _ if id == menu::SETTINGS.id => windows::open(&["--settings"]),
         _ if id == menu::QUIT.id => windows::quit(),
         _ if id == menu::NEW_WINDOW.id => windows::open(&[]),
+        // PseudoTerminal.m -toggleLayoutLocked:.
+        _ if id == menu::LOCK_LAYOUT.id => {
+            let mut locked = handles.layout_locked;
+            locked.toggle();
+        }
         _ if id == menu::NEW_TAB.id => {
             let profile = handles.defaults.peek().default_profile_name();
             new_tab(handles, events, &profile, None);
@@ -3788,6 +3836,7 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             let layout = Arrangement {
                 name: String::new(),
                 tabs,
+                layout_locked: false,
             };
             match toml::to_string(&layout) {
                 Ok(layout) => windows::open(&["--layout", &layout]),

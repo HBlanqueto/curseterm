@@ -654,3 +654,4 @@ advanced-time-between-blinks = Cursor blink speed (seconds).
 advanced-slow-paste-bytes-per-call = Number of bytes to paste in each chunk when pasting slowly.
 advanced-slow-paste-delay-between-calls = Delay in seconds between chunks when pasting slowly
 advanced-paste-history-max-options = Number of entries to save in Paste History.
+lock-layout = Lock Layout
