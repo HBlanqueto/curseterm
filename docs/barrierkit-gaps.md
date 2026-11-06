@@ -2,7 +2,7 @@
 
 Versión/commit de BarrierKit usado: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Resumen: documento vivo; estado al cerrar la fase 20 (2026-11-06), probado en
+Resumen: documento vivo; estado al cerrar la fase 21 (2026-11-06), probado en
 sway sin pantalla con lavapipe (`progreso.md`). Lo más serio: los handlers de
 `use_menu_action` corren fuera del contexto de Freya y hacen abortar la app si
 tocan el portapapeles o `WindowControls::get()` (BK-017); el menú solo se
@@ -62,6 +62,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-030 | entrada | Los eventos de ratón no traen modificadores | media | Workaround: modificadores seguidos con el teclado |
 | BK-031 | ventana / apariencia | Una ventana no puede pedir fondo translúcido | media | Parche 0007 probado |
 | BK-032 | plataforma | Los avisos de `Timers` sobreviven a su ventana | alta | Workaround probado: `alive` en `terminal.rs` |
+| BK-033 | entrada | Sin método de entrada (`zwp_text_input_v3`) | alta | Parche 0009 probado |
 
 ## Gaps
 
@@ -701,6 +702,30 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **API propuesta para el kit**: que `Timers` sea por ventana o que `wakeup` devuelva un guardián que lo quite al soltarse.
 - **Gravedad**: alta
 - **Cómo reproducirlo**: con el parche 0008, abrir dos ventanas de terminal y cerrar una sin el indicador `alive`.
+
+### BK-033 — Sin método de entrada (`zwp_text_input_v3`)
+- **Área**: entrada
+- **Qué necesitaba CurseTerm**: escribir con un método de entrada (chino,
+  japonés, acentos compuestos), con el texto en composición en el cursor.
+- **Qué ofrece hoy BarrierKit**: Freya 0.4.3 trae `ImePreeditEventData`, pero
+  el runner no enlaza `zwp_text_input_manager_v3`, así que ningún método de
+  entrada llega a la app.
+- **Qué falta**: la entrada de texto del protocolo, el texto en composición
+  para la app y la posición del cursor para el método de entrada.
+- **Cómo lo resolví en CurseTerm**: el parche
+  [`kit-parches/0009-metodo-de-entrada.patch`](../kit-parches/0009-metodo-de-entrada.patch)
+  añade `platform/ime.rs`: el texto en composición se publica en
+  `WindowControls::ime_preedit`, el confirmado llega como `Key::Character` y
+  `set_ime_cursor_area` coloca la ventana del método de entrada. CurseTerm
+  dibuja la composición subrayada en el cursor. smithay-client-toolkit solo
+  avisa de las seats que aparecen después de arrancar, así que la inicial se
+  enlaza al construir el runtime.
+- **Coste del workaround**: sin el parche no hay método de entrada; los
+  campos de texto del kit reciben el texto confirmado pero no muestran la
+  composición.
+- **API propuesta para el kit**: la del parche, o los eventos `ImePreedit` de Freya entregados al elemento con foco.
+- **Gravedad**: alta
+- **Cómo reproducirlo**: buscar `text_input` en `crates/barrier-kit/src/platform`: no aparece.
 
 ## Cosas que funcionaron bien
 

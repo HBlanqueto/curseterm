@@ -1069,3 +1069,34 @@ aparte.
 
 - Open Quickly y Undo Close siguen sin ver las otras ventanas; tampoco se
   pueden mover pestañas entre ventanas.
+
+## Fase 21 — Método de entrada
+
+### Plan
+
+1. **Parche 0009:** el runner enlaza `zwp_text_input_v3`, publica el texto en
+   composición y entrega el confirmado como una tecla (BK-033).
+2. **CurseTerm:** dibuja la composición subrayada en el cursor de la sesión
+   activa y dice al método de entrada dónde está el cursor.
+3. **Prueba** con un método de entrada de prueba (`vime`, cliente de
+   `zwp_input_method_v2` en el laboratorio) y documentación en los dos
+   idiomas.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos del kit; 40 tests de la app y 1 del bloque.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `echo ` y composición `ñand`: aparece subrayada en el cursor y la shell aún no la recibe | ✓ tras enlazar la seat inicial; sctk solo avisa de las nuevas | `fase21-composicion.png` |
+| Confirmar `ñandú`: la shell recibe el texto y la composición desaparece | ✓ | — |
+
+**No probado:** que el compositor reciba `set_cursor_rectangle` (la traza no
+llegó a mostrarlo); un método de entrada real como fcitx5 o IBus; la
+composición en los campos de texto de las hojas.
+
+**Difiere de iTerm2:** la composición se dibuja encima de la línea, sin
+apartar el texto que hay a la derecha del cursor.

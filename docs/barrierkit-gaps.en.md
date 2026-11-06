@@ -2,7 +2,7 @@
 
 BarrierKit version/commit used: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Summary: living document; state at the close of phase 20 (2026-11-06), tested on
+Summary: living document; state at the close of phase 21 (2026-11-06), tested on
 headless sway with lavapipe (`progreso.en.md`). The most serious: the
 `use_menu_action` handlers run outside Freya's context and abort the app if
 they touch the clipboard or `WindowControls::get()` (BK-017); the menu is only
@@ -62,6 +62,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-030 | input | Mouse events carry no modifiers | medium | Workaround: modifiers tracked through the keyboard |
 | BK-031 | window / appearance | A window cannot ask for a translucent background | medium | Patch 0007 tested |
 | BK-032 | platform | `Timers` callbacks outlive their window | high | Tested workaround: `alive` in `terminal.rs` |
+| BK-033 | input | No input method (`zwp_text_input_v3`) | high | Patch 0009 tested |
 
 ## Gaps
 
@@ -697,6 +698,29 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Proposed kit API**: make `Timers` per window, or have `wakeup` return a guard that removes it when dropped.
 - **Severity**: high
 - **How to reproduce**: with patch 0008, open two terminal windows and close one without the `alive` flag.
+
+### BK-033 — No input method (`zwp_text_input_v3`)
+- **Area**: input
+- **What CurseTerm needed**: typing with an input method (Chinese, Japanese,
+  composed accents), with the composition text at the cursor.
+- **What BarrierKit offers today**: Freya 0.4.3 has `ImePreeditEventData`,
+  but the runner does not bind `zwp_text_input_manager_v3`, so no input
+  method reaches the app.
+- **What is missing**: the protocol's text input, the composition text for
+  the app and the cursor position for the input method.
+- **How CurseTerm solves it**: the patch
+  [`kit-parches/0009-metodo-de-entrada.patch`](../kit-parches/0009-metodo-de-entrada.patch)
+  adds `platform/ime.rs`: the composition text is published in
+  `WindowControls::ime_preedit`, the committed text arrives as
+  `Key::Character` and `set_ime_cursor_area` places the input method's
+  window. CurseTerm draws the composition underlined at the cursor.
+  smithay-client-toolkit only reports seats that appear after start-up, so
+  the initial one is attached when the runtime is built.
+- **Workaround cost**: without the patch there is no input method; the kit's
+  text fields get the committed text but do not show the composition.
+- **Proposed kit API**: the patch's, or Freya's `ImePreedit` events delivered to the focused element.
+- **Severity**: high
+- **How to reproduce**: search `crates/barrier-kit/src/platform` for `text_input`: it does not appear.
 
 ## Things that worked well
 

@@ -188,6 +188,7 @@ pub struct Overlay<'a> {
     pub broadcast: Option<Rgb>,
     pub badge: Option<&'a str>,
     pub opacity: f32,
+    pub preedit: Option<&'a str>,
 }
 
 pub fn draw(
@@ -250,6 +251,13 @@ pub fn draw(
         overlay.inset + ((cursor.point.line.0 + offset) as f32 + 0.5) * fonts.cell_height,
     );
     draw_cursor(ctx, term, cursor, offset, &frame.palette, fonts, focused);
+    if let Some(text) = overlay.preedit.filter(|text| !text.is_empty()) {
+        let (x, y) = (
+            cursor.point.column.0 as f32 * fonts.cell_width,
+            (cursor.point.line.0 + offset) as f32 * fonts.cell_height,
+        );
+        draw_preedit(ctx, text, (x, y), fonts, scheme);
+    }
     draw_images(ctx, overlay.extras, top, fonts);
     draw_marks(ctx, overlay, top, term.screen_lines() as i64, fonts, scheme);
     if overlay.extras.show_timestamps {
@@ -429,6 +437,27 @@ fn draw_timestamps(
             &ink,
         );
     }
+}
+
+fn draw_preedit(
+    ctx: &mut CanvasContext,
+    text: &str,
+    (x, y): (f32, f32),
+    fonts: &Fonts,
+    scheme: &Scheme,
+) {
+    let font = fonts.face(text.chars().next().unwrap_or(' '), 0);
+    let (width, _) = font.measure_str(text, None);
+    let mut fill = paint(scheme.selection);
+    fill.set_anti_alias(false);
+    ctx.canvas
+        .draw_rect(SkRect::new(x, y, x + width, y + fonts.cell_height), &fill);
+    let ink = paint(scheme.foreground);
+    ctx.canvas
+        .draw_str(text, (x, y + fonts.ascent), &font, &ink);
+    let underline = y + fonts.cell_height - 1.0;
+    ctx.canvas
+        .draw_rect(SkRect::new(x, underline - 1.0, x + width, underline), &ink);
 }
 
 fn draw_scroll_indicator(

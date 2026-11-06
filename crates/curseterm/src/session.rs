@@ -105,6 +105,7 @@ pub struct Session {
     sender: Sender<Cow<'static, [u8]>>,
     size: Cell<GridSize>,
     area: Cell<Option<(f32, f32)>>,
+    pub origin: Cell<(f32, f32)>,
     shell_pid: u32,
     runs_command: bool,
     pub started: Instant,
@@ -168,6 +169,7 @@ impl Session {
             sender,
             size: Cell::new(size),
             area: Cell::new(None),
+            origin: Cell::new((0.0, 0.0)),
             shell_pid,
             runs_command,
             started: Instant::now(),
@@ -405,6 +407,15 @@ impl Session {
         let mut selection = Selection::new(SelectionType::Simple, cell(span.start), Side::Left);
         selection.update(cell(span.end - 1), Side::Right);
         term.selection = Some(selection);
+    }
+
+    pub fn cursor_cell(&self) -> (usize, i32) {
+        let term = self.term.lock();
+        let cursor = term.grid().cursor.point;
+        (
+            cursor.column.0,
+            cursor.line.0 + term.grid().display_offset() as i32,
+        )
     }
 
     pub fn has_output(&self) -> bool {

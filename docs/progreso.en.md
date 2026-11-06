@@ -1065,3 +1065,33 @@ flight; the hotkey window, which is still a separate process.
 
 - Open Quickly and Undo Close still do not see the other windows; tabs
   cannot be moved between windows either.
+
+## Phase 21 — Input method
+
+### Plan
+
+1. **Patch 0009:** the runner binds `zwp_text_input_v3`, publishes the
+   composition text and delivers the committed one as a key (BK-033).
+2. **CurseTerm:** draws the composition underlined at the active session's
+   cursor and tells the input method where the cursor is.
+3. **Test** with a test input method (`vime`, a `zwp_input_method_v2` client
+   in the lab) and documentation in both languages.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the patched kit. `./dev.sh check` clean in both
+kit modes; 40 app tests and 1 block test.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `echo ` and composition `ñand`: it shows underlined at the cursor and the shell does not get it yet | ✓ after attaching the initial seat; sctk only reports new ones | `fase21-composicion.png` |
+| Committing `ñandú`: the shell gets the text and the composition goes away | ✓ | — |
+
+**Not tested:** that the compositor gets `set_cursor_rectangle` (the trace
+did not show it); a real input method such as fcitx5 or IBus; composition
+in the sheets' text fields.
+
+**Differs from iTerm2:** the composition is drawn over the line, without
+moving aside the text right of the cursor.

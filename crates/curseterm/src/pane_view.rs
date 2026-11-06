@@ -30,6 +30,7 @@ pub struct TerminalPane {
     pub held: State<Modifiers>,
     pub badge: Option<Rc<str>>,
     pub opacity: f32,
+    pub preedit: Option<Rc<str>>,
 }
 
 impl PartialEq for TerminalPane {
@@ -43,6 +44,7 @@ impl PartialEq for TerminalPane {
             && self.find == other.find
             && self.badge == other.badge
             && self.opacity == other.opacity
+            && self.preedit == other.preedit
     }
 }
 
@@ -70,6 +72,7 @@ impl Component for TerminalPane {
         let mut reported_cell = use_state(|| None::<(usize, usize)>);
         let badge = self.badge.clone();
         let opacity = self.opacity;
+        let preedit = self.preedit.clone();
 
         let mut look = DefaultHasher::new();
         (
@@ -81,6 +84,7 @@ impl Component for TerminalPane {
             &find,
             &badge,
             opacity.to_bits(),
+            &preedit,
             &scheme.name,
             fonts.cell_width.to_bits(),
         )
@@ -103,6 +107,7 @@ impl Component for TerminalPane {
                     broadcast: broadcast.then_some(scheme.ansi[1]),
                     badge: badge.as_deref(),
                     opacity,
+                    preedit: preedit.as_deref(),
                 };
                 grid::draw(ctx, &term, &fonts, &scheme, focused, &overlay);
             })
@@ -133,6 +138,7 @@ impl Component for TerminalPane {
                         let fonts = fonts.clone();
                         move |event: Event<SizedEventData>| {
                             let area = event.data().area;
+                            session.origin.set((area.min_x(), area.min_y()));
                             session.fit(
                                 area.width() - 2.0 * SPACE_2,
                                 area.height() - 2.0 * SPACE_2,

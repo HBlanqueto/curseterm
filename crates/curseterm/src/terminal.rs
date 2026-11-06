@@ -404,12 +404,15 @@ impl App for Terminal {
                     mode => state.receivers(mode),
                 },
                 transparent,
+                preedit: ime_preedit(&handles),
             };
             pane_tree(&root, Vec::new(), &painting)
         });
         drop(state);
         #[cfg(feature = "kit-parcheado")]
         use_background_alpha(if transparent { 0.0 } else { 1.0 });
+        #[cfg(feature = "kit-parcheado")]
+        place_ime_cursor(&handles);
         #[cfg(feature = "kit-parcheado")]
         use_window_title(&title);
 
@@ -519,6 +522,7 @@ struct Painting {
     receivers: Vec<SessionId>,
     find: Option<Rc<str>>,
     transparent: bool,
+    preedit: Option<Rc<str>>,
 }
 
 fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
@@ -537,6 +541,7 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                     find: painting.find.clone().filter(|_| *id == painting.active),
                     on_focus: Callback::new(move |id| workspace.write().focus(id)),
                     held: painting.handles.held,
+                    preedit: painting.preedit.clone().filter(|_| *id == painting.active),
                     opacity: if painting.transparent {
                         profile.opacity()
                     } else {
@@ -1691,6 +1696,34 @@ fn use_focus_report(handles: &Handles, focused: bool) {
         let sequence: &[u8] = if focused { b"\x1b[I" } else { b"\x1b[O" };
         session.write(sequence.to_vec());
     }
+}
+
+// BK-033: without patch 0009 no input method reaches the window.
+#[cfg(feature = "kit-parcheado")]
+fn ime_preedit(handles: &Handles) -> Option<Rc<str>> {
+    let text = handles.controls.ime_preedit.read();
+    (!text.is_empty()).then(|| Rc::from(text.as_str()))
+}
+
+#[cfg(not(feature = "kit-parcheado"))]
+fn ime_preedit(_: &Handles) -> Option<Rc<str>> {
+    None
+}
+
+#[cfg(feature = "kit-parcheado")]
+fn place_ime_cursor(handles: &Handles) {
+    let Some(session) = handles.active() else {
+        return;
+    };
+    let fonts = handles.fonts_for(&handles.defaults.peek().profile(&session.profile));
+    let (column, line) = session.cursor_cell();
+    let (x, y) = session.origin.get();
+    handles.controls.set_ime_cursor_area(
+        (x + SPACE_2 + column as f32 * fonts.cell_width) as i32,
+        (y + SPACE_2 + line as f32 * fonts.cell_height) as i32,
+        fonts.cell_width.ceil() as i32,
+        fonts.cell_height.ceil() as i32,
+    );
 }
 
 // BK-031: without patch 0007 the runner clears the window opaque, so transparency stays off.
