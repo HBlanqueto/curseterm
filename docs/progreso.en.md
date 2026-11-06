@@ -1119,3 +1119,31 @@ kit modes; 40 app tests and 1 block test.
 **Not tested:** the middle button when the program asks for the mouse (the
 click is sent to it and nothing is pasted, as in iTerm2); the primary
 selection in the sheets' text fields.
+
+## Phase 23 — Copy with Styles
+
+### Plan
+
+1. **Patch 0011:** `WindowControls::copy_rich(text, html)` offers
+   `text/html` besides plain text (BK-035).
+2. **Edit › Copy with Styles (⌥⌘C):** turns the selection into HTML with each
+   cell's resolved colours, bold, italic and underline.
+3. **Test** with `wl-paste -l` and `wl-paste -t text/html`.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the patched kit. `./dev.sh check` clean in both
+kit modes; 41 app tests (the HTML one only with the patched kit) and 1 block
+test.
+
+| Test | Result |
+|---|---|
+| Bold red `rojo` and ` <normal>`, triple click and ⌥⌘C: there is `text/html` with a bold `span` coloured `#cb4b16`, and `<normal>` escaped; the plain text is `rojo <normal>` | ✓ after keeping dark mode in `Handles`: `theme::resolved()` aborts outside Freya's context (BK-017) |
+| Underlined `verde`: the `span` has `text-decoration:underline` | ✓ |
+| ⌘C afterwards: only the text types remain | ✓ |
+
+**Not tested:** pasting into an app that reads `text/html` (there is none in
+the lab); block selections.
+
+**Differs from iTerm2:** iTerm2 copies RTF; CurseTerm copies HTML, the rich
+format Linux apps understand.

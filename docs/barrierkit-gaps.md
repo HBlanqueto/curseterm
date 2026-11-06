@@ -2,7 +2,7 @@
 
 Versión/commit de BarrierKit usado: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Resumen: documento vivo; estado al cerrar la fase 22 (2026-11-06), probado en
+Resumen: documento vivo; estado al cerrar la fase 23 (2026-11-06), probado en
 sway sin pantalla con lavapipe (`progreso.md`). Lo más serio: los handlers de
 `use_menu_action` corren fuera del contexto de Freya y hacen abortar la app si
 tocan el portapapeles o `WindowControls::get()` (BK-017); el menú solo se
@@ -64,6 +64,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-032 | plataforma | Los avisos de `Timers` sobreviven a su ventana | alta | Workaround probado: `alive` en `terminal.rs` |
 | BK-033 | entrada | Sin método de entrada (`zwp_text_input_v3`) | alta | Parche 0009 probado |
 | BK-034 | portapapeles | Sin selección primaria | media | Parche 0010 probado |
+| BK-035 | portapapeles | El portapapeles solo ofrece texto plano | baja | Parche 0011 probado |
 
 ## Gaps
 
@@ -746,6 +747,23 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **API propuesta para el kit**: la del parche.
 - **Gravedad**: media
 - **Cómo reproducirlo**: seleccionar en CurseTerm con el kit tal cual y `wl-paste --primary`: no da nada.
+
+### BK-035 — El portapapeles solo ofrece texto plano
+- **Área**: portapapeles
+- **Qué necesitaba CurseTerm**: Edit › Copy with Styles (⌥⌘C), que copia la
+  selección con sus colores y estilos para pegarla con formato.
+- **Qué ofrece hoy BarrierKit**: `ClipboardProvider::set_contents` publica
+  solo `TEXT_MIMES` (`platform/clipboard.rs:20`).
+- **Qué falta**: ofrecer varios formatos a la vez y servir cada uno.
+- **Cómo lo resolví en CurseTerm**: el parche
+  [`kit-parches/0011-copiar-con-formato.patch`](../kit-parches/0011-copiar-con-formato.patch)
+  añade `WindowControls::copy_rich(texto, html)`, que ofrece además
+  `text/html`. CurseTerm construye el HTML con los colores ya resueltos de
+  cada celda (`styled.rs`). Sin el parche, la entrada copia texto plano.
+- **Coste del workaround**: ninguno con el parche.
+- **API propuesta para el kit**: la del parche, o una lista de pares formato y datos.
+- **Gravedad**: baja
+- **Cómo reproducirlo**: copiar con el kit tal cual y `wl-paste -l`: solo hay tipos de texto.
 
 ## Cosas que funcionaron bien
 

@@ -2,7 +2,7 @@
 
 BarrierKit version/commit used: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Summary: living document; state at the close of phase 22 (2026-11-06), tested on
+Summary: living document; state at the close of phase 23 (2026-11-06), tested on
 headless sway with lavapipe (`progreso.en.md`). The most serious: the
 `use_menu_action` handlers run outside Freya's context and abort the app if
 they touch the clipboard or `WindowControls::get()` (BK-017); the menu is only
@@ -64,6 +64,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-032 | platform | `Timers` callbacks outlive their window | high | Tested workaround: `alive` in `terminal.rs` |
 | BK-033 | input | No input method (`zwp_text_input_v3`) | high | Patch 0009 tested |
 | BK-034 | clipboard | No primary selection | medium | Patch 0010 tested |
+| BK-035 | clipboard | The clipboard only offers plain text | low | Patch 0011 tested |
 
 ## Gaps
 
@@ -742,6 +743,23 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Proposed kit API**: the patch's.
 - **Severity**: medium
 - **How to reproduce**: select in CurseTerm with the kit as is and run `wl-paste --primary`: it gives nothing.
+
+### BK-035 — The clipboard only offers plain text
+- **Area**: clipboard
+- **What CurseTerm needed**: Edit › Copy with Styles (⌥⌘C), which copies the
+  selection with its colours and styles to paste it formatted.
+- **What BarrierKit offers today**: `ClipboardProvider::set_contents` only
+  publishes `TEXT_MIMES` (`platform/clipboard.rs:20`).
+- **What is missing**: offering several formats at once and serving each.
+- **How CurseTerm solves it**: the patch
+  [`kit-parches/0011-copiar-con-formato.patch`](../kit-parches/0011-copiar-con-formato.patch)
+  adds `WindowControls::copy_rich(text, html)`, which also offers
+  `text/html`. CurseTerm builds the HTML from each cell's resolved colours
+  (`styled.rs`). Without the patch, the item copies plain text.
+- **Workaround cost**: none with the patch.
+- **Proposed kit API**: the patch's, or a list of format and data pairs.
+- **Severity**: low
+- **How to reproduce**: copy with the kit as is and run `wl-paste -l`: there are only text types.
 
 ## Things that worked well
 

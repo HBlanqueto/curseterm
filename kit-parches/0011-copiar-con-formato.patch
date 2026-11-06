@@ -1,0 +1,182 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 6 Nov 2026 03:00:00 +0000
+Subject: [PATCH] feat(kit): copiar texto con formato (text/html)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+El portapapeles solo ofrecía texto plano. WindowControls::copy_rich
+ofrece además text/html; set_contents sigue copiando solo texto. Lo
+nota CurseTerm (BK-035).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F89v1xFeQ2WCVD25PBsobh
+---
+diff --git a/crates/barrier-kit/src/platform/clipboard.rs b/crates/barrier-kit/src/platform/clipboard.rs
+index f14c574..5dc2287 100644
+--- a/crates/barrier-kit/src/platform/clipboard.rs
++++ b/crates/barrier-kit/src/platform/clipboard.rs
+@@ -18,10 +18,12 @@ use sctk::reexports::client::{Connection, QueueHandle};
+ use super::runtime::Runtime;
+ 
+ pub(crate) const TEXT_MIMES: [&str; 3] = ["text/plain;charset=utf-8", "text/plain", "UTF8_STRING"];
++const HTML_MIME: &str = "text/html";
+ 
+ #[derive(Default)]
+ struct Shared {
+     own: Option<String>,
++    own_html: Option<String>,
+     to_publish: bool,
+     foreign: Option<Arc<OnceLock<String>>>,
+ }
+@@ -60,6 +62,15 @@ impl Clipboard {
+         Box::new(self.clone())
+     }
+ 
++    pub(crate) fn set_rich(&self, text: String, html: String) {
++        if let Ok(mut shared) = self.shared.lock() {
++            shared.own = Some(text);
++            shared.own_html = Some(html);
++            shared.to_publish = true;
++        }
++        self.ping.ping();
++    }
++
+     pub(crate) fn take_publish(&self) -> bool {
+         self.shared
+             .lock()
+@@ -103,6 +114,7 @@ impl ClipboardProvider for Clipboard {
+     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+         let mut shared = self.shared.lock().map_err(|_| "clipboard poisoned")?;
+         shared.own = Some(text);
++        shared.own_html = None;
+         shared.to_publish = true;
+         drop(shared);
+         self.ping.ping();
+@@ -127,13 +139,17 @@ impl Runtime {
+         if !std::mem::take(&mut shared.to_publish) {
+             return;
+         }
++        let html = shared.own_html.is_some().then_some(HTML_MIME);
++        drop(shared);
+         let Some(data) = self.clipboard_device.as_mut() else {
+             return;
+         };
+         let Some(device) = &data.device else {
+             return;
+         };
+-        let source = data.manager.create_copy_paste_source(&self.qh, TEXT_MIMES);
++        let source = data
++            .manager
++            .create_copy_paste_source(&self.qh, TEXT_MIMES.into_iter().chain(html));
+         source.set_selection(device, self.last_input_serial.get());
+         data.source = Some(source);
+     }
+@@ -226,15 +242,16 @@ impl DataSourceHandler for Runtime {
+         _: &Connection,
+         _: &QueueHandle<Self>,
+         _: &WlDataSource,
+-        _: String,
++        mime: String,
+         mut pipe: WritePipe,
+     ) {
+-        let own = self
+-            .clipboard
+-            .shared
+-            .lock()
+-            .ok()
+-            .and_then(|shared| shared.own.clone());
++        let own = self.clipboard.shared.lock().ok().and_then(|shared| {
++            if mime == HTML_MIME {
++                shared.own_html.clone()
++            } else {
++                shared.own.clone()
++            }
++        });
+         if let Some(text) = own {
+             std::thread::spawn(move || {
+                 if let Err(error) = pipe.write_all(text.as_bytes()) {
+@@ -256,6 +273,7 @@ impl DataSourceHandler for Runtime {
+             data.source = None;
+             if let Ok(mut shared) = self.clipboard.shared.lock() {
+                 shared.own = None;
++                shared.own_html = None;
+             }
+         }
+     }
+diff --git a/crates/barrier-kit/src/platform/tests.rs b/crates/barrier-kit/src/platform/tests.rs
+index efcba84..e8db9fd 100644
+--- a/crates/barrier-kit/src/platform/tests.rs
++++ b/crates/barrier-kit/src/platform/tests.rs
+@@ -27,6 +27,7 @@ pub(super) fn window_controls(status: WindowStatus) -> WindowControls {
+     let (ping, _source) = calloop::ping::make_ping().unwrap();
+     WindowControls {
+         primary: super::clipboard::Clipboard::new(ping.clone()),
++        clipboard: super::clipboard::Clipboard::new(ping.clone()),
+         queue: Rc::new(RefCell::new(Vec::new())),
+         ping,
+         pointer_serial: Rc::new(std::cell::Cell::new(0)),
+diff --git a/crates/barrier-kit/src/platform/window.rs b/crates/barrier-kit/src/platform/window.rs
+index 24c3f54..eb3f3aa 100644
+--- a/crates/barrier-kit/src/platform/window.rs
++++ b/crates/barrier-kit/src/platform/window.rs
+@@ -157,6 +157,7 @@ pub struct WindowControls {
+     pub(crate) overlay_titlebar_height: State<f32>,
+     pub ime_preedit: State<String>,
+     pub(crate) primary: super::clipboard::Clipboard,
++    pub(crate) clipboard: super::clipboard::Clipboard,
+ }
+ 
+ pub(crate) fn window_activated() -> bool {
+@@ -230,6 +231,10 @@ impl WindowControls {
+         self.ping.ping();
+     }
+ 
++    pub fn copy_rich(&self, text: String, html: String) {
++        self.clipboard.set_rich(text, html);
++    }
++
+     pub fn primary_selection(&self) -> Box<dyn freya_clipboard::copypasta::ClipboardProvider> {
+         self.primary.provider()
+     }
+@@ -489,6 +494,7 @@ impl Runtime {
+             overlay_titlebar_height: State::create_global(0.0),
+             ime_preedit: State::create_global(String::new()),
+             primary: self.primary.clone(),
++            clipboard: self.clipboard.clone(),
+         };
+         let focus_notice = self.focus_manager.as_ref().map(|manager| {
+             let notice = manager.get_focus_surface(&surface, qh, surface.id());
+diff --git a/docs/barrierkit/06-ventanas.en.md b/docs/barrierkit/06-ventanas.en.md
+index 10f503e..363fb3f 100644
+--- a/docs/barrierkit/06-ventanas.en.md
++++ b/docs/barrierkit/06-ventanas.en.md
+@@ -42,7 +42,9 @@ cursor is, in the window's logical pixels.
+ 
+ `primary_selection()` gives a `ClipboardProvider` for the primary selection
+ (`zwp_primary_selection`), the one the middle button pastes: `set_contents`
+-publishes it and `get_contents` reads another app's.
++publishes it and `get_contents` reads another app's. `copy_rich(text, html)`
++copies the plain text to the clipboard and also `text/html`, so apps that
++understand it paste with formatting.
+ 
+ ## Window state
+ 
+diff --git a/docs/barrierkit/06-ventanas.md b/docs/barrierkit/06-ventanas.md
+index a4de5ff..319ce11 100644
+--- a/docs/barrierkit/06-ventanas.md
++++ b/docs/barrierkit/06-ventanas.md
+@@ -42,7 +42,9 @@ el cursor, en píxeles lógicos de la ventana.
+ 
+ `primary_selection()` da un `ClipboardProvider` para la selección primaria
+ (`zwp_primary_selection`), la que pega el botón central: `set_contents` la
+-publica y `get_contents` lee la de otra app.
++publica y `get_contents` lee la de otra app. `copy_rich(texto, html)` copia al
++portapapeles el texto plano y además `text/html`, para que las apps que lo
++entienden peguen con formato.
+ 
+ ## Estado de la ventana
+ 
+-- 
+2.47.0

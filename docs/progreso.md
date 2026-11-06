@@ -1124,3 +1124,31 @@ los dos modos del kit; 40 tests de la app y 1 del bloque.
 **No probado:** el botón central cuando el programa pide el ratón (se le
 manda el clic y no se pega nada, como en iTerm2); la primaria en los campos
 de texto de las hojas.
+
+## Fase 23 — Copy with Styles
+
+### Plan
+
+1. **Parche 0011:** `WindowControls::copy_rich(texto, html)` ofrece
+   `text/html` además del texto plano (BK-035).
+2. **Edit › Copy with Styles (⌥⌘C):** convierte la selección en HTML con los
+   colores resueltos de cada celda, negrita, cursiva y subrayado.
+3. **Prueba** con `wl-paste -l` y `wl-paste -t text/html`.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos del kit; 41 tests de la app (el de HTML solo con el kit
+parcheado) y 1 del bloque.
+
+| Prueba | Resultado |
+|---|---|
+| `rojo` en negrita roja y ` <normal>`, triple clic y ⌥⌘C: hay `text/html` con un `span` en negrita y color `#cb4b16`, y `<normal>` escapado; el texto plano es `rojo <normal>` | ✓ tras guardar el modo oscuro en `Handles`: `theme::resolved()` aborta fuera del contexto de Freya (BK-017) |
+| `verde` subrayado: el `span` lleva `text-decoration:underline` | ✓ |
+| ⌘C después: solo quedan los tipos de texto | ✓ |
+
+**No probado:** pegar en una app que lea `text/html` (no hay ninguna en el
+laboratorio); selecciones en bloque.
+
+**Difiere de iTerm2:** iTerm2 copia RTF; CurseTerm copia HTML, el formato
+con formato que entienden las apps de Linux.

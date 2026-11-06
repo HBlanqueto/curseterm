@@ -49,6 +49,8 @@ pub const CLOSE_PANES: Action =
     Action::new("close-panes", || tr!("close-panes")).shortcut(super_with(Modifiers::ALT, 'w'));
 
 pub const COPY: Action = Action::new("copy", || tr!("copy")).shortcut(super_key('c'));
+pub const COPY_STYLED: Action =
+    Action::new("copy-styled", || tr!("copy-styled")).shortcut(super_with(Modifiers::ALT, 'c'));
 pub const PASTE: Action = Action::new("paste", || tr!("paste")).shortcut(super_key('v'));
 pub const CLEAR_BUFFER: Action =
     Action::new("clear-buffer", || tr!("clear-buffer")).shortcut(super_key('k'));
@@ -206,6 +208,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
             tr!("menu-edit"),
             vec![
                 COPY.item(false),
+                COPY_STYLED.item(false),
                 COPY_MODE.item_with(true, CheckState::Checkbox(false)),
                 PASTE.item(true),
                 submenu(

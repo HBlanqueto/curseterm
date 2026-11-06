@@ -103,6 +103,20 @@ pub struct Palette<'a> {
 }
 
 impl Palette<'_> {
+    pub fn cell_colors(&self, cell: &Cell) -> (Rgb, Rgb) {
+        let mut fg = self.resolve(bold_bright(cell.fg, cell.flags));
+        let mut bg = self.resolve(cell.bg);
+        if cell.flags.contains(Flags::INVERSE) {
+            std::mem::swap(&mut fg, &mut bg);
+        }
+        if cell.flags.contains(Flags::DIM) {
+            fg = dim(fg);
+        }
+        (fg, bg)
+    }
+}
+
+impl Palette<'_> {
     pub fn resolve(&self, color: Color) -> Rgb {
         match color {
             Color::Spec(rgb) => rgb,
@@ -547,14 +561,7 @@ fn draw_cell(
     } else {
         1.0
     };
-    let mut fg = palette.resolve(bold_bright(cell.fg, cell.flags));
-    let mut bg = palette.resolve(cell.bg);
-    if cell.flags.contains(Flags::INVERSE) {
-        std::mem::swap(&mut fg, &mut bg);
-    }
-    if cell.flags.contains(Flags::DIM) {
-        fg = dim(fg);
-    }
+    let (fg, mut bg) = palette.cell_colors(cell);
     if selected {
         bg = palette.scheme.selection;
     }

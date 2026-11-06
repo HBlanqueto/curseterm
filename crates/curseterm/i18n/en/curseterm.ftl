@@ -234,3 +234,4 @@ run-coprocess = Run Coprocess…
 stop-coprocess = Stop Coprocess
 coprocess-command = Command; it reads the session output and its output is typed in
 coprocess-confirm = Run
+copy-styled = Copy with Styles

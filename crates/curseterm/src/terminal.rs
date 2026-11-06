@@ -70,6 +70,7 @@ struct Handles {
     controls: WindowControls,
     timers: Timers,
     alive: Rc<Cell<bool>>,
+    dark: Rc<Cell<bool>>,
     clipboard: ClipboardState,
     broadcast: State<Broadcast>,
     find: Find,
@@ -256,6 +257,7 @@ impl App for Terminal {
             controls: WindowControls::get(),
             timers: Timers::get(),
             alive: Rc::new(Cell::new(true)),
+            dark: Rc::new(Cell::new(dark)),
             clipboard: consume_root_context(),
             broadcast,
             find,
@@ -269,6 +271,7 @@ impl App for Terminal {
             held,
             transparency,
         });
+        handles.dark.set(dark);
         use_drop({
             let alive = handles.alive.clone();
             move || alive.set(false)
@@ -605,6 +608,7 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::COPY.id, selection);
     use_menu_enabled(menu::USE_SELECTION_FOR_FIND.id, selection);
     use_menu_enabled(menu::OPEN_SELECTION.id, selection);
+    use_menu_enabled(menu::COPY_STYLED.id, selection);
     use_menu_enabled(menu::PASTE_SELECTION.id, selection);
     let logging = handles.active().is_some_and(|session| session.logging());
     use_menu_enabled(menu::LOG_START.id, !logging);
@@ -690,6 +694,29 @@ fn copy(handles: &Handles, session: &Session) {
         remember_paste(handles, text.clone());
         set_clipboard(handles.clipboard, text);
     }
+}
+
+// BK-035: without patch 0011 the clipboard only takes plain text.
+#[cfg(not(feature = "kit-parcheado"))]
+fn copy_styled(handles: &Handles, session: &Session) {
+    copy(handles, session);
+}
+
+#[cfg(feature = "kit-parcheado")]
+fn copy_styled(handles: &Handles, session: &Session) {
+    let defaults = handles.defaults.peek();
+    let profile = defaults.profile(&session.profile);
+    let scheme = defaults.scheme(&profile, handles.dark.get());
+    let (Some(text), Some(lines)) = (
+        session.selected_text(),
+        crate::styled::selection(session, &scheme),
+    ) else {
+        return;
+    };
+    let html = crate::styled::html(&lines, scheme.background, &profile.font_family);
+    drop(defaults);
+    remember_paste(handles, text.clone());
+    handles.controls.copy_rich(text, html);
 }
 
 fn remember_paste(handles: &Handles, text: String) {
@@ -1508,6 +1535,11 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         _ if id == menu::PASTE_SELECTION.id => {
             if let Some(text) = active.and_then(|session| session.selected_text()) {
                 paste_text(handles, text);
+            }
+        }
+        _ if id == menu::COPY_STYLED.id => {
+            if let Some(session) = &active {
+                copy_styled(handles, session);
             }
         }
         _ if id == menu::OPEN_SELECTION.id => {
