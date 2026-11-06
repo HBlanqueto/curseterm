@@ -2905,3 +2905,44 @@ de menú o de perfil.
 **Difiere de iTerm2:** Open Quickly, la barra de estado y la herramienta
 Actions de la barra lateral no las listan; sin importar ni exportar; sin
 reordenar arrastrando.
+
+## Fase 64 — Smart Selection del perfil
+
+### Plan
+
+La selección inteligente de iTerm2 (`iTermTextExtractor.m
+-smartSelectionAt:withRules:…`, `SmartSelectionController.m` y
+`SmartSelectionRules.plist`):
+
+1. **Reglas** con notas, expresión regular y precisión (Very Low 0,00001,
+   Low 0,001, Normal 1, High 1000, Very High 1 000 000); las once de serie de
+   iTerm2, traducidas al motor de `regex`.
+2. **Cuádruple clic:** cada coincidencia de cada regla que cubre el carácter
+   pulsado, en la línea lógica, puntúa precisión × longitud y gana la mejor;
+   sin ninguna, selección de palabra.
+3. Annotate en el cursor y Smart Select All (las pistas) usan las reglas del
+   perfil; las pistas, las de precisión Normal o más.
+4. **Profiles › Advanced › Smart Selection:** una fila por regla con notas,
+   expresión y precisión, «−», «+» y Load Defaults.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado, con «copiar al
+seleccionar». `./dev.sh check` limpio en los dos modos; un test nuevo de la
+elección entre reglas.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Cuádruple clic en `https://example.org/a,b`: `https://example.org/a` | ✓ | — |
+| En `me@example.com`: el correo entero | ✓ | — |
+| En `/usr/lib/x.so`: la ruta entera | ✓ | — |
+| En `ok`: la palabra | ✓ | — |
+| Ajustes › Profiles › Advanced: las once reglas con su precisión | ✓ | `fase64-seleccion-inteligente.png` |
+
+**No probado:** con el kit tal cual; editar una regla, borrarla y Load
+Defaults; una coincidencia que cruza una línea partida.
+
+**Difiere de iTerm2:** sin las acciones de cada regla (menú contextual y
+⌘+clic) ni el banco de pruebas de la hoja; el texto mirado es la línea lógica
+pulsada, no dos líneas por arriba y por abajo; `\b` es de ASCII y la regla
+HTTP URL pierde la rama con look-behind.

@@ -37,6 +37,7 @@ use crate::key_bindings::NamedAction;
 use crate::key_bindings_pane::{KeyBindingsEditor, Owner};
 use crate::localize::tr;
 use crate::menu;
+use crate::smart_selection::{self, Precision, Rule};
 use crate::snippets_pane::SnippetsPane;
 use crate::triggers;
 
@@ -387,6 +388,10 @@ impl Component for ProfilesPane {
                                 }))
                                 .maybe_child(
                                     (*section.read() == 7).then(|| triggers_table(index, &profile)),
+                                )
+                                .maybe_child(
+                                    (*section.read() == 7)
+                                        .then(|| smart_selection_table(index, &profile)),
                                 ),
                         ),
                     ),
@@ -1001,6 +1006,103 @@ fn trigger_editor(index: usize, position: usize, trigger: &Trigger) -> Rect {
         )
 }
 
+// SmartSelectionController.m: Notes, Regular Expression and Precision, with + and − and
+// Load Defaults.
+fn smart_selection_table(index: usize, profile: &Profile) -> Rect {
+    let rows = profile
+        .smart_selection_rules
+        .iter()
+        .enumerate()
+        .map(|(position, rule)| {
+            let text = |field, value: &str| {
+                rect().width(Size::flex(1.0)).child(ProfileText {
+                    index,
+                    field,
+                    value: value.to_string(),
+                })
+            };
+            let precision = Precision::ALL
+                .iter()
+                .position(|precision| *precision == rule.precision)
+                .unwrap_or_default();
+            rect()
+                .width(Size::fill())
+                .direction(Direction::Horizontal)
+                .content(Content::flex())
+                .cross_align(Alignment::Center)
+                .spacing(SPACE_1)
+                .child(text(Field::SmartNotes(position), &rule.notes))
+                .child(text(Field::SmartRegex(position), &rule.regex))
+                .child(
+                    rect().width(Size::px(TRIGGER_EDITOR.action_width)).child(
+                        [
+                            tr!("precision-very-low"),
+                            tr!("precision-low"),
+                            tr!("precision-normal"),
+                            tr!("precision-high"),
+                            tr!("precision-very-high"),
+                        ]
+                        .into_iter()
+                        .fold(
+                            PopUpButton::new(tr!("smart-selection-precision")),
+                            |popup, name| popup.item(name),
+                        )
+                        .selected(precision)
+                        .on_change(move |choice: usize| {
+                            edit(index, |profile| {
+                                if let Some(rule) = profile.smart_selection_rules.get_mut(position)
+                                {
+                                    rule.precision = Precision::ALL[choice];
+                                }
+                            })
+                        }),
+                    ),
+                )
+                .child(
+                    IconButton::new(Symbol::Minus, tr!("smart-selection-remove")).on_press(
+                        move |_| {
+                            edit(index, |profile| {
+                                if position < profile.smart_selection_rules.len() {
+                                    profile.smart_selection_rules.remove(position);
+                                }
+                            })
+                        },
+                    ),
+                )
+                .into_element()
+        });
+    rect()
+        .width(Size::fill())
+        .direction(Direction::Vertical)
+        .spacing(SPACE_1)
+        .child(text(
+            tr!("section-smart-selection"),
+            HEADLINE,
+            Palette::current().label,
+        ))
+        .children(rows)
+        .child(
+            rect()
+                .direction(Direction::Horizontal)
+                .cross_align(Alignment::Center)
+                .spacing(SPACE_1)
+                .child(
+                    IconButton::new(Symbol::Plus, tr!("smart-selection-add")).on_press(move |_| {
+                        edit(index, |profile| {
+                            profile.smart_selection_rules.push(Rule::default())
+                        })
+                    }),
+                )
+                .child(
+                    Button::new(tr!("smart-selection-defaults")).on_press(move |_| {
+                        edit(index, |profile| {
+                            profile.smart_selection_rules = smart_selection::default_rules()
+                        })
+                    }),
+                ),
+        )
+}
+
 fn edit_trigger(index: usize, position: usize, change: impl FnOnce(&mut Trigger)) {
     edit(index, |profile| {
         if let Some(trigger) = profile.triggers.get_mut(position) {
@@ -1111,6 +1213,8 @@ enum Field {
     Directory,
     Family,
     TriggerRegex(usize),
+    SmartNotes(usize),
+    SmartRegex(usize),
     TriggerParameter(usize, TriggerAction),
     Scrollback,
     Columns,
@@ -1130,7 +1234,8 @@ impl Field {
             Self::Badge => tr!("profile-badge-placeholder"),
             Self::Directory => tr!("directory-path"),
             Self::Family => tr!("font-family"),
-            Self::TriggerRegex(_) => tr!("trigger-regex"),
+            Self::TriggerRegex(_) | Self::SmartRegex(_) => tr!("trigger-regex"),
+            Self::SmartNotes(_) => tr!("smart-selection-notes"),
             Self::TriggerParameter(_, action) => trigger_placeholder(action),
             Self::Scrollback => tr!("scrollback-lines"),
             Self::Columns => tr!("window-columns"),
@@ -1184,6 +1289,14 @@ impl Field {
                         match self {
                             Self::TriggerRegex(_) => trigger.regex = value.clone(),
                             _ => trigger.parameter = value.clone(),
+                        }
+                    }
+                }
+                Self::SmartNotes(position) | Self::SmartRegex(position) => {
+                    if let Some(rule) = profile.smart_selection_rules.get_mut(position) {
+                        match self {
+                            Self::SmartNotes(_) => rule.notes = value.clone(),
+                            _ => rule.regex = value.clone(),
                         }
                     }
                 }

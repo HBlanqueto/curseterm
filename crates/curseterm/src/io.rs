@@ -20,6 +20,7 @@ use alacritty_terminal::term::cell::{Cell, Flags, Hyperlink};
 use alacritty_terminal::tty::{EventedReadWrite, Pty};
 use alacritty_terminal::vte::ansi::{Handler, Processor, Rgb};
 use freya_engine::prelude::{Data, Image};
+use regex::Regex;
 use rustix::event::{PollFd, PollFlags, Timespec, poll};
 
 use crate::config::{Trigger, TriggerAction};
@@ -27,6 +28,7 @@ use crate::integration::{self, Dimension, InlineImage, Notification, Report};
 use crate::key_report::{KeyMode, ModifyOtherKeysWatch};
 use crate::osc::{Piece, Splitter};
 use crate::session::Listener;
+use crate::smart_selection::{self, Precision, Rule};
 use crate::triggers::{self, Compiled, PARTIAL_LINE_INTERVAL};
 
 const READ_BUFFER: usize = 1 << 16;
@@ -112,6 +114,8 @@ pub struct Extras {
     compiled: Vec<Compiled>,
     pub fired: Vec<Fired>,
     last_partial_check: Option<Instant>,
+    smart_rules: Vec<Rule>,
+    pub smart_selection: Vec<(Regex, Precision)>,
 }
 
 impl Extras {
@@ -201,6 +205,13 @@ impl Extras {
         }
         self.triggers = triggers.to_vec();
         self.compiled = triggers::compile(triggers);
+    }
+
+    pub fn set_smart_selection_rules(&mut self, rules: &[Rule]) {
+        if self.smart_rules != rules {
+            self.smart_rules = rules.to_vec();
+            self.smart_selection = smart_selection::compile(rules);
+        }
     }
 
     // AlertTrigger.m: Disable This Alert turns the trigger off for this session only.
@@ -603,8 +614,27 @@ fn cursor_logical_line(term: &Term<Listener>) -> Range<i64> {
     first..last + 1
 }
 
+// The wrapped rows around `row`, up to the screen's last row.
+pub fn logical_line_at(term: &Term<Listener>, row: i64) -> Range<i64> {
+    let history = term.history_size() as i64;
+    let bottom = history + term.screen_lines() as i64 - 1;
+    let wraps = |row: i64| {
+        term.grid()[Line((row - history) as i32)][Column(term.columns() - 1)]
+            .flags
+            .contains(Flags::WRAPLINE)
+    };
+    let (mut first, mut last) = (row, row);
+    while first > 0 && wraps(first - 1) {
+        first -= 1;
+    }
+    while last < bottom && wraps(last) {
+        last += 1;
+    }
+    first..last + 1
+}
+
 // iTermStringLine: the wrapped rows joined, with each byte's cell.
-fn logical_text(term: &Term<Listener>, rows: Range<i64>) -> (String, Vec<(i64, usize)>) {
+pub fn logical_text(term: &Term<Listener>, rows: Range<i64>) -> (String, Vec<(i64, usize)>) {
     let history = term.history_size() as i64;
     let mut text = String::new();
     let mut cells = Vec::new();

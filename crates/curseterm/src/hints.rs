@@ -5,28 +5,6 @@ use crate::session::SessionId;
 // iTermAdvancedSettingsModel.m findUrlsRegex.
 pub const URL_PATTERN: &str = r"https?://([a-z0-9A-Z]+(:[a-zA-Z0-9]+)?@)?[a-z0-9A-Z\-]+(\.[a-z0-9A-Z\-]+)*((:[0-9]+)?)(/[a-zA-Z0-9;:/\.\-_+%~?&@=#\(\)]*)?";
 
-// SmartSelectionRules.plist, the rules of normal precision or more joined as
-// PTYSession.m -regularExpressonForNonLowPrecisionSmartSelectionRulesCombined does. The engine has
-// no look-behind, POSIX letter classes nor Unicode word boundaries: `\p{L}` and `\p{N}` stand for
-// the classes, the boundaries are ASCII ones, and the HTTP URL rule keeps its branch without the
-// look-behind.
-const SMART_RULES: [&str; 10] = [
-    r"([a-zA-Z0-9_]+::)+[a-zA-Z0-9_]+",
-    r"\~?/?([\p{L}\p{N}._-]+/+)+[\p{L}\p{N}._-]+/?",
-    r#"@?"(?:[^"\\]|\\.)*""#,
-    r"([\p{L}\p{N}._]+\.)+[\p{L}\p{N}._]+",
-    r"(?-u:\b)mailto:([a-z0-9A-Z_]+@)?([a-zA-Z0-9\-]+\.)*[a-zA-Z0-9\-]+(?-u:\b)",
-    r"@selector\([^)]+\)",
-    r"(?-u:\b)[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,4}(?-u:\b)",
-    r"https?://([a-z0-9A-Z]+(:[a-zA-Z0-9]+)?@)?([a-z0-9A-Z][-a-z0-9A-Z]*\.)*[A-Za-z][-A-Za-z]*((:[0-9]+)?)(/[a-zA-Z0-9;/.\-_+%?&@=#~(]*)?",
-    r"(?-u:\b)ssh:([a-z0-9A-Z_]+@)?([a-zA-Z0-9\-]+\.)*[a-zA-Z0-9\-]+(?-u:\b)",
-    r"(?-u:\b)telnet:([a-z0-9A-Z_]+@)?([a-zA-Z0-9\-]+\.)*[a-zA-Z0-9\-]+(?-u:\b)",
-];
-
-pub fn smart_pattern() -> String {
-    SMART_RULES.map(|rule| format!("(?:{rule})")).join("|")
-}
-
 #[derive(Clone, Copy, PartialEq)]
 pub enum HintAction {
     Open,
@@ -147,7 +125,8 @@ mod tests {
     #[test]
     fn the_url_and_smart_selection_expressions_compile_in_the_terminal_search() {
         assert!(RegexSearch::new(URL_PATTERN).is_ok());
-        assert!(RegexSearch::new(&smart_pattern()).is_ok());
+        let rules = crate::smart_selection::default_rules();
+        assert!(RegexSearch::new(&crate::smart_selection::combined_pattern(&rules)).is_ok());
     }
 
     #[test]

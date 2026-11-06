@@ -25,6 +25,7 @@ use alacritty_terminal::vte::ansi::{CursorShape, CursorStyle, Handler, Processor
 use barrier_kit::platform::WakeHandle;
 use barrier_kit_next::tokens::GLOBAL_SEARCH;
 
+use regex::Regex;
 use rustix::process::{Pid, Signal, kill_process_group};
 
 use crate::activity::Activity;
@@ -37,6 +38,7 @@ use crate::key_report::{KITTY_FLAGS, KeyMode};
 use crate::keys::CopyCommand;
 use crate::links;
 use crate::session_note::SessionNote;
+use crate::smart_selection::{self, Precision};
 
 pub type SessionId = u64;
 
@@ -204,6 +206,7 @@ impl Session {
         {
             let mut extras = self.extras();
             extras.set_triggers(&profile.triggers);
+            extras.set_smart_selection_rules(&profile.smart_selection_rules);
             extras.apps_change_key_mode = profile.apps_change_key_reporting;
             // PTYSession.m -setProfile: a profile asking for CSI u sets the session's mode.
             match (profile.report_keys_csi_u, extras.key_mode) {
@@ -593,21 +596,19 @@ impl Session {
     }
 
     pub fn smart_select(&self, point: Point) {
+        let rules = self.extras().smart_selection.clone();
         let mut term = self.term.lock();
-        let Some((first, last)) = smart_span(&term, point) else {
+        let Some((first, last)) = smart_span(&term, point, &rules) else {
             return;
         };
-        let mut selection = Selection::new(
-            SelectionType::Simple,
-            Point::new(point.line, first),
-            Side::Left,
-        );
-        selection.update(Point::new(point.line, last), Side::Right);
+        let mut selection = Selection::new(SelectionType::Simple, first, Side::Left);
+        selection.update(last, Side::Right);
         term.selection = Some(selection);
     }
 
     // The order of the tries follows PTYSession.m -addNoteAtCursor.
     pub fn annotate_cursor(&self) {
+        let rules = self.extras().smart_selection.clone();
         let term = self.term.lock();
         let cursor = term.grid().cursor.point;
         let line = pty_io::absolute_line(&term);
@@ -616,10 +617,15 @@ impl Session {
             .into_iter()
             .chain(cursor.column.0.checked_sub(1))
             .filter(|column| *column < term.columns())
-            .find_map(|column| smart_span(&term, Point::new(cursor.line, Column(column))));
-        let (start, end) = span.map_or((0, term.columns()), |(first, last)| (first.0, last.0 + 1));
+            .find_map(|column| smart_span(&term, Point::new(cursor.line, Column(column)), &rules));
+        let history = term.history_size() as i64;
+        let absolute = |point: Point| (history + i64::from(point.line.0), point.column.0);
+        let (start, end) = span.map_or(((line, 0), (line, term.columns())), |(first, last)| {
+            let (row, column) = absolute(last);
+            (absolute(first), (row, column + 1))
+        });
         drop(term);
-        self.extras().annotate((line, start), (line, end));
+        self.extras().annotate(start, end);
     }
 
     pub fn annotate_selection(&self) {
@@ -1254,12 +1260,29 @@ fn toggle_vi_selection(term: &mut Term<Listener>, kind: SelectionType) {
     });
 }
 
-fn smart_span(term: &Term<Listener>, point: Point) -> Option<(Column, Column)> {
+// iTermTextExtractor.m -smartSelectionAt:…: the profile's rules over the clicked logical line,
+// and word selection when none matches.
+fn smart_span(
+    term: &Term<Listener>,
+    point: Point,
+    rules: &[(Regex, Precision)],
+) -> Option<(Point, Point)> {
+    let history = term.history_size() as i64;
+    let row = history + i64::from(point.line.0);
+    let (text, cells) = pty_io::logical_text(term, pty_io::logical_line_at(term, row));
+    let target = cells.iter().position(|cell| *cell == (row, point.column.0));
+    let to_point =
+        |(row, column): (i64, usize)| Point::new(Line((row - history) as i32), Column(column));
+    if let Some(span) = target.and_then(|target| smart_selection::best_match(&text, target, rules))
+    {
+        return Some((to_point(cells[span.start]), to_point(cells[span.end - 1])));
+    }
     let (text, columns) = pty_io::trimmed_text_and_byte_columns(term, point.line);
-    let column = point.column.0;
-    let span = links::url_span(&text, &columns, column)
-        .or_else(|| links::word_span(&text, &columns, column))?;
-    Some((Column(columns[span.start]), Column(columns[span.end - 1])))
+    let span = links::word_span(&text, &columns, point.column.0)?;
+    Some((
+        Point::new(point.line, Column(columns[span.start])),
+        Point::new(point.line, Column(columns[span.end - 1])),
+    ))
 }
 
 #[cfg(test)]

@@ -73,6 +73,7 @@ use crate::session::{
     self, GridSize, Launch, Listener, MarkJump, Session, SessionId, TerminalState,
 };
 use crate::session_note::NoteChange;
+use crate::smart_selection;
 use crate::snippets::{self, Escaping, Snippet};
 use crate::status;
 use crate::theme;
@@ -3820,7 +3821,13 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         }
         _ if id == menu::SMART_SELECT_ALL.id => {
             if let Some(session) = &active {
-                let found = session::visible_found(&session.term.lock(), &hints::smart_pattern());
+                let rules = handles
+                    .defaults
+                    .peek()
+                    .profile(&session.profile)
+                    .smart_selection_rules;
+                let pattern = smart_selection::combined_pattern(&rules);
+                let found = session::visible_found(&session.term.lock(), &pattern);
                 show_hints(handles, session, found, HintAction::Copy);
             }
         }

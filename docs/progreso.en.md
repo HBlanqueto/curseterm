@@ -2882,3 +2882,44 @@ action.
 **Differs from iTerm2:** Open Quickly, the status bar and the toolbelt's
 Actions tool do not list them; no import or export; no reordering by
 dragging.
+
+## Phase 64 — The profile's Smart Selection
+
+### Plan
+
+iTerm2's smart selection (`iTermTextExtractor.m
+-smartSelectionAt:withRules:…`, `SmartSelectionController.m` and
+`SmartSelectionRules.plist`):
+
+1. **Rules** with notes, a regular expression and a precision (Very Low
+   0.00001, Low 0.001, Normal 1, High 1000, Very High 1,000,000); iTerm2's
+   eleven built-in ones, translated to the `regex` engine.
+2. **Quadruple click:** every match of every rule that covers the clicked
+   character, in the logical line, scores precision × length and the best one
+   wins; with none, word selection.
+3. Annotate at the cursor and Smart Select All (the hints) use the profile's
+   rules; the hints, those of Normal precision or more.
+4. **Profiles › Advanced › Smart Selection:** one row per rule with notes,
+   expression and precision, «−», «+» and Load Defaults.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit, with «copy on select».
+`./dev.sh check` clean in both modes; a new test for the choice between
+rules.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Quadruple click on `https://example.org/a,b`: `https://example.org/a` | ✓ | — |
+| On `me@example.com`: the whole address | ✓ | — |
+| On `/usr/lib/x.so`: the whole path | ✓ | — |
+| On `ok`: the word | ✓ | — |
+| Settings › Profiles › Advanced: the eleven rules with their precision | ✓ | `fase64-seleccion-inteligente.png` |
+
+**Not tested:** the kit as is; editing a rule, removing it and Load Defaults;
+a match across a wrapped line.
+
+**Differs from iTerm2:** no per-rule actions (context menu and ⌘+click) nor
+the sheet's playground; the text looked at is the clicked logical line, not
+two lines above and below; `\b` is ASCII and the HTTP URL rule loses its
+look-behind branch.

@@ -9,6 +9,7 @@ use crate::arrangement::Arrangement;
 use crate::find_mode::FindMode;
 use crate::key_bindings::{Binding, NamedAction};
 use crate::paste_warning::PasteWarnings;
+use crate::smart_selection::{self, Rule};
 use crate::snippets::Snippet;
 
 pub const APP_ID: &str = "org.curseterm.CurseTerm";
@@ -137,6 +138,7 @@ pub struct Profile {
     pub initial_text: String,
     pub working_directory: WorkingDirectory,
     pub triggers: Vec<Trigger>,
+    pub smart_selection_rules: Vec<Rule>,
     pub scrollback_lines: u32,
     pub flash_visual_bell: bool,
     pub bell_icon_in_tabs: bool,
@@ -348,6 +350,7 @@ impl Default for Profile {
             initial_text: String::new(),
             working_directory: WorkingDirectory::Home,
             triggers: Vec::new(),
+            smart_selection_rules: smart_selection::default_rules(),
             scrollback_lines: 1000,
             flash_visual_bell: true,
             bell_icon_in_tabs: true,
