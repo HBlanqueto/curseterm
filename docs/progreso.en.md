@@ -2216,3 +2216,44 @@ the tabs sheet.
 
 **Differs from iTerm2:** no «don't ask again» in the warnings; the sheet is
 our own, not an `NSAlert`.
+
+## Phase 50 — Find modes and Clear Find
+
+### Plan
+
+iTerm2's find mode (`iTermFindViewController.h` `iTermFindMode`,
+`iTermFindDriver.m` and `FindView.xib`) and Edit › Find › Clear Find
+(`iTermApplicationDelegate.m -clearFindString:`):
+
+1. **Five modes:** Smart Case Substring (the default: case-sensitive only if
+   the query has a capital), Case-Sensitive Substring, Case-Insensitive
+   Substring, Case-Sensitive Regex and Case-Insensitive Regex. Find and Filter
+   each save their own, like `findMode_iTerm` and `NoSyncFilterMode`. The mode
+   is chosen in a `PopUpButton` beside the field (BK-038).
+2. **Filter with expressions:** the filter stops comparing text and uses the
+   same pattern as Find.
+3. **Clear Find (⌥⌘E):** clears the query; it is enabled only when there is
+   something to clear.
+4. **iTerm2's Find submenu order:** Find URLs, Find All Smart Selection
+   Matches and Pick Result to Open in their group, and Filter last.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes; a new test checks each mode with the `regex` crate and that
+`alacritty_terminal`'s search accepts its patterns.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `error` in Smart Case: 13 results with `Error`, `error` and `ERROR` | ✓ | — |
+| Case-Sensitive Substring: 5 of 5, only `error`; the search reruns when the mode changes | ✓ | `fase50-distingue.png` |
+| ⌥⌘E leaves the field empty and without highlights | ✓ | — |
+| `FO+.BAR` in Case-Insensitive Regex: `foo.bar` and `fooxbar` | ✓ | `fase50-regex.png` |
+| `find_mode` and `filter_mode` are saved separately in the `.domain` | ✓ | — |
+| Filter `^E` in Case-Sensitive Regex: only `Error one` and `ERROR 3` | ✓ | `fase50-filtro.png` |
+
+**Not tested:** the kit as is; Clear Find enabled or disabled in the D-Bus
+menu.
+
+**Differs from iTerm2:** the mode is in a `PopUpButton`, not in the
+magnifier's menu (BK-038); no Erase Search History.

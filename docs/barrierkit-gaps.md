@@ -67,6 +67,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-035 | portapapeles | El portapapeles solo ofrece texto plano | baja | Parche 0011 probado |
 | BK-036 | controles | Sin vista de texto de varias líneas | media | Bloque probado `views::text_view` |
 | BK-037 | controles / avisos | `Alert` solo tiene dos botones y no se puede silenciar | baja | Workaround probado: hoja propia con `sheet` |
+| BK-038 | controles | `SearchField` no tiene menú de opciones | baja | Workaround probado: `PopUpButton` al lado |
 
 ## Gaps
 
@@ -836,6 +837,28 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Gravedad**: baja
 - **Cómo reproducirlo**: leer `pub struct Alert` en
   `crates/barrier-kit/src/views/feedback.rs`.
+
+### BK-038 — `SearchField` no tiene menú de opciones
+- **Área**: controles
+- **Qué necesitaba CurseTerm**: el modo de búsqueda de iTerm2 (Smart Case
+  Substring, Case-Sensitive Substring, Case-Insensitive Substring,
+  Case-Sensitive Regex y Case-Insensitive Regex), que en `FindView.xib` es el
+  menú de la lupa del campo de búsqueda.
+- **Qué ofrece hoy BarrierKit**: `SearchField` con `auto_focus`,
+  `on_focus_change` y `on_navigate` (`controls.rs:850`); la lupa es solo un
+  dibujo.
+- **Qué falta**: un menú en la lupa del `SearchField`, como
+  `NSSearchField.searchMenuTemplate`.
+- **Cómo lo resolví en CurseTerm**: un `PopUpButton` con los cinco modos al
+  lado del campo, en las barras de Find y de Filter (`mode_popup` en
+  `terminal.rs`).
+- **Coste del workaround**: la barra pierde ancho y el modo se ve siempre, no
+  solo al abrir el menú.
+- **API propuesta para el kit**: `SearchField::menu(Vec<MenuItem>)` con
+  radio para la opción elegida.
+- **Gravedad**: baja
+- **Cómo reproducirlo**: leer `pub struct SearchField` en
+  `crates/barrier-kit/src/controls.rs`.
 
 ## Cosas que funcionaron bien
 

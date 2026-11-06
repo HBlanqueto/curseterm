@@ -14,6 +14,7 @@ use barrier_kit::app_menu::MenuHandle;
 use barrier_kit::compact::Stepper;
 use barrier_kit::controls::{Button, ButtonStyle, SearchField, Slider, TextField};
 use barrier_kit::platform::{DecorationResponse, Timers, WakeHandle, WindowControls};
+use barrier_kit::popup_button::PopUpButton;
 use barrier_kit::style::{Palette, text};
 use barrier_kit::symbol::Symbol;
 use barrier_kit::theme::color;
@@ -46,6 +47,7 @@ use crate::config::{
     APP_ID, APP_NAME, AltKey, ClosePrompt, Defaults, MarkAlert, Profile, SessionEnd, Theme,
     WorkingDirectory, change_defaults,
 };
+use crate::find_mode::FindMode;
 use crate::grid::Fonts;
 use crate::hint_view;
 use crate::hints::{self, HintAction, Hints, Typed};
@@ -196,12 +198,19 @@ struct Find {
     focused: State<bool>,
     position: State<Option<(usize, usize)>>,
     field: AccessibilityId,
+    mode: fn(&Defaults) -> FindMode,
+    save_mode: fn(&mut Defaults, FindMode),
 }
 
 impl Find {
-    fn show_position(self, session: &Session, query: &str) {
+    fn show_position(self, session: &Session, pattern: &str) {
         let mut position = self.position;
-        position.set(session.find_position(query));
+        position.set(session.find_position(pattern));
+    }
+
+    fn pattern(self, defaults: &Defaults) -> Option<String> {
+        let query = self.query.read();
+        (!query.is_empty()).then(|| (self.mode)(defaults).pattern(&query))
     }
 
     fn close(self) {
@@ -243,10 +252,10 @@ impl Handles {
     }
 
     fn find(&self, direction: SearchDirection) {
-        let query = self.find.query.peek().clone();
-        if let Some(session) = self.active().filter(|_| !query.is_empty()) {
-            session.find(&query, direction);
-            self.find.show_position(&session, &query);
+        let pattern = self.find.pattern(&self.defaults.peek());
+        if let Some((session, pattern)) = self.active().zip(pattern) {
+            session.find(&pattern, direction);
+            self.find.show_position(&session, &pattern);
         }
     }
 
@@ -340,6 +349,8 @@ impl App for Terminal {
             focused: use_state(|| false),
             position: use_state(|| None),
             field: use_hook(AccessibilityId::new_unique),
+            mode: |defaults| defaults.find_mode,
+            save_mode: |defaults, mode| defaults.find_mode = mode,
         };
         let filter = Find {
             open: use_state(|| false),
@@ -347,6 +358,8 @@ impl App for Terminal {
             focused: use_state(|| false),
             position: use_state(|| None),
             field: use_hook(AccessibilityId::new_unique),
+            mode: |defaults| defaults.filter_mode,
+            save_mode: |defaults, mode| defaults.filter_mode = mode,
         };
         let handles = use_hook(move || Handles {
             workspace,
@@ -405,15 +418,15 @@ impl App for Terminal {
         use_side_effect({
             let handles = handles.clone();
             move || {
-                let query = find.query.read().clone();
-                if let Some(session) = handles.active().filter(|_| !query.is_empty()) {
+                let pattern = find.pattern(&defaults.read());
+                if let Some((session, pattern)) = handles.active().zip(pattern) {
                     session.clear_selection();
-                    session.find(&query, SearchDirection::Left);
+                    session.find(&pattern, SearchDirection::Left);
                     *revision.write() += 1;
-                    let typed = query.clone();
+                    let later = handles.clone();
                     handles.after(Duration::from_millis(DURATION_FAST_MS), move || {
-                        if *find.query.peek() == typed {
-                            find.show_position(&session, &typed);
+                        if find.pattern(&later.defaults.peek()).as_ref() == Some(&pattern) {
+                            find.show_position(&session, &pattern);
                         }
                     });
                 }
@@ -558,10 +571,15 @@ impl App for Terminal {
                 revision: *revision.read(),
                 workspace,
                 tab: state.active,
-                find: (*find.open.read() && !find.query.read().is_empty())
-                    .then(|| Rc::from(find.query.read().as_str())),
-                filter: (*handles.filter.open.read() && !handles.filter.query.read().is_empty())
-                    .then(|| Rc::from(handles.filter.query.read().as_str())),
+                find: find
+                    .pattern(&defaults.read())
+                    .filter(|_| *find.open.read())
+                    .map(Rc::from),
+                filter: handles
+                    .filter
+                    .pattern(&defaults.read())
+                    .filter(|_| *handles.filter.open.read())
+                    .map(Rc::from),
                 receivers: match *broadcast.read() {
                     Broadcast::Off => Vec::new(),
                     mode => state.receivers(mode),
@@ -585,7 +603,8 @@ impl App for Terminal {
 
         let keyboard = handles.clone();
         let find_bar = (*find.open.read()).then(|| find_bar(&handles, revision));
-        let filter_bar = (*handles.filter.open.read()).then(|| filter_bar(handles.filter));
+        let filter_bar = (*handles.filter.open.read())
+            .then(|| filter_bar(handles.filter, &handles.defaults.read()));
         let replay_bar = (*replay.read()).map(|(id, index)| replay_bar(&handles, id, index));
         let alert = (*confirm.read()).map(|pending| confirm_alert(&handles, pending));
         let sheet_view = (*sheet.read()).map(|open| match open {
@@ -1043,6 +1062,7 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::ANNOTATE_SELECTION.id, selection);
     let searching = *handles.find.open.read() && !handles.find.query.read().is_empty();
     use_menu_enabled(menu::PICK_RESULT.id, searching);
+    use_menu_enabled(menu::CLEAR_FIND.id, !handles.find.query.read().is_empty());
     use_menu_checked(menu::TOOLBELT.id, *handles.toolbelt.shown.read());
     for state in TerminalState::ALL {
         let on = handles
@@ -2082,6 +2102,30 @@ fn replay_bar(handles: &Handles, id: SessionId, index: usize) -> Element {
         .into_element()
 }
 
+// FindView.xib: the search field's menu chooses how the query matches.
+fn mode_popup(find: Find, defaults: &Defaults) -> PopUpButton {
+    let names = [
+        tr!("find-mode-smart-case"),
+        tr!("find-mode-case-sensitive"),
+        tr!("find-mode-case-insensitive"),
+        tr!("find-mode-regex-case-sensitive"),
+        tr!("find-mode-regex-case-insensitive"),
+    ];
+    let selected = FindMode::ALL
+        .iter()
+        .position(|mode| *mode == (find.mode)(defaults))
+        .unwrap_or_default();
+    names
+        .into_iter()
+        .fold(PopUpButton::new(tr!("find-mode")), |button, name| {
+            button.item(name)
+        })
+        .selected(selected)
+        .on_change(move |position: usize| {
+            change_defaults(|defaults| (find.save_mode)(defaults, FindMode::ALL[position]));
+        })
+}
+
 fn find_bar(handles: &Handles, mut revision: State<u64>) -> Element {
     let find = handles.find;
     let navigate = handles.clone();
@@ -2111,6 +2155,7 @@ fn find_bar(handles: &Handles, mut revision: State<u64>) -> Element {
                     *revision.write() += 1;
                 }),
         )
+        .child(mode_popup(find, &handles.defaults.read()))
         .maybe_child((!find.query.read().is_empty()).then(|| {
             let position = match *find.position.read() {
                 Some((current, total)) => {
@@ -2127,7 +2172,7 @@ fn find_bar(handles: &Handles, mut revision: State<u64>) -> Element {
 
 // iTermFindDriver.m: the Filter field; the session shows only the lines that match until it
 // closes.
-fn filter_bar(filter: Find) -> Element {
+fn filter_bar(filter: Find, defaults: &Defaults) -> Element {
     rect()
         .background(color(Palette::current().window_background))
         .width(Size::fill())
@@ -2146,6 +2191,7 @@ fn filter_bar(filter: Find) -> Element {
                     state.set(focused);
                 }),
         )
+        .child(mode_popup(filter, defaults))
         .child(Button::new(tr!("find-close")).on_press(move |_| close_filter(filter)))
         .into_element()
 }
@@ -3036,6 +3082,10 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
                 open.set(true);
             }
         }
+        _ if id == menu::CLEAR_FIND.id => {
+            let mut query = handles.find.query;
+            query.set(String::new());
+        }
         _ if id == menu::SET_MARK.id => {
             if let Some(session) = &active {
                 session.set_mark();
@@ -3099,9 +3149,9 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             }
         }
         _ if id == menu::PICK_RESULT.id => {
-            let query = handles.find.query.peek().clone();
-            if let Some(session) = active.as_ref().filter(|_| !query.is_empty()) {
-                let found = session::visible_find_results(&session.term.lock(), &query);
+            let pattern = handles.find.pattern(&handles.defaults.peek());
+            if let Some((session, pattern)) = active.as_ref().zip(pattern) {
+                let found = session::visible_found(&session.term.lock(), &pattern);
                 show_hints(handles, session, found, HintAction::Open);
             }
         }

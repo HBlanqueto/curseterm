@@ -2228,3 +2228,45 @@ en la hoja de tabuladores.
 
 **Difiere de iTerm2:** sin «no volver a preguntar» en los avisos; la hoja es
 propia, no un `NSAlert`.
+
+## Fase 50 — Modos de búsqueda y Clear Find
+
+### Plan
+
+El modo de búsqueda de iTerm2 (`iTermFindViewController.h` `iTermFindMode`,
+`iTermFindDriver.m` y `FindView.xib`) y Edit › Find › Clear Find
+(`iTermApplicationDelegate.m -clearFindString:`):
+
+1. **Cinco modos:** Smart Case Substring (por defecto: distingue mayúsculas
+   solo si la búsqueda tiene alguna), Case-Sensitive Substring,
+   Case-Insensitive Substring, Case-Sensitive Regex y Case-Insensitive Regex.
+   Find y Filter guardan cada uno el suyo, como `findMode_iTerm` y
+   `NoSyncFilterMode`. El modo se elige en un `PopUpButton` junto al campo
+   (BK-038).
+2. **Filter con expresiones:** el filtro deja de comparar texto y usa el mismo
+   patrón que Find.
+3. **Clear Find (⌥⌘E):** borra la búsqueda; solo está activo si hay algo que
+   borrar.
+4. **Orden del submenú Find de iTerm2:** Find URLs, Find All Smart Selection
+   Matches y Pick Result to Open en su grupo, y Filter al final.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos; un test nuevo comprueba cada modo con el crate `regex` y que
+la búsqueda de `alacritty_terminal` acepta sus patrones.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `error` en Smart Case: 13 resultados con `Error`, `error` y `ERROR` | ✓ | — |
+| Case-Sensitive Substring: 5 de 5, solo `error`; la búsqueda se repite al cambiar el modo | ✓ | `fase50-distingue.png` |
+| ⌥⌘E deja el campo vacío y sin resaltado | ✓ | — |
+| `FO+.BAR` en Case-Insensitive Regex: `foo.bar` y `fooxbar` | ✓ | `fase50-regex.png` |
+| `find_mode` y `filter_mode` quedan guardados por separado en el `.domain` | ✓ | — |
+| Filter `^E` en Case-Sensitive Regex: solo `Error one` y `ERROR 3` | ✓ | `fase50-filtro.png` |
+
+**No probado:** con el kit tal cual; Clear Find activo o inactivo en el menú
+D-Bus.
+
+**Difiere de iTerm2:** el modo está en un `PopUpButton` y no en el menú de la
+lupa (BK-038); sin Erase Search History.

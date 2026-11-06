@@ -127,14 +127,11 @@ thread_local! {
     static SEARCH: RefCell<Option<(String, RegexSearch)>> = const { RefCell::new(None) };
 }
 
-fn with_search<R>(query: &str, search: impl FnOnce(&mut RegexSearch) -> R) -> Option<R> {
+fn with_search<R>(pattern: &str, search: impl FnOnce(&mut RegexSearch) -> R) -> Option<R> {
     SEARCH.with(|cached| {
         let mut cached = cached.borrow_mut();
-        if cached.as_ref().is_none_or(|(known, _)| known != query) {
-            *cached = Some((
-                query.to_string(),
-                RegexSearch::new(&literal_pattern(query)).ok()?,
-            ));
+        if cached.as_ref().is_none_or(|(known, _)| known != pattern) {
+            *cached = Some((pattern.to_string(), RegexSearch::new(pattern).ok()?));
         }
         cached.as_mut().map(|(_, regex)| search(regex))
     })
@@ -727,19 +724,13 @@ impl Session {
         term.selection = Some(selection);
     }
 
-    // AsyncFilter.swift: whole logical lines holding the query, case-sensitive only when it has a
-    // capital (smart case), keeping as many of the newest as the screen holds.
-    pub fn filtered_rows(&self, query: &str) -> Vec<Vec<GridCell>> {
-        let term = self.term.lock();
-        let sensitive = query.chars().any(char::is_uppercase);
-        let fold = |text: &str| {
-            if sensitive {
-                text.to_string()
-            } else {
-                text.to_lowercase()
-            }
+    // AsyncFilter.swift: whole logical lines that match, keeping as many of the newest as the
+    // screen holds.
+    pub fn filtered_rows(&self, pattern: &str) -> Vec<Vec<GridCell>> {
+        let Ok(regex) = regex::Regex::new(pattern) else {
+            return Vec::new();
         };
-        let needle = fold(query);
+        let term = self.term.lock();
         let mut rows = Vec::new();
         let mut logical: Vec<Vec<GridCell>> = Vec::new();
         let mut text = String::new();
@@ -756,7 +747,7 @@ impl Session {
             );
             logical.push(row);
             if !wraps {
-                if fold(&text).contains(&needle) {
+                if regex.is_match(&text) {
                     rows.append(&mut logical);
                 } else {
                     logical.clear();
@@ -822,8 +813,8 @@ impl Session {
         }
     }
 
-    pub fn find(&self, query: &str, direction: Direction) -> bool {
-        with_search(query, |regex| self.find_with(regex, direction)).unwrap_or(false)
+    pub fn find(&self, pattern: &str, direction: Direction) -> bool {
+        with_search(pattern, |regex| self.find_with(regex, direction)).unwrap_or(false)
     }
 
     fn find_with(&self, regex: &mut RegexSearch, direction: Direction) -> bool {
@@ -851,14 +842,14 @@ impl Session {
         true
     }
 
-    pub fn find_position(&self, query: &str) -> Option<(usize, usize)> {
+    pub fn find_position(&self, pattern: &str) -> Option<(usize, usize)> {
         let term = self.term.lock();
         let start = Point::new(Line(-(term.history_size() as i32)), Column(0));
         let end = Point::new(
             Line(term.screen_lines() as i32 - 1),
             Column(term.columns() - 1),
         );
-        let all = matches_between(&term, query, start, end);
+        let all = matches_between(&term, pattern, start, end);
         let selected = term
             .selection
             .as_ref()
@@ -942,22 +933,18 @@ pub fn visible_found(term: &Term<Listener>, pattern: &str) -> Vec<hints::Found> 
         .collect()
 }
 
-pub fn visible_find_results(term: &Term<Listener>, query: &str) -> Vec<hints::Found> {
-    visible_found(term, &literal_pattern(query))
-}
-
-pub fn visible_matches(term: &Term<Listener>, query: &str) -> Vec<Match> {
+pub fn visible_matches(term: &Term<Listener>, pattern: &str) -> Vec<Match> {
     let offset = term.grid().display_offset() as i32;
     let start = Point::new(Line(-offset), Column(0));
     let end = Point::new(
         Line(term.screen_lines() as i32 - 1 - offset),
         Column(term.columns() - 1),
     );
-    matches_between(term, query, start, end)
+    matches_between(term, pattern, start, end)
 }
 
-fn matches_between(term: &Term<Listener>, query: &str, start: Point, end: Point) -> Vec<Match> {
-    with_search(query, |regex| matches_with(term, regex, start, end)).unwrap_or_default()
+fn matches_between(term: &Term<Listener>, pattern: &str, start: Point, end: Point) -> Vec<Match> {
+    with_search(pattern, |regex| matches_with(term, regex, start, end)).unwrap_or_default()
 }
 
 fn matches_with(
@@ -977,17 +964,6 @@ fn matches_with(
         }
     }
     found
-}
-
-fn literal_pattern(query: &str) -> String {
-    query
-        .chars()
-        .flat_map(|c| match c {
-            '\\' | '.' | '+' | '*' | '?' | '(' | ')' | '|' | '[' | ']' | '{' | '}' | '^' | '$'
-            | '#' | '&' | '-' | '~' => vec!['\\', c],
-            c => vec![c],
-        })
-        .collect()
 }
 
 fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {

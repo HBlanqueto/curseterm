@@ -113,6 +113,8 @@ pub const PICK_RESULT: Action = Action::new("pick-result", || tr!("pick-result")
 pub const USE_SELECTION_FOR_FIND: Action =
     Action::new("use-selection-for-find", || tr!("use-selection-for-find"))
         .shortcut(super_key('e'));
+pub const CLEAR_FIND: Action =
+    Action::new("clear-find", || tr!("clear-find")).shortcut(super_with(Modifiers::ALT, 'e'));
 pub const MARKS_MENU: &str = "marks-menu";
 pub const SET_MARK: Action =
     Action::new("set-mark", || tr!("set-mark")).shortcut(super_with(Modifiers::SHIFT, 'm'));
@@ -306,10 +308,13 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                         FIND_NEXT.item(true),
                         FIND_PREVIOUS.item(true),
                         USE_SELECTION_FOR_FIND.item(false),
-                        FILTER.item(true),
+                        CLEAR_FIND.item(false),
+                        MenuItem::Separator,
                         FIND_URLS.item(true),
                         SMART_SELECT_ALL.item(true),
                         PICK_RESULT.item(false),
+                        MenuItem::Separator,
+                        FILTER.item(true),
                     ],
                 ),
                 submenu(

@@ -6,6 +6,7 @@ use barrier_kit_next::tokens::{MONO, TERMINAL};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::arrangement::Arrangement;
+use crate::find_mode::FindMode;
 use crate::paste_warning::PasteWarnings;
 
 pub const APP_ID: &str = "org.curseterm.CurseTerm";
@@ -29,6 +30,8 @@ pub struct Defaults {
     pub theme: Theme,
     pub paste_warnings: PasteWarnings,
     pub paste_tab_spaces: u8,
+    pub find_mode: FindMode,
+    pub filter_mode: FindMode,
 }
 
 impl Default for Defaults {
@@ -47,6 +50,8 @@ impl Default for Defaults {
             paste_warnings: PasteWarnings::default(),
             // iTermNumberOfSpacesAccessoryViewController.m: four by default.
             paste_tab_spaces: 4,
+            find_mode: FindMode::default(),
+            filter_mode: FindMode::default(),
         }
     }
 }

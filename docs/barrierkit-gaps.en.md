@@ -67,6 +67,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-035 | clipboard | The clipboard only offers plain text | low | Patch 0011 tested |
 | BK-036 | controls | No multi-line text view | medium | Tested block `views::text_view` |
 | BK-037 | controls / alerts | `Alert` has only two buttons and cannot be silenced | low | Tested workaround: own sheet with `sheet` |
+| BK-038 | controls | `SearchField` has no options menu | low | Tested workaround: a `PopUpButton` beside it |
 
 ## Gaps
 
@@ -834,6 +835,27 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Severity**: low
 - **How to reproduce**: read `pub struct Alert` in
   `crates/barrier-kit/src/views/feedback.rs`.
+
+### BK-038 — `SearchField` has no options menu
+- **Area**: controls
+- **What CurseTerm needed**: iTerm2's find mode (Smart Case Substring,
+  Case-Sensitive Substring, Case-Insensitive Substring, Case-Sensitive Regex
+  and Case-Insensitive Regex), which in `FindView.xib` is the menu of the
+  search field's magnifier.
+- **What BarrierKit offers today**: `SearchField` with `auto_focus`,
+  `on_focus_change` and `on_navigate` (`controls.rs:850`); the magnifier is
+  only a drawing.
+- **What is missing**: a menu on the `SearchField` magnifier, like
+  `NSSearchField.searchMenuTemplate`.
+- **How I solved it in CurseTerm**: a `PopUpButton` with the five modes beside
+  the field, in the Find and Filter bars (`mode_popup` in `terminal.rs`).
+- **Cost of the workaround**: the bar loses width and the mode is always
+  visible, not only when the menu opens.
+- **Proposed kit API**: `SearchField::menu(Vec<MenuItem>)` with a radio for
+  the chosen option.
+- **Severity**: low
+- **How to reproduce**: read `pub struct SearchField` in
+  `crates/barrier-kit/src/controls.rs`.
 
 ## Things that worked well
 

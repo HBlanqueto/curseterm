@@ -6,6 +6,7 @@ mod clock;
 mod composer;
 mod composer_view;
 mod config;
+mod find_mode;
 mod grid;
 mod hint_view;
 mod hints;
