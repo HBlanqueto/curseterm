@@ -1988,3 +1988,46 @@ and the dimming of background windows; there are no tab colors, tab numbers,
 subtitles or overflow menu; the title bar and tabs use flat
 `windowBackgroundColor`, without macOS's translucent material; the window
 buttons are the kit's.
+
+## Phase 44 — Duplicating, even panes and selecting the command
+
+### Plan
+
+Four entries of iTerm2's menus:
+
+1. **Duplicate Tab** (Shell) copies the whole tab, with its panes, profiles
+   and folders (`PseudoTerminal.m -createDuplicateOfTab:`). It used to open a
+   tab with only the active session, which is what **Duplicate Session**
+   (Session, `-duplicateSession:`) does.
+2. **Arrange Split Panes Evenly** (Window) gives every pane the same share,
+   at every level (`PTYTab.m -arrangeSplitPanesEvenlyInSplitView:`). It is
+   only enabled with panes.
+3. **Select Current Command** (Edit) selects, at a prompt, what was typed
+   since `OSC 133;B`, and otherwise the last command, from `133;B` to
+   `133;C` (`PTYSession.m -textViewRangeOfCurrentCommand`). `133;B` is now
+   read.
+4. **Test** on sway and documentation.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the patched kit. `./dev.sh check` clean in both
+modes; the `OSC 133` test now checks `133;B`.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| ⌘D twice leaves panes of 1/2, 1/4 and 1/4; Arrange Split Panes Evenly makes them thirds | ✓ | `fase44-paneles.png` (top and middle) |
+| Duplicate Tab opens a tab with the same three panes | ✓ | `fase44-paneles.png` (bottom) |
+| Duplicate Session and Arrange Split Panes Evenly appear in their menus; the latter is disabled without panes | ✓ | — |
+| With a `PS1` that emits `133;B` and `echo hola` typed: Select Current Command is enabled and, after Copy, the clipboard holds what was typed since the mark | ✓ | — |
+| The same in the first pane of a duplicated tab | ✓ | — |
+
+**Not tested:** the kit as is; the last finished command, which needs a
+shell that emits `133;C`; a multi-line command.
+
+**Differs from iTerm2:** the selection is not copied by itself even with
+copy on select on; continuation prompts (PS2) and the right prompt are not
+taken out of the range; Duplicate Tab activates the first pane, not the one
+that was active; Duplicate Window and Replace Selection (Base64,
+JSON) are not there.

@@ -114,6 +114,18 @@ impl Pane {
         }
     }
 
+    // PTYTab.m -arrangeSplitPanesEvenlyInSplitView:
+    pub fn arrange_evenly(&mut self) {
+        if let Self::Split {
+            children, ratios, ..
+        } = self
+        {
+            let share = 1.0 / children.len() as f32;
+            ratios.iter_mut().for_each(|ratio| *ratio = share);
+            children.iter_mut().for_each(Self::arrange_evenly);
+        }
+    }
+
     pub fn remove(&mut self, target: SessionId) -> bool {
         let Self::Split {
             children, ratios, ..

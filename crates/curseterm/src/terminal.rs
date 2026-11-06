@@ -961,6 +961,12 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::SAVE_SELECTION.id, selection);
     let output = handles.active().is_some_and(|session| session.has_output());
     use_menu_enabled(menu::SELECT_OUTPUT.id, output);
+    use_menu_enabled(
+        menu::SELECT_CURRENT_COMMAND.id,
+        handles
+            .active()
+            .is_some_and(|session| session.has_current_command()),
+    );
     let copy_mode = handles.active().is_some_and(|session| session.copy_mode());
     use_menu_checked(menu::COPY_MODE.id, copy_mode);
     let timestamps = handles
@@ -1038,6 +1044,7 @@ fn use_live_menu(handles: &Handles) {
         .is_some_and(|session| session.has_scrollback());
     use_menu_enabled(menu::CLEAR_SCROLLBACK.id, scrollback);
     use_menu_enabled(menu::CLOSE_PANES.id, split);
+    use_menu_enabled(menu::ARRANGE_EVENLY, split);
     use_menu_enabled(menu::UNDO_CLOSE.id, handles.buried.read().is_some());
     use_menu_enabled(menu::PASTE_HISTORY.id, !handles.pastes.read().is_empty());
     let current = handles.active();
@@ -2219,22 +2226,12 @@ fn save_arrangement(handles: &Handles, name: &str) {
     if name.is_empty() {
         return;
     }
-    let sessions = handles.sessions.peek();
-    let describe = |id| {
-        let session = sessions.get(&id)?;
-        Some((session.profile.clone(), session.working_directory()))
-    };
     let tabs: Vec<TabLayout> = handles
         .workspace
         .peek()
         .tabs
         .iter()
-        .filter_map(|tab| {
-            Some(TabLayout {
-                title: tab.title.clone(),
-                root: arrangement::capture(&tab.root, &describe)?,
-            })
-        })
+        .filter_map(|tab| tab_layout(handles, tab))
         .collect();
     change_defaults(|defaults| {
         defaults.arrangements.retain(|saved| saved.name != name);
@@ -2258,26 +2255,43 @@ fn restore_arrangement(handles: &Handles, events: &Events, name: &str) -> bool {
     };
     let mut restored = false;
     for tab in saved.tabs {
-        let root = arrangement::build(&tab.root, &mut |profile, directory| {
-            let mut launch = handles.launch(profile, None);
-            if directory.is_some() {
-                launch.directory = directory;
-            }
-            spawn(handles, events, launch)
-        });
-        if let Some(root) = root {
-            let active = root.leaves()[0];
-            let mut workspace = handles.workspace;
-            workspace.write().restore(Tab {
-                root,
-                active,
-                zoomed: false,
-                title: tab.title,
-            });
-            restored = true;
-        }
+        restored |= open_layout(handles, events, tab);
     }
     restored
+}
+
+fn tab_layout(handles: &Handles, tab: &Tab) -> Option<TabLayout> {
+    let sessions = handles.sessions.peek();
+    let describe = |id| {
+        let session = sessions.get(&id)?;
+        Some((session.profile.clone(), session.working_directory()))
+    };
+    Some(TabLayout {
+        title: tab.title.clone(),
+        root: arrangement::capture(&tab.root, &describe)?,
+    })
+}
+
+fn open_layout(handles: &Handles, events: &Events, tab: TabLayout) -> bool {
+    let root = arrangement::build(&tab.root, &mut |profile, directory| {
+        let mut launch = handles.launch(profile, None);
+        if directory.is_some() {
+            launch.directory = directory;
+        }
+        spawn(handles, events, launch)
+    });
+    let Some(root) = root else {
+        return false;
+    };
+    let active = root.leaves()[0];
+    let mut workspace = handles.workspace;
+    workspace.write().restore(Tab {
+        root,
+        active,
+        zoomed: false,
+        title: tab.title,
+    });
+    true
 }
 
 fn new_tab(handles: &Handles, events: &Events, profile: &str, directory: Option<PathBuf>) {
@@ -2553,12 +2567,30 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             let profile = handles.defaults.peek().default_profile_name();
             new_tab(handles, events, &profile, None);
         }
-        _ if id == menu::DUPLICATE_TAB.id => {
+        // PseudoTerminal.m -duplicateSession: a new tab with only this session, in its folder.
+        _ if id == menu::DUPLICATE_SESSION.id => {
             let directory = active
                 .as_ref()
                 .and_then(|session| session.working_directory());
             new_tab(handles, events, &handles.current_profile(), directory);
         }
+        // PseudoTerminal.m -createDuplicateOfTab: the same panes, profiles and folders.
+        _ if id == menu::DUPLICATE_TAB.id => {
+            let workspace = handles.workspace.peek();
+            let copy = workspace
+                .active_tab()
+                .and_then(|tab| tab_layout(handles, tab));
+            drop(workspace);
+            if let Some(copy) = copy {
+                open_layout(handles, events, copy);
+            }
+        }
+        _ if id == menu::SELECT_CURRENT_COMMAND.id => {
+            if let Some(session) = &active {
+                session.select_current_command();
+            }
+        }
+        menu::ARRANGE_EVENLY => workspace.write().arrange_evenly(),
         _ if id == menu::SPLIT_VERTICALLY.id => split(handles, events, Axis::Row),
         _ if id == menu::SPLIT_HORIZONTALLY.id => split(handles, events, Axis::Column),
         _ if id == menu::CLOSE.id => {

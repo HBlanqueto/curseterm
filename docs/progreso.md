@@ -2001,3 +2001,45 @@ transparencia ni la atenuación de ventanas de fondo; no hay colores de
 pestaña, números de pestaña, subtítulos ni menú de desbordamiento; la
 barra de título y las pestañas usan `windowBackgroundColor` liso, sin el
 material translúcido de macOS; los botones de ventana son los del kit.
+
+## Fase 44 — Duplicar, repartir paneles y seleccionar el comando
+
+### Plan
+
+Cuatro entradas de los menús de iTerm2:
+
+1. **Duplicate Tab** (Shell) copia la pestaña entera, con sus paneles,
+   perfiles y carpetas (`PseudoTerminal.m -createDuplicateOfTab:`). Antes
+   abría una pestaña con la sesión activa sola, que es lo que hace
+   **Duplicate Session** (Session, `-duplicateSession:`).
+2. **Arrange Split Panes Evenly** (Window) da a cada panel la misma parte, en
+   cada nivel (`PTYTab.m -arrangeSplitPanesEvenlyInSplitView:`). Solo está
+   activo con paneles.
+3. **Select Current Command** (Edit) selecciona en un prompt lo escrito desde
+   `OSC 133;B` y, si no, el último comando, de `133;B` a `133;C`
+   (`PTYSession.m -textViewRangeOfCurrentCommand`). Ahora se lee `133;B`.
+4. **Prueba** en sway y documentación.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos; el test de `OSC 133` comprueba ahora `133;B`.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| ⌘D dos veces deja paneles de 1/2, 1/4 y 1/4; Arrange Split Panes Evenly los deja en tercios | ✓ | `fase44-paneles.png` (arriba y en medio) |
+| Duplicate Tab abre una pestaña con los mismos tres paneles | ✓ | `fase44-paneles.png` (abajo) |
+| Duplicate Session y Arrange Split Panes Evenly salen en sus menús; este último desactivado sin paneles | ✓ | — |
+| Con `PS1` que emite `133;B` y `echo hola` escrito: Select Current Command se activa y, tras Copy, el portapapeles tiene lo escrito desde la marca | ✓ | — |
+| Lo mismo en el primer panel de una pestaña duplicada | ✓ | — |
+
+**No probado:** con el kit tal cual; el último comando ya ejecutado, que
+necesita una shell que emita `133;C`; un comando de varias líneas.
+
+**Difiere de iTerm2:** la selección no se copia sola aunque esté activado
+copiar al seleccionar; no se quitan del rango los prompts de continuación
+(PS2) ni el prompt de la derecha; Duplicate Tab deja activo el primer panel,
+no el que lo estaba; Duplicate Window y Replace
+Selection (Base64, JSON) no están.

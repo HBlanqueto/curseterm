@@ -678,6 +678,44 @@ impl Session {
         term.scroll_to_point(point(start));
     }
 
+    // PTYSession.m -textViewRangeOfCurrentCommand: at a prompt, what has been typed after it;
+    // otherwise the last command.
+    fn current_command(&self) -> Option<((i64, usize), (i64, usize))> {
+        let extras = self.extras();
+        match extras.command_start {
+            Some(start) => {
+                let term = self.term.lock();
+                Some((
+                    start,
+                    (
+                        pty_io::absolute_line(&term),
+                        term.grid().cursor.point.column.0,
+                    ),
+                ))
+            }
+            None => extras.command,
+        }
+        .filter(|(start, end)| end > start)
+    }
+
+    pub fn has_current_command(&self) -> bool {
+        self.current_command().is_some()
+    }
+
+    pub fn select_current_command(&self) {
+        let Some((start, end)) = self.current_command() else {
+            return;
+        };
+        let mut term = self.term.lock();
+        let history = term.history_size() as i64;
+        let point = |(line, column): (i64, usize)| {
+            Point::new(Line((line - history) as i32), Column(column))
+        };
+        let mut selection = Selection::new(SelectionType::Simple, point(start), Side::Left);
+        selection.update(point(end), Side::Left);
+        term.selection = Some(selection);
+    }
+
     pub fn copy_mode(&self) -> bool {
         self.mode().contains(TermMode::VI)
     }

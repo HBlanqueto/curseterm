@@ -30,6 +30,10 @@ pub const NEW_TAB: Action = Action::new("new-tab", || tr!("new-tab")).shortcut(s
 pub const NEW_TAB_PROFILE: Action = Action::new("new-tab-profile", || tr!("new-tab-profile"))
     .shortcut(super_with(Modifiers::ALT.union(Modifiers::SHIFT), 't'));
 pub const DUPLICATE_TAB: Action = Action::new("duplicate-tab", || tr!("duplicate-tab"));
+pub const DUPLICATE_SESSION: Action = Action::new("duplicate-session", || tr!("duplicate-session"));
+pub const SELECT_CURRENT_COMMAND: Action =
+    Action::new("select-current-command", || tr!("select-current-command"));
+pub const ARRANGE_EVENLY: &str = "arrange-evenly";
 pub const SPLIT_VERTICALLY: Action =
     Action::new("split-vertically", || tr!("split-vertically")).shortcut(super_key('d'));
 pub const SPLIT_HORIZONTALLY: Action =
@@ -275,6 +279,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 MenuItem::Separator,
                 SELECT_ALL.item(true),
                 SELECT_OUTPUT.item(false),
+                SELECT_CURRENT_COMMAND.item(false),
                 MenuItem::Separator,
                 submenu(
                     FIND_MENU,
@@ -351,6 +356,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
             tr!("menu-session"),
             vec![
                 EDIT_SESSION.item(true),
+                DUPLICATE_SESSION.item(true),
                 MenuItem::Separator,
                 RUN_COPROCESS.item(true),
                 STOP_COPROCESS.item(false),
@@ -395,6 +401,8 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
             vec![
                 MINIMIZE.item(true),
                 keyed(ZOOM, tr!("zoom"), "Super+Shift+)"),
+                MenuItem::Separator,
+                MenuItem::action(ARRANGE_EVENLY, tr!("arrange-evenly")).with_enabled(false),
                 MenuItem::Separator,
                 EDIT_WINDOW_TITLE.item(true),
                 EDIT_TAB_TITLE.item(true),

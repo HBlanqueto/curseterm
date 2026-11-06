@@ -95,6 +95,8 @@ pub struct Extras {
     pub triggers_enabled: bool,
     pub mark_reported: bool,
     pub last_status: Option<i32>,
+    pub command_start: Option<(i64, usize)>,
+    pub command: Option<((i64, usize), (i64, usize))>,
     pub alert_on_next_mark: bool,
     pub notifications: Vec<Notification>,
     triggers: Vec<Trigger>,
@@ -248,6 +250,10 @@ impl Extras {
             .filter(|anchored| **anchored >= lines.end)
             .for_each(|anchored| *anchored -= removed);
     }
+}
+
+fn cursor_point(term: &Term<Listener>) -> (i64, usize) {
+    (absolute_line(term), term.grid().cursor.point.column.0)
 }
 
 pub fn absolute_line(term: &Term<Listener>) -> i64 {
@@ -489,7 +495,14 @@ fn apply(term: &mut Term<Listener>, extras: &Mutex<Extras>, report: Report) {
             extras.add_mark(absolute_line(term));
             extras.mark_reported = true;
         }
-        Report::OutputStart => extras.output_start = Some(absolute_line(term)),
+        Report::CommandStart => extras.command_start = Some(cursor_point(term)),
+        Report::OutputStart => {
+            let line = absolute_line(term);
+            if let Some(start) = extras.command_start.take() {
+                extras.command = Some((start, cursor_point(term)));
+            }
+            extras.output_start = Some(line);
+        }
         Report::CommandEnd(status) => {
             extras.last_status = status;
             extras.end_output(absolute_line(term), term.grid().cursor.point.column.0)

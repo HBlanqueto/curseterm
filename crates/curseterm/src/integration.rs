@@ -7,6 +7,7 @@ use base64::engine::general_purpose::STANDARD;
 pub enum Report {
     Directory(PathBuf),
     Mark,
+    CommandStart,
     OutputStart,
     CommandEnd(Option<i32>),
     Image(InlineImage),
@@ -43,6 +44,7 @@ pub fn parse(payload: &[u8]) -> Option<Report> {
         [b'7', b';', url @ ..] => file_url(std::str::from_utf8(url).ok()?).map(Report::Directory),
         [b'9', b';', ..] => growl(text?.strip_prefix("9;")?),
         [b'1', b'3', b'3', b';', b'A', ..] => Some(Report::Mark),
+        [b'1', b'3', b'3', b';', b'B', ..] => Some(Report::CommandStart),
         [b'1', b'3', b'3', b';', b'C', ..] => Some(Report::OutputStart),
         [b'1', b'3', b'3', b';', b'D', rest @ ..] => {
             Some(Report::CommandEnd(std::str::from_utf8(rest).ok().and_then(
@@ -185,14 +187,14 @@ mod tests {
     }
 
     #[test]
-    fn a_prompt_start_or_set_mark_is_a_mark_and_the_command_input_is_ignored() {
+    fn a_prompt_start_or_set_mark_is_a_mark_and_the_command_input_starts_a_command() {
         assert_eq!(parse(b"133;A"), Some(Report::Mark));
         assert_eq!(parse(b"1337;SetMark"), Some(Report::Mark));
         assert_eq!(parse(b"133;C"), Some(Report::OutputStart));
         assert_eq!(parse(b"133;D;0"), Some(Report::CommandEnd(Some(0))));
         assert_eq!(parse(b"133;D;127"), Some(Report::CommandEnd(Some(127))));
         assert_eq!(parse(b"133;D"), Some(Report::CommandEnd(None)));
-        assert_eq!(parse(b"133;B"), None);
+        assert_eq!(parse(b"133;B"), Some(Report::CommandStart));
     }
 
     #[test]

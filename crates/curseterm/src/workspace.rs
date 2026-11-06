@@ -266,6 +266,12 @@ impl Workspace {
         }
     }
 
+    pub fn arrange_evenly(&mut self) {
+        if let Some(tab) = self.active_tab_mut() {
+            tab.root.arrange_evenly();
+        }
+    }
+
     pub fn toggle_zoom(&mut self) {
         if let Some(tab) = self.active_tab_mut() {
             tab.zoomed = !tab.zoomed && tab.root.is_split();
