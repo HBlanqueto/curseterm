@@ -9,6 +9,7 @@ menu-edit = Edit
 copy = Copy
 copy-mode = Copy Mode
 paste = Paste
+soft-boundaries = Selection Respects Soft Boundaries
 select-all = Select All
 select-output = Select Output of Last Command
 tabs = Tabs

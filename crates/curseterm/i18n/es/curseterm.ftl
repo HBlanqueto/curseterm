@@ -9,6 +9,7 @@ menu-edit = Edición
 copy = Copiar
 copy-mode = Modo copia
 paste = Pegar
+soft-boundaries = La selección respeta los bordes suaves
 select-all = Seleccionar todo
 select-output = Seleccionar la salida del último comando
 tabs = Pestañas

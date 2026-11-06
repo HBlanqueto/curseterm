@@ -1342,6 +1342,9 @@ fn use_live_menu(handles: &Handles) {
         .active()
         .is_some_and(|session| session.extras().triggers_enabled);
     use_menu_checked(menu::TRIGGERS_ENABLED.id, triggers);
+    let soft_boundaries = handles.defaults.read().selection_respects_soft_boundaries;
+    session::SOFT_BOUNDARIES.store(soft_boundaries, std::sync::atomic::Ordering::Relaxed);
+    use_menu_checked(menu::SOFT_BOUNDARIES.id, soft_boundaries);
     let interactive = handles
         .active()
         .is_some_and(|session| session.extras().triggers_in_interactive_apps);
@@ -4178,6 +4181,10 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
                 open_sheet(handles, Sheet::AddTrigger(session.id));
             }
         }
+        _ if id == menu::SOFT_BOUNDARIES.id => change_defaults(|defaults| {
+            defaults.selection_respects_soft_boundaries =
+                !defaults.selection_respects_soft_boundaries
+        }),
         _ if id == menu::TRIGGERS_IN_INTERACTIVE_APPS.id => {
             if let Some(session) = &active {
                 let mut extras = session.extras();

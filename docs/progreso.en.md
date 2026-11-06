@@ -3152,3 +3152,34 @@ flags (fish).
 
 **Differs from iTerm2:** it is a sheet, not the announcement bar over the
 session; it only looks at the kitty flags, not modifyOtherKeys.
+
+## Phase 71 — Selection Respects Soft Boundaries
+
+### Plan
+
+iTerm2's Edit › Selection Respects Soft Boundaries (⌥⌘A)
+(`iTermTextExtractor.m -restrictToLogicalWindowIncludingCoord:`,
+`-coordContainsColumnDivider:`):
+
+1. A soft boundary is a column with `|`, `│`, `├` or `┤` in at least eight
+   rows in a row, like a vim or tmux split.
+2. With the checkbox, a triple click selects the line only between the
+   boundaries around the click, and smart selection looks only at that part.
+3. The checkbox applies to every session and is saved.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit and twelve lines with `|` in
+column 30. `./dev.sh check` clean in both modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Without the checkbox, triple click: `izquierda 5 … \|derecha 5` | ✓ | — |
+| With it, triple click on the left: `izquierda 5` and its spaces; on the right: `derecha 5` | ✓ | `fase71-bordes-suaves.png` |
+| Quadruple click on «derecha»: `derecha` with the checkbox and `\|derecha` without it | ✓ | — |
+
+**Not tested:** the kit as is; boundaries with box-drawing `│`.
+
+**Differs from iTerm2:** dragging is not limited to the window
+(`alacritty_terminal`'s selection has no column windows), nor is search; the
+copied line keeps its spaces up to the boundary.

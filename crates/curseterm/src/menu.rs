@@ -100,6 +100,8 @@ pub const PASTE_SELECTION: Action = Action::new("paste-selection", || tr!("paste
 pub const LOG_MENU: &str = "log-menu";
 pub const LOG_START: Action = Action::new("log-start", || tr!("log-start"));
 pub const LOG_STOP: Action = Action::new("log-stop", || tr!("log-stop"));
+pub const SOFT_BOUNDARIES: Action = Action::new("soft-boundaries", || tr!("soft-boundaries"))
+    .shortcut(super_with(Modifiers::ALT, 'a'));
 pub const SELECT_ALL: Action =
     Action::new("select-all", || tr!("select-all")).shortcut(super_key('a'));
 pub const SELECT_OUTPUT: Action = Action::new("select-output", || tr!("select-output"))
@@ -396,6 +398,7 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
                 SELECT_ALL.item(true),
                 SELECT_OUTPUT.item(false),
                 SELECT_CURRENT_COMMAND.item(false),
+                SOFT_BOUNDARIES.item_with(true, CheckState::Checkbox(false)),
                 MenuItem::Separator,
                 submenu(
                     FIND_MENU,

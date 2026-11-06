@@ -44,6 +44,7 @@ pub struct Defaults {
     pub actions: Vec<NamedAction>,
     pub show_tabs_in_fullscreen: bool,
     pub reset_key_reporting: Option<bool>,
+    pub selection_respects_soft_boundaries: bool,
 }
 
 impl Default for Defaults {
@@ -73,6 +74,7 @@ impl Default for Defaults {
             // iTermPreferences.m: ShowFullScreenTabBar YES.
             show_tabs_in_fullscreen: true,
             reset_key_reporting: None,
+            selection_respects_soft_boundaries: false,
         }
     }
 }

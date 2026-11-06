@@ -3174,3 +3174,34 @@ las banderas (fish).
 
 **Difiere de iTerm2:** es una hoja, no la barra de avisos sobre la sesión;
 solo mira las banderas kitty, no modifyOtherKeys.
+
+## Fase 71 — Selection Respects Soft Boundaries
+
+### Plan
+
+Edit › Selection Respects Soft Boundaries (⌥⌘A) de iTerm2
+(`iTermTextExtractor.m -restrictToLogicalWindowIncludingCoord:`,
+`-coordContainsColumnDivider:`):
+
+1. Un borde suave es una columna con `|`, `│`, `├` o `┤` en al menos ocho
+   filas seguidas, como la división de vim o de tmux.
+2. Con la casilla, el triple clic selecciona la línea solo entre los bordes
+   que rodean el clic, y la selección inteligente mira solo esa parte.
+3. La casilla vale para todas las sesiones y se guarda.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado y doce líneas con `|` en
+la columna 30. `./dev.sh check` limpio en los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Sin la casilla, triple clic: `izquierda 5 … \|derecha 5` | ✓ | — |
+| Con ella, triple clic a la izquierda: `izquierda 5` y sus espacios; a la derecha: `derecha 5` | ✓ | `fase71-bordes-suaves.png` |
+| Cuádruple clic en «derecha»: `derecha` con la casilla y `\|derecha` sin ella | ✓ | — |
+
+**No probado:** con el kit tal cual; bordes con `│` de dibujo de cajas.
+
+**Difiere de iTerm2:** arrastrar no se limita a la ventana (la selección de
+`alacritty_terminal` no tiene ventanas de columnas), ni la búsqueda; la línea
+copiada conserva los espacios hasta el borde.

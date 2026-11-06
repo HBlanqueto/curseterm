@@ -2,10 +2,11 @@ use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::io::{self, Read};
-use std::ops::RangeInclusive;
+use std::ops::{Range, RangeInclusive};
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
@@ -496,7 +497,24 @@ impl Session {
     }
 
     pub fn start_selection(&self, kind: SelectionType, point: Point, side: Side) {
-        self.term.lock().selection = Some(Selection::new(kind, point, side));
+        let mut term = self.term.lock();
+        let window = (kind == SelectionType::Lines && SOFT_BOUNDARIES.load(Ordering::Relaxed))
+            .then(|| logical_window(&term, point))
+            .filter(|window| window.len() < term.columns());
+        // PTYTextView -selectLineAt…respectingDividers: the line inside the dividers only.
+        term.selection = Some(match window {
+            Some(window) => {
+                let mut selection = Selection::new(
+                    SelectionType::Simple,
+                    Point::new(point.line, Column(window.start)),
+                    Side::Left,
+                );
+                selection.update(Point::new(point.line, Column(window.end - 1)), Side::Right);
+                selection
+            }
+            None => Selection::new(kind, point, side),
+        });
+        drop(term);
         self.extras().sub_selections.clear();
     }
 
@@ -1389,8 +1407,49 @@ fn toggle_vi_selection(term: &mut Term<Listener>, kind: SelectionType) {
     });
 }
 
+// iTermController selectionRespectsSoftBoundaries: one setting for every session.
+pub static SOFT_BOUNDARIES: AtomicBool = AtomicBool::new(false);
+
+const DIVIDERS: [char; 4] = ['|', '\u{2502}', '\u{251c}', '\u{2524}'];
+// iTermTextExtractor.m kNumCharsToSearchForDivider.
+const DIVIDER_RUN: i32 = 8;
+
+// iTermTextExtractor.m -restrictToLogicalWindowIncludingCoord:: the columns between the vertical
+// dividers around the point, a divider being a column of eight of them.
+fn logical_window(term: &Term<Listener>, point: Point) -> Range<usize> {
+    let divider_at = |line: i32, column: usize| {
+        let line = Line(line);
+        line >= term.topmost_line()
+            && line <= term.bottommost_line()
+            && DIVIDERS.contains(&term.grid()[line][Column(column)].c)
+    };
+    let is_divider = |column: usize| {
+        let run = |step: i32| {
+            (1..DIVIDER_RUN)
+                .take_while(|offset| divider_at(point.line.0 + step * offset, column))
+                .count() as i32
+        };
+        divider_at(point.line.0, column) && 1 + run(-1) + run(1) >= DIVIDER_RUN
+    };
+    let dividers: Vec<usize> = (0..term.columns())
+        .filter(|column| is_divider(*column))
+        .collect();
+    let start = dividers
+        .iter()
+        .filter(|column| **column < point.column.0)
+        .max()
+        .map_or(0, |column| column + 1);
+    let end = dividers
+        .iter()
+        .find(|column| **column > point.column.0)
+        .copied()
+        .unwrap_or(term.columns());
+    start..end
+}
+
 // iTermTextExtractor.m -smartSelectionAt:…: the profile's rules over the clicked logical line,
-// and word selection when none matches.
+// or only inside the dividers when the selection respects them, and word selection when none
+// matches.
 fn smart_span(
     term: &Term<Listener>,
     point: Point,
@@ -1398,7 +1457,17 @@ fn smart_span(
 ) -> Option<(Point, Point)> {
     let history = term.history_size() as i64;
     let row = history + i64::from(point.line.0);
-    let (text, cells) = pty_io::logical_text(term, pty_io::logical_line_at(term, row));
+    let (mut text, mut cells) = pty_io::logical_text(term, pty_io::logical_line_at(term, row));
+    if SOFT_BOUNDARIES.load(Ordering::Relaxed) {
+        let window = logical_window(term, point);
+        let kept: Vec<usize> = (0..cells.len())
+            .filter(|index| cells[*index].0 == row && window.contains(&cells[*index].1))
+            .collect();
+        if let (Some(first), Some(last)) = (kept.first(), kept.last()) {
+            text = text[*first..=*last].to_string();
+            cells = cells[*first..=*last].to_vec();
+        }
+    }
     let target = cells.iter().position(|cell| *cell == (row, point.column.0));
     let to_point =
         |(row, column): (i64, usize)| Point::new(Line((row - history) as i32), Column(column));
