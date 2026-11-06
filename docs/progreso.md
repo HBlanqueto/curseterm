@@ -3375,3 +3375,12 @@ los dos modos.
 **Difiere de iTerm2:** sin Simulate Numlock, porque una combinación no
 distingue el teclado numérico; Factory Defaults no trae ⌃Tab ni ⌃⇧Tab, porque
 CurseTerm no ordena las pestañas por uso reciente.
+
+## Decisión — Remapeo de modificadores (2026-11-06)
+
+`iTermModifierRemapper.m` remapea Control, Option y Command con un event tap
+de macOS, antes que cualquier app y que los atajos del menú. En Wayland una
+app no puede hacerlo: los atajos del menú los despacha BarrierKit con los
+modificadores tal cual llegan, y remapear solo la entrada del terminal dejaría
+el menú sin remapear. El remapeo es del compositor (Malaysia) o de xkb
+(`altwin:swap_alt_win`, `ctrl:swap_lwin_lctl`…); CurseTerm no lo implementa.

@@ -3352,3 +3352,13 @@ modes.
 **Differs from iTerm2:** no Simulate Numlock, because a binding does not tell
 the keypad apart; Factory Defaults has no ⌃Tab nor ⌃⇧Tab, because CurseTerm
 does not order tabs by recent use.
+
+## Decision — Modifier remapping (2026-11-06)
+
+`iTermModifierRemapper.m` remaps Control, Option and Command with a macOS
+event tap, ahead of every app and of the menu shortcuts. On Wayland an app
+cannot do that: BarrierKit dispatches the menu shortcuts with the modifiers as
+they arrive, and remapping only the terminal input would leave the menu
+unremapped. Remapping belongs to the compositor (Malaysia) or to xkb
+(`altwin:swap_alt_win`, `ctrl:swap_lwin_lctl`…); CurseTerm does not implement
+it.
