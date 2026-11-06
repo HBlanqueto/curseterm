@@ -1186,3 +1186,17 @@ del bloque.
 - Se guardan fotos de la pantalla cada medio segundo, no cada cambio; la
   memoria se limita por número de fotos y no hay ajuste para cambiarlo.
 - Solo se reproduce la pantalla visible, sin el historial de cada momento.
+
+## Fase 25 — Toolbelt
+
+### Plan
+
+1. **View › Toolbelt (⇧⌘B):** un panel a la derecha de la ventana con tres
+   herramientas:
+   - **Jobs:** los procesos de la sesión activa (los de su sesión de
+     terminal, sin la shell), leídos de `/proc`; «Terminate» manda `SIGTERM`
+     al elegido.
+   - **Paste History:** el historial de pegado; pulsar una entrada la pega.
+   - **Recent Directories:** los directorios por los que pasaron las
+     sesiones de la ventana; pulsar uno escribe `cd` con la ruta escapada.
+2. **Prueba** en sway sin pantalla y documentación en los dos idiomas.

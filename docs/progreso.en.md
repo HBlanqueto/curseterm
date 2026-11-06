@@ -1181,3 +1181,17 @@ snapshots.
 - Screen snapshots are kept every half second, not on every change; memory
   is capped by snapshot count and there is no setting to change it.
 - Only the visible screen is replayed, without each moment's scrollback.
+
+## Phase 25 — Toolbelt
+
+### Plan
+
+1. **View › Toolbelt (⇧⌘B):** a panel on the window's right with three
+   tools:
+   - **Jobs:** the active session's processes (those in its terminal
+     session, without the shell), read from `/proc`; "Terminate" sends
+     `SIGTERM` to the chosen one.
+   - **Paste History:** the paste history; clicking an entry pastes it.
+   - **Recent Directories:** the directories the window's sessions went
+     through; clicking one types `cd` with the escaped path.
+2. **Test** on headless sway and documentation in both languages.
