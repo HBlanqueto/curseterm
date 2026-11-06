@@ -1634,3 +1634,42 @@ nor sending only the selection; no Auto Composer nor status bar Composer;
 the text stops before the close button because Freya gives the pointer to
 the scroll view under it; after ⌥⇧↩ the cursor does not go back to the start
 of the removed command.
+
+## Phase 37 — Named marks
+
+### Plan
+
+iTerm2's Edit › Set Named Mark… (⌥⇧⌘M) and Edit › Named Marks
+(`PseudoTerminal.m -addNamedMark:`, `BookmarkDialogViewController.swift`,
+`PTYSession.m -saveScrollPositionWithName:` and `-scrollToNamedMark:`,
+`iTermApplicationDelegate.m` for the submenu):
+
+1. **«Enter Mark Name» dialog** with the date and time
+   (`yyyy-MM-dd HH:mm:ss`) as the default name; OK and Cancel; an empty name
+   does nothing.
+2. **Mark** on the first visible line (the blue triangle of marks) and a
+   «Named Mark name» annotation across that line, visible and without focus.
+3. **Named Marks submenu:** one entry per mark in the order they were set;
+   choosing one centers it when it is off screen.
+4. Named marks are anchored like the others and cleared with the buffer.
+5. **Test** on headless sway and documentation.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `seq 1 60`, scroll up with the wheel and ⌥⇧⌘M: the dialog brings `2026-11-06 03:23:49`; with Enter, a triangle on line `18` and the note «Named Mark 2026-11-06 03:23:49» | ✓ | `fase37-marca-con-nombre.png` |
+| D-Bus menu: Named Marks lists `2026-11-06 03:23:49` | ✓ | — |
+| After `seq 1 80`, choosing the mark in the submenu goes back to line `18` | ✓ | — |
+
+**Not tested:** with the kit as is (no D-Bus menu, and the field only takes
+the focus when clicked, BK-029); several marks with the same name.
+
+**Differs from iTerm2:** no Named Marks tool in the Toolbelt nor renaming or
+deleting from it; jumping does not flash the mark; named marks are not in
+Open Quickly.

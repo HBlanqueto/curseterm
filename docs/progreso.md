@@ -1639,3 +1639,43 @@ varios cursores ni enviar solo la selección; sin Auto Composer ni Composer
 en la barra de estado; el texto termina antes del botón de cerrar porque
 Freya da el puntero al desplazamiento que tiene debajo; tras ⌥⇧↩ el cursor
 no vuelve al inicio de la orden quitada.
+
+## Fase 37 — Marcas con nombre
+
+### Plan
+
+Edit › Set Named Mark… (⌥⇧⌘M) y Edit › Named Marks de iTerm2
+(`PseudoTerminal.m -addNamedMark:`, `BookmarkDialogViewController.swift`,
+`PTYSession.m -saveScrollPositionWithName:` y `-scrollToNamedMark:`,
+`iTermApplicationDelegate.m` para el submenú):
+
+1. **Diálogo «Enter Mark Name»** con la fecha y la hora
+   (`yyyy-MM-dd HH:mm:ss`) como nombre por omisión; OK y Cancel; un nombre
+   vacío no hace nada.
+2. **Marca** en la primera línea visible (el triángulo azul de las marcas) y
+   una anotación «Named Mark nombre» a lo ancho de esa línea, visible y sin
+   foco.
+3. **Submenú Named Marks:** una entrada por marca en el orden en que se
+   pusieron; elegirla la centra si no está en pantalla.
+4. Las marcas con nombre se anclan como las demás y se borran con el búfer.
+5. **Prueba** en sway sin pantalla y documentación.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `seq 1 60`, subir con la rueda y ⌥⇧⌘M: el diálogo trae `2026-11-06 03:23:49`; con Enter, triángulo en la línea `18` y la nota «Named Mark 2026-11-06 03:23:49» | ✓ | `fase37-marca-con-nombre.png` |
+| Menú D-Bus: Named Marks lista `2026-11-06 03:23:49` | ✓ | — |
+| Tras `seq 1 80`, elegir la marca en el submenú vuelve a la línea `18` | ✓ | — |
+
+**No probado:** con el kit tal cual (sin menú por D-Bus y el campo toma el
+foco solo al pulsarlo, BK-029); varias marcas con el mismo nombre.
+
+**Difiere de iTerm2:** sin la herramienta Named Marks del Toolbelt ni
+renombrar o borrar desde ella; al saltar no destella la marca; las marcas
+con nombre no van en Open Quickly.

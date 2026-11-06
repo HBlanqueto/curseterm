@@ -452,6 +452,38 @@ impl Session {
         self.extras().add_mark(line);
     }
 
+    // PTYSession.m -saveScrollPositionWithName: marks the top visible line and labels it with an
+    // annotation across the whole line.
+    pub fn set_named_mark(&self, name: &str, label: String) {
+        let term = self.term.lock();
+        let line = term.history_size() as i64 - term.grid().display_offset() as i64;
+        let columns = term.columns();
+        drop(term);
+        let mut extras = self.extras();
+        extras.add_mark(line);
+        extras.named_marks.push((line, name.to_string()));
+        extras.annotate((line, 0), (line, columns));
+        if let Some(annotation) = extras.annotations.last_mut() {
+            annotation.text = label;
+            annotation.focus = false;
+        }
+    }
+
+    pub fn named_marks(&self) -> Vec<String> {
+        self.extras()
+            .named_marks
+            .iter()
+            .map(|(_, name)| name.clone())
+            .collect()
+    }
+
+    pub fn jump_to_named_mark(&self, index: usize) {
+        let line = self.extras().named_marks.get(index).map(|(line, _)| *line);
+        if let Some(line) = line {
+            self.scroll_into_view(line..=line);
+        }
+    }
+
     pub fn link_at(&self, point: Point) -> Option<String> {
         let term = self.term.lock();
         if let Some(link) = term.grid()[point].hyperlink() {

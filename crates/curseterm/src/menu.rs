@@ -107,6 +107,10 @@ pub const ANNOTATE_SELECTION: Action =
     Action::new("annotate-selection", || tr!("annotate-selection"));
 pub const NEXT_ANNOTATION: &str = "next-annotation";
 pub const PREVIOUS_ANNOTATION: &str = "previous-annotation";
+pub const SET_NAMED_MARK: Action = Action::new("set-named-mark", || tr!("set-named-mark"))
+    .shortcut(super_with(Modifiers::ALT.union(Modifiers::SHIFT), 'm'));
+pub const NAMED_MARKS_MENU: &str = "named-marks-menu";
+pub const NAMED_MARK_PREFIX: &str = "named-mark:";
 pub const SHOW_COMPOSER: &str = "show-composer";
 pub const SHOW_ANNOTATIONS: Action =
     Action::new("show-annotations", || tr!("show-annotations")).shortcut(super_key('\\'));
@@ -293,6 +297,8 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                         ),
                     ],
                 ),
+                SET_NAMED_MARK.item(true),
+                submenu(NAMED_MARKS_MENU, tr!("named-marks-menu"), Vec::new()),
                 MenuItem::Separator,
                 CLEAR_BUFFER.item(true),
                 CLEAR_REPLAY.item(true),
@@ -475,7 +481,7 @@ pub fn select_tab_items(titles: &[String], active: usize) -> Vec<MenuItem> {
         .collect()
 }
 
-pub fn arrangement_items(prefix: &str, names: &[String]) -> Vec<MenuItem> {
+pub fn indexed_items(prefix: &str, names: &[String]) -> Vec<MenuItem> {
     names
         .iter()
         .enumerate()

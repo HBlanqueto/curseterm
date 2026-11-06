@@ -34,7 +34,7 @@ use vow_design::{
 };
 
 use crate::arrangement::{self, Arrangement, TabLayout};
-use crate::clock::local_time;
+use crate::clock::{local_date_time, local_time};
 use crate::composer_view::ComposerEvent;
 use crate::config::{
     APP_ID, AltKey, ClosePrompt, Defaults, Profile, SessionEnd, WorkingDirectory, change_defaults,
@@ -112,6 +112,7 @@ enum Sheet {
     Log(SessionId),
     Coprocess(SessionId),
     SaveArrangement,
+    NamedMark(SessionId),
     CopyModeKeys,
 }
 
@@ -801,11 +802,19 @@ fn use_live_menu(handles: &Handles) {
         .collect();
     use_submenu_items(
         menu::RESTORE_ARRANGEMENT,
-        menu::arrangement_items(menu::ARRANGEMENT_PREFIX, &arrangements),
+        menu::indexed_items(menu::ARRANGEMENT_PREFIX, &arrangements),
     );
     use_submenu_items(
         menu::RESTORE_ARRANGEMENT_TABS,
-        menu::arrangement_items(menu::ARRANGEMENT_TABS_PREFIX, &arrangements),
+        menu::indexed_items(menu::ARRANGEMENT_TABS_PREFIX, &arrangements),
+    );
+    let named_marks = handles
+        .active()
+        .map(|session| session.named_marks())
+        .unwrap_or_default();
+    use_submenu_items(
+        menu::NAMED_MARKS_MENU,
+        menu::indexed_items(menu::NAMED_MARK_PREFIX, &named_marks),
     );
     use_submenu_items(
         menu::BROADCAST_MENU,
@@ -1084,6 +1093,11 @@ fn field_sheet(handles: &Handles, target: Sheet) -> Element {
             tr!("arrangement-name"),
             tr!("save-confirm"),
         ),
+        Sheet::NamedMark(_) => (
+            tr!("enter-mark-name"),
+            tr!("mark-name"),
+            tr!("mark-name-confirm"),
+        ),
         Sheet::Coprocess(_) => (
             tr!("run-coprocess"),
             tr!("coprocess-command"),
@@ -1150,6 +1164,15 @@ fn confirm_later(handles: &Handles, target: Sheet) {
             Sheet::Log(of) => start_log(&later, of, &typed),
             Sheet::Coprocess(of) => start_coprocess(&later, of, &typed),
             Sheet::SaveArrangement => save_arrangement(&later, &typed),
+            Sheet::NamedMark(of) => {
+                if let Some(session) = later.sessions.peek().get(&of).filter(|_| !typed.is_empty())
+                {
+                    session.set_named_mark(
+                        &typed,
+                        tr!("named-mark-annotation", name = typed.as_str()),
+                    );
+                }
+            }
             _ => workspace.write().rename_window(&typed),
         }
         let mut sheet = later.sheet;
@@ -1983,6 +2006,15 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         workspace.write().select_tab(index);
         return;
     }
+    if let Some(index) = id
+        .strip_prefix(menu::NAMED_MARK_PREFIX)
+        .and_then(|index| index.parse().ok())
+    {
+        if let Some(session) = handles.active() {
+            session.jump_to_named_mark(index);
+        }
+        return;
+    }
     let defaults = handles.defaults.peek();
     let arrangement = |prefix| {
         id.strip_prefix(prefix)
@@ -2063,6 +2095,15 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             if let Some(session) = active {
                 handles.draft.clone().set(String::new());
                 open_sheet(handles, Sheet::SaveSelection(session.id));
+            }
+        }
+        _ if id == menu::SET_NAMED_MARK.id => {
+            if let Some(session) = active {
+                handles
+                    .draft
+                    .clone()
+                    .set(local_date_time(std::time::SystemTime::now()));
+                open_sheet(handles, Sheet::NamedMark(session.id));
             }
         }
         _ if id == menu::SAVE_ARRANGEMENT.id => {

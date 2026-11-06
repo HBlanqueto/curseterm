@@ -75,6 +75,7 @@ pub struct Snapshot {
 pub struct Extras {
     pub directory: Option<PathBuf>,
     pub marks: Vec<i64>,
+    pub named_marks: Vec<(i64, String)>,
     pub output: Option<[i64; 2]>,
     output_start: Option<i64>,
     pub images: Vec<Placed>,
@@ -196,6 +197,7 @@ impl Extras {
 
     pub fn forget_everything(&mut self) {
         self.marks.clear();
+        self.named_marks.clear();
         self.output = None;
         self.output_start = None;
         self.stamps.clear();
@@ -217,6 +219,7 @@ impl Extras {
             .flat_map(|annotation| [&mut annotation.start.0, &mut annotation.end.0]);
         self.marks
             .iter_mut()
+            .chain(self.named_marks.iter_mut().map(|(line, _)| line))
             .chain(output)
             .chain(self.output_start.iter_mut())
             .chain(images)
@@ -228,6 +231,7 @@ impl Extras {
     pub fn forget_lines(&mut self, lines: Range<i64>) {
         let kept = |line: i64| !lines.contains(&line);
         self.marks.retain(|mark| kept(*mark));
+        self.named_marks.retain(|(line, _)| kept(*line));
         self.output = self.output.filter(|[start, _]| kept(*start));
         self.output_start = self.output_start.filter(|start| kept(*start));
         self.stamps.retain(|(stamped, _)| kept(*stamped));
