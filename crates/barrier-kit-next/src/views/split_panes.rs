@@ -4,6 +4,7 @@ use barrier_kit::style::Palette;
 use barrier_kit::theme::color;
 use freya_core::prelude::*;
 use torin::prelude::{Content, Direction, Size};
+use vow_design::Rgba;
 
 use crate::tokens::SPLIT_PANES;
 
@@ -14,6 +15,7 @@ pub struct SplitPanes {
     panes: Vec<Element>,
     ratios: Vec<f32>,
     on_ratios: Option<Callback<Vec<f32>, ()>>,
+    divider: Option<Rgba>,
 }
 
 impl SplitPanes {
@@ -24,7 +26,13 @@ impl SplitPanes {
             panes: Vec::new(),
             ratios: Vec::new(),
             on_ratios: None,
+            divider: None,
         }
+    }
+
+    pub fn divider(mut self, divider: Rgba) -> Self {
+        self.divider = Some(divider);
+        self
     }
 
     pub fn pane(mut self, pane: impl IntoElement) -> Self {
@@ -76,6 +84,7 @@ impl Component for SplitPanes {
                 let on_ratios = self.on_ratios.clone();
                 row = row.child(Divider {
                     direction,
+                    ink: self.divider,
                     on_drag: Callback::new(move |delta: f32| {
                         let free = *length.peek() - SPLIT_PANES.divider * (count - 1) as f32;
                         if let (Some(on_ratios), true) = (&on_ratios, free > 0.0) {
@@ -110,6 +119,7 @@ fn dragged(ratios: &[f32], divider: usize, delta: f32, free: f32) -> Vec<f32> {
 #[derive(PartialEq)]
 struct Divider {
     direction: Direction,
+    ink: Option<Rgba>,
     on_drag: Callback<f32, ()>,
 }
 
@@ -125,7 +135,7 @@ impl Component for Divider {
         } else {
             CursorIcon::RowResize
         };
-        let line = rect().background(color(palette.separator));
+        let line = rect().background(color(self.ink.unwrap_or(palette.separator)));
         let line = if horizontal {
             line.width(Size::px(SPLIT_PANES.divider))
                 .height(Size::fill())

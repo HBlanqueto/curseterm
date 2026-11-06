@@ -24,9 +24,17 @@ pub const TAB_BAR: TabBarMetrics = TabBarMetrics {
 pub struct SplitPanesMetrics {
     pub divider: f32,
     pub pane_min: f32,
+    pub light_divider: Rgba,
+    pub dark_divider: Rgba,
+    pub minimal_prominence: f32,
 }
 
+// PseudoTerminal.m -terminalWindowDecorationControlColor: AppKit's light and dark grey, and
+// iTermAdvancedSettingsModel minimalSplitPaneDividerProminence.
 pub const SPLIT_PANES: SplitPanesMetrics = SplitPanesMetrics {
+    light_divider: Rgba::rgb8(170, 170, 170),
+    dark_divider: Rgba::rgb8(85, 85, 85),
+    minimal_prominence: 0.15,
     divider: 3.0,
     pane_min: 60.0,
 };

@@ -3205,3 +3205,34 @@ la columna 30. `./dev.sh check` limpio en los dos modos.
 **Difiere de iTerm2:** arrastrar no se limita a la ventana (la selección de
 `alacritty_terminal` no tiene ventanas de columnas), ni la búsqueda; la línea
 copiada conserva los espacios hasta el borde.
+
+## Fase 72 — Divisores de paneles con los colores del tema
+
+### Plan
+
+`PseudoTerminal.m -terminalWindowDecorationControlColor` y `PTYSplitView.m
+-dividerColor`:
+
+1. Light y Light High Contrast: gris claro de AppKit (170); Dark y Dark High
+   Contrast: gris oscuro (85); Regular y Compact, uno u otro según la
+   apariencia del sistema.
+2. Minimal: el fondo del terminal acercado un 15 % al blanco si es oscuro o al
+   negro si es claro (`minimalSplitPaneDividerProminence`).
+3. `SplitPanes` de `barrier-kit-next` acepta el color del divisor.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado y una división ⌘D, leyendo
+el píxel del divisor. `./dev.sh check` limpio en los dos modos.
+
+| Tema | Fondo | Divisor | Resultado |
+|---|---|---|---|
+| Regular, sistema claro | (251, 251, 252) | (170, 170, 170) | ✓ |
+| Dark | (23, 25, 30) | (85, 85, 85) | ✓ |
+| Minimal | (251, 251, 252) | (213, 213, 214) | ✓ |
+
+**No probado:** con el kit tal cual; los de alto contraste.
+
+**Difiere de iTerm2:** sin `splitPaneColor` ni `splitPaneDividerWidth`
+(ajustes avanzados); Minimal no oculta el divisor cuando se atenúan los
+paneles inactivos.

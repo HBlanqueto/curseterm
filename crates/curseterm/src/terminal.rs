@@ -655,6 +655,7 @@ impl App for Terminal {
                 replay: *replay.read(),
                 blink_off: window_focused && cursor_blink_off(&handles, revision),
                 maximized: tab.zoomed,
+                divider: theme::divider_color(theme, dark, terminal_background),
             };
             animate_notes(&handles, revision);
             pane_tree(&root, Vec::new(), &painting)
@@ -1111,6 +1112,7 @@ struct Painting {
     replay: Option<(SessionId, usize)>,
     blink_off: bool,
     maximized: bool,
+    divider: Rgba,
 }
 
 fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
@@ -1238,6 +1240,7 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
             };
             let (mut workspace, tab, at) = (painting.workspace, painting.tab, path.clone());
             let split = SplitPanes::new(tr!("panes"), direction)
+                .divider(painting.divider)
                 .ratios(ratios.clone())
                 .on_ratios(move |next: Vec<f32>| {
                     let mut state = workspace.write();

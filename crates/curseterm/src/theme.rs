@@ -1,7 +1,7 @@
 use alacritty_terminal::vte::ansi::Rgb;
 use barrier_kit_next::tokens::{
-    MINIMAL_TABS, TAB_STRIP, TAB_STYLE_DARK, TAB_STYLE_DARK_HIGH_CONTRAST, TAB_STYLE_LIGHT,
-    TAB_STYLE_LIGHT_HIGH_CONTRAST, TITLE_BAR, TabStyle,
+    MINIMAL_TABS, SPLIT_PANES, TAB_STRIP, TAB_STYLE_DARK, TAB_STYLE_DARK_HIGH_CONTRAST,
+    TAB_STYLE_LIGHT, TAB_STYLE_LIGHT_HIGH_CONTRAST, TITLE_BAR, TabStyle,
 };
 use barrier_kit_next::views::tab_bar::brightness;
 use vow_design::Rgba;
@@ -118,6 +118,29 @@ pub fn chrome_height(theme: Theme, tab_bar_shown: bool) -> f32 {
 fn perceived_dark(color: Rgb) -> bool {
     let channel = |value: u8| f32::from(value) / 255.0;
     0.30 * channel(color.r) + 0.59 * channel(color.g) + 0.11 * channel(color.b) < 0.5
+}
+
+// PseudoTerminal.m -terminalWindowDecorationControlColor: the split pane dividers.
+pub fn divider_color(theme: Theme, system_dark: bool, background: Rgb) -> Rgba {
+    let dark = match theme {
+        Theme::Minimal => {
+            let bar = Rgba::rgba8(background.r, background.g, background.b, 1.0);
+            let toward = if perceived_dark(background) {
+                Rgba::rgb8(255, 255, 255)
+            } else {
+                Rgba::rgb8(0, 0, 0)
+            };
+            return bar.mix(toward, SPLIT_PANES.minimal_prominence);
+        }
+        Theme::Regular | Theme::Compact => system_dark,
+        Theme::Light | Theme::LightHighContrast => false,
+        Theme::Dark | Theme::DarkHighContrast => true,
+    };
+    if dark {
+        SPLIT_PANES.dark_divider
+    } else {
+        SPLIT_PANES.light_divider
+    }
 }
 
 fn shift(color: Rgba, amount: f32) -> Rgba {
