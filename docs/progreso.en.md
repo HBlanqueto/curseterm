@@ -2706,3 +2706,23 @@ keyboard has no semicolon).
 **Differs from iTerm2:** the history is not saved on quit nor kept per
 remote host; no Auto Command Completion nor the Command History toolbelt
 tool; a command does not remember its folder or exit code.
+
+## Pass with the kit as is (2026-11-06)
+
+Built without `kit-parches` and tested in headless sway.
+
+| Test | Result |
+|---|---|
+| ⌘T, ⌘D, Find (⌘F) with «hola»: 1 of 1 and highlighted | ✓ |
+| Open Quickly (⇧⌘O) with the three sessions; Down and Escape | ✓ |
+| Settings (⌘,) in its own process, Profiles tab | ✓ |
+| Instant Replay (⌥⌘B) | ✓ |
+| ⌘A and ⌘C: `wl-paste` returns the text | ✓ |
+| ⌘N: another window in another process | ✓ |
+
+**Failures seen, already known:** the title stays «CurseTerm» (without patch
+0001); closing Settings with ⌘W panics in `close_window` (BK-001, fixed by
+patch 0008).
+
+**Detail:** with the Settings window below its minimum width (tiled sway
+ignores it), the profile tabs break their text.

@@ -2730,3 +2730,23 @@ laboratorio el teclado virtual no da el punto y coma).
 **Difiere de iTerm2:** el historial no se guarda al salir ni es por equipo
 remoto; sin Auto Command Completion ni la herramienta Command History de la
 barra lateral; la orden no recuerda su carpeta ni su código de salida.
+
+## Pasada con el kit tal cual (2026-11-06)
+
+Compilado sin `kit-parches` y probado en sway sin pantalla.
+
+| Prueba | Resultado |
+|---|---|
+| ⌘T, ⌘D, Find (⌘F) con «hola»: 1 de 1 y resaltado | ✓ |
+| Open Quickly (⇧⌘O) con las tres sesiones; Abajo y Escape | ✓ |
+| Ajustes (⌘,) en su propio proceso, pestaña Profiles | ✓ |
+| Instant Replay (⌥⌘B) | ✓ |
+| ⌘A y ⌘C: `wl-paste` devuelve el texto | ✓ |
+| ⌘N: otra ventana en otro proceso | ✓ |
+
+**Fallos vistos, ya conocidos:** el título se queda en «CurseTerm» (sin el
+parche 0001); cerrar Ajustes con ⌘W entra en pánico en `close_window`
+(BK-001, lo corrige el parche 0008).
+
+**Detalle:** con la ventana de Ajustes por debajo de su ancho mínimo (sway en
+mosaico no lo respeta), las pestañas del perfil parten su texto.
