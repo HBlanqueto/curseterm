@@ -43,44 +43,48 @@ impl Snippet {
         shown
     }
 
-    // iTermKeyBindingAction.m +escapedText:mode:
     pub fn escaped(&self) -> String {
-        let mut escaped = String::new();
-        let mut chars = self.value.chars().peekable();
-        while let Some(c) = chars.next() {
-            let Some(&next) = chars.peek().filter(|_| c == '\\') else {
-                escaped.push(c);
-                continue;
-            };
-            let control = match (self.escaping, next) {
-                (Escaping::Literal, _) => None,
-                (_, 'n') => Some('\n'),
-                (_, 'e') => Some('\x1b'),
-                (_, 'a') => Some('\x07'),
-                (_, 't') => Some('\t'),
-                (Escaping::CStyle, 'b') => Some('\x08'),
-                (Escaping::CStyle, 'r') => Some('\r'),
-                (Escaping::CStyle, '\\') => Some('\\'),
-                (Escaping::CStyle, 'x') => hex_byte(&mut chars),
-                _ => None,
-            };
-            match control {
-                Some(control) => {
-                    escaped.push(control);
-                    if next != 'x' {
-                        chars.next();
-                    }
-                }
-                // An escaped backslash never starts an escape of its own.
-                None if next == '\\' => {
-                    escaped.push_str("\\\\");
+        escape(&self.value, self.escaping)
+    }
+}
+
+// iTermKeyBindingAction.m +escapedText:mode:
+pub fn escape(value: &str, escaping: Escaping) -> String {
+    let mut escaped = String::new();
+    let mut chars = value.chars().peekable();
+    while let Some(c) = chars.next() {
+        let Some(&next) = chars.peek().filter(|_| c == '\\') else {
+            escaped.push(c);
+            continue;
+        };
+        let control = match (escaping, next) {
+            (Escaping::Literal, _) => None,
+            (_, 'n') => Some('\n'),
+            (_, 'e') => Some('\x1b'),
+            (_, 'a') => Some('\x07'),
+            (_, 't') => Some('\t'),
+            (Escaping::CStyle, 'b') => Some('\x08'),
+            (Escaping::CStyle, 'r') => Some('\r'),
+            (Escaping::CStyle, '\\') => Some('\\'),
+            (Escaping::CStyle, 'x') => hex_byte(&mut chars),
+            _ => None,
+        };
+        match control {
+            Some(control) => {
+                escaped.push(control);
+                if next != 'x' {
                     chars.next();
                 }
-                None => escaped.push(c),
             }
+            // An escaped backslash never starts an escape of its own.
+            None if next == '\\' => {
+                escaped.push_str("\\\\");
+                chars.next();
+            }
+            None => escaped.push(c),
         }
-        escaped
     }
+    escaped
 }
 
 // NSString+iTerm.m -stringByReplacingEscapedHexValuesWithChars: \x and two hex digits.

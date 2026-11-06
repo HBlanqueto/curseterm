@@ -1,0 +1,428 @@
+use barrier_kit::compact::IconButton;
+use barrier_kit::controls::{Button, ButtonStyle, TextField};
+use barrier_kit::popup_button::PopUpButton;
+use barrier_kit::style::{Palette, text};
+use barrier_kit::symbol::Symbol;
+use barrier_kit::theme::color;
+use barrier_kit::views::feedback::sheet;
+use barrier_kit::views::form::{Form, Row, Section};
+use barrier_kit::views::table::Table;
+use barrier_kit_next::tokens::KEY_BINDING_EDITOR;
+use freya_core::prelude::*;
+use torin::prelude::{Alignment, Direction, Gaps, Size};
+use vow_design::{CAPTION, HEADLINE, SPACE_1, SPACE_2, TEXT};
+
+use crate::config::change_defaults;
+use crate::key_bindings::{Binding, BindingAction, Parameter, combo, shown};
+use crate::localize::tr;
+use crate::preferences::intern;
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum Owner {
+    Global,
+    Profile(usize),
+}
+
+impl Owner {
+    fn change(self, change: impl FnOnce(&mut Vec<Binding>)) {
+        change_defaults(|defaults| match self {
+            Owner::Global => change(&mut defaults.key_bindings),
+            Owner::Profile(index) => {
+                defaults.ensure_profiles();
+                if let Some(profile) = defaults.profiles.get_mut(index) {
+                    change(&mut profile.key_mappings);
+                }
+            }
+        });
+    }
+}
+
+#[derive(PartialEq)]
+pub struct KeyBindingsEditor {
+    pub owner: Owner,
+    pub bindings: Vec<Binding>,
+    pub profiles: Vec<String>,
+    pub snippets: Vec<String>,
+    pub menu_items: Vec<(String, String)>,
+}
+
+// PreferencePanel.xib Keys › Key Bindings and the profile's Keys › Key Mappings: the table,
+// + and − and Edit.
+impl Component for KeyBindingsEditor {
+    fn render(&self) -> impl IntoElement {
+        let mut selected = use_state(|| None::<usize>);
+        let editing = use_state(|| None::<Option<usize>>);
+        let draft = use_state(Binding::default);
+        let owner = self.owner;
+        let chosen = selected.read().filter(|index| *index < self.bindings.len());
+        let rows = self
+            .bindings
+            .iter()
+            .map(|binding| vec![shown(&binding.combo), describe(binding, &self.menu_items)])
+            .collect();
+        let open = move |index: Option<usize>, binding: Binding| {
+            let (mut draft, mut editing) = (draft, editing);
+            draft.set(binding);
+            editing.set(Some(index));
+        };
+        let edited = chosen.and_then(|index| self.bindings.get(index).cloned());
+        rect()
+            .width(Size::fill())
+            .direction(Direction::Vertical)
+            .spacing(SPACE_1)
+            .child(
+                rect()
+                    .height(Size::px(KEY_BINDING_EDITOR.table_height))
+                    .child(
+                        Table::new(
+                            tr!("key-bindings"),
+                            vec![tr!("key-binding-shortcut"), tr!("key-binding-action")],
+                        )
+                        .rows(rows)
+                        .selected(chosen)
+                        .on_select(move |row| selected.set(Some(row))),
+                    ),
+            )
+            .child(
+                rect()
+                    .direction(Direction::Horizontal)
+                    .cross_align(Alignment::Center)
+                    .spacing(SPACE_1)
+                    .child(
+                        IconButton::new(Symbol::Plus, tr!("key-binding-add"))
+                            .on_press(move |_| open(None, Binding::default())),
+                    )
+                    .child(
+                        IconButton::new(Symbol::Minus, tr!("key-binding-remove"))
+                            .disabled(chosen.is_none())
+                            .on_press(move |_| {
+                                if let Some(index) = chosen {
+                                    owner.change(|bindings| {
+                                        if index < bindings.len() {
+                                            bindings.remove(index);
+                                        }
+                                    });
+                                    selected.set(None);
+                                }
+                            }),
+                    )
+                    .child(
+                        Button::new(tr!("key-binding-edit"))
+                            .disabled(edited.is_none())
+                            .on_press(move |_| {
+                                if let Some(binding) = edited.clone() {
+                                    open(chosen, binding);
+                                }
+                            }),
+                    ),
+            )
+            .maybe_child((*editing.read()).map(|index| {
+                edit_sheet(self, draft, index, move || {
+                    let mut editing = editing;
+                    editing.set(None);
+                })
+            }))
+    }
+}
+
+fn describe(binding: &Binding, menu_items: &[(String, String)]) -> String {
+    let name = binding.action.name();
+    match binding.action.parameter() {
+        Parameter::None => name.to_string(),
+        Parameter::MenuItem => {
+            let label = menu_items
+                .iter()
+                .find(|(id, _)| *id == binding.parameter)
+                .map_or(binding.parameter.as_str(), |(_, label)| label.as_str());
+            format!("{name} {label}")
+        }
+        _ => format!("{name} {}", binding.parameter),
+    }
+}
+
+// iTermEditKeyActionWindowController.xib: Keyboard Shortcut, Action and its parameter.
+fn edit_sheet(
+    editor: &KeyBindingsEditor,
+    draft: State<Binding>,
+    index: Option<usize>,
+    close: impl Fn() + Clone + 'static,
+) -> Element {
+    let owner = editor.owner;
+    let palette = Palette::current();
+    let binding = draft.read().clone();
+    let mut actions = draft;
+    let group = binding.action.group();
+    let mut grouped = draft;
+    let group_popup = (0..BindingAction::GROUPS.len())
+        .fold(
+            PopUpButton::new(tr!("key-binding-group")),
+            |button, group| button.item(BindingAction::group_name(group)),
+        )
+        .selected(group)
+        .on_change(move |position: usize| {
+            let mut binding = grouped.write();
+            binding.action = BindingAction::GROUPS[position][0];
+            binding.parameter.clear();
+        });
+    let members = BindingAction::GROUPS[group];
+    let action_popup = members
+        .iter()
+        .fold(
+            PopUpButton::new(tr!("key-binding-action")),
+            |button, action| button.item(action.name()),
+        )
+        .selected(
+            members
+                .iter()
+                .position(|action| *action == binding.action)
+                .unwrap_or_default(),
+        )
+        .on_change(move |position: usize| {
+            let mut binding = actions.write();
+            binding.action = members[position];
+            binding.parameter.clear();
+        });
+    let action_popups = rect()
+        .direction(Direction::Horizontal)
+        .cross_align(Alignment::Center)
+        .spacing(SPACE_1)
+        .child(group_popup)
+        .child(action_popup);
+    let same = |names: &[String]| -> Vec<(String, String)> {
+        names
+            .iter()
+            .map(|name| (name.clone(), name.clone()))
+            .collect()
+    };
+    let options = match binding.action.parameter() {
+        Parameter::Profile => same(&editor.profiles),
+        Parameter::Snippet => same(&editor.snippets),
+        Parameter::MenuItem => editor.menu_items.clone(),
+        Parameter::None | Parameter::Text => Vec::new(),
+    };
+    let first = options.first().map(|(id, _)| id.clone());
+    let choices = |names: Vec<(String, String)>| {
+        let mut choice = draft;
+        let ids: Vec<String> = names.iter().map(|(id, _)| id.clone()).collect();
+        let current = ids
+            .iter()
+            .position(|id| *id == binding.parameter)
+            .unwrap_or_default();
+        names
+            .into_iter()
+            .fold(
+                PopUpButton::new(tr!("key-binding-parameter")),
+                |button, (_, name)| button.item(intern(&name)),
+            )
+            .selected(current)
+            .on_change(move |position: usize| {
+                if let Some(id) = ids.get(position) {
+                    choice.write().parameter = id.clone();
+                }
+            })
+            .into_element()
+    };
+    let parameter = match binding.action.parameter() {
+        Parameter::None => None,
+        Parameter::Text => Some(ParameterText { draft }.into_element()),
+        Parameter::MenuItem => Some(
+            MenuItemChooser {
+                draft,
+                items: options,
+            }
+            .into_element(),
+        ),
+        Parameter::Profile | Parameter::Snippet => Some(choices(options)),
+    };
+    let cancel = close.clone();
+    let ready = !binding.combo.is_empty();
+    sheet(
+        rect()
+            .width(Size::px(KEY_BINDING_EDITOR.width))
+            .direction(Direction::Vertical)
+            .spacing(SPACE_2)
+            .child(text(
+                tr!("key-binding-sheet-title"),
+                HEADLINE,
+                palette.label,
+            ))
+            .child(Form::new().section({
+                let section = Section::new()
+                    .row(Row::new(tr!("key-binding-shortcut")).control(Recorder { draft }))
+                    .row(Row::new(tr!("key-binding-action")).control(action_popups));
+                match parameter {
+                    Some(control) => {
+                        section.row(Row::new(tr!("key-binding-parameter")).control(control))
+                    }
+                    None => section,
+                }
+            }))
+            .child(
+                rect()
+                    .width(Size::fill())
+                    .direction(Direction::Horizontal)
+                    .main_align(Alignment::End)
+                    .spacing(SPACE_2)
+                    .child(Button::new(tr!("close-cancel")).on_press(move |_| cancel()))
+                    .child(
+                        Button::new(tr!("snippet-ok"))
+                            .style(ButtonStyle::Primary)
+                            .disabled(!ready)
+                            .on_press(move |_| {
+                                let mut binding = draft.peek().clone();
+                                if binding.parameter.is_empty()
+                                    && let Some(first) = &first
+                                {
+                                    binding.parameter = first.clone();
+                                }
+                                owner.change(|bindings| match index {
+                                    Some(index) if index < bindings.len() => {
+                                        bindings[index] = binding;
+                                    }
+                                    _ => bindings.push(binding),
+                                });
+                                close();
+                            }),
+                    ),
+            ),
+    )
+    .into_element()
+}
+
+// iTermSearchableComboView: the menu items narrowed by what is typed, since a long kit pop-up
+// does not scroll (BK-040).
+#[derive(PartialEq)]
+struct MenuItemChooser {
+    draft: State<Binding>,
+    items: Vec<(String, String)>,
+}
+
+impl Component for MenuItemChooser {
+    fn render(&self) -> impl IntoElement {
+        let filter = use_state(String::new);
+        let mut binding = self.draft;
+        let typed = filter.read().to_lowercase();
+        let chosen = binding.read().parameter.clone();
+        let mut shown: Vec<(String, String)> = self
+            .items
+            .iter()
+            .filter(|(id, label)| *id == chosen || label.to_lowercase().contains(&typed))
+            .take(KEY_BINDING_EDITOR.menu_matches)
+            .cloned()
+            .collect();
+        if shown.is_empty() {
+            shown = self.items.iter().take(1).cloned().collect();
+        }
+        let ids: Vec<String> = shown.iter().map(|(id, _)| id.clone()).collect();
+        let selected = ids.iter().position(|id| *id == chosen).unwrap_or_default();
+        // What the pop-up shows is what OK saves, also before it is touched.
+        use_side_effect({
+            let items = self.items.clone();
+            move || {
+                let typed = filter.read().to_lowercase();
+                let chosen = binding.peek().parameter.clone();
+                let matches = |label: &String| label.to_lowercase().contains(&typed);
+                let kept = items
+                    .iter()
+                    .any(|(id, label)| *id == chosen && matches(label));
+                if let Some((first, _)) = items.iter().find(|(_, label)| matches(label))
+                    && !kept
+                {
+                    binding.write().parameter = first.clone();
+                }
+            }
+        });
+        rect()
+            .width(Size::fill())
+            .direction(Direction::Vertical)
+            .spacing(SPACE_1)
+            .child(TextField::new(filter, tr!("key-binding-menu-filter")).width(Size::fill()))
+            .child(
+                shown
+                    .iter()
+                    .fold(
+                        PopUpButton::new(tr!("key-binding-parameter")),
+                        |button, (_, label)| button.item(intern(label)),
+                    )
+                    .selected(selected)
+                    .on_change(move |position: usize| {
+                        if let Some(id) = ids.get(position) {
+                            binding.write().parameter = id.clone();
+                        }
+                    }),
+            )
+    }
+}
+
+#[derive(PartialEq)]
+struct ParameterText {
+    draft: State<Binding>,
+}
+
+impl Component for ParameterText {
+    fn render(&self) -> impl IntoElement {
+        let mut binding = self.draft;
+        let value = use_state(|| binding.peek().parameter.clone());
+        use_side_effect(move || {
+            let typed = value.read().clone();
+            if binding.peek().parameter != typed {
+                binding.write().parameter = typed;
+            }
+        });
+        TextField::new(value, tr!("key-binding-text-placeholder")).width(Size::fill())
+    }
+}
+
+// iTermShortcutInputView: click it, then press the shortcut.
+#[derive(PartialEq)]
+struct Recorder {
+    draft: State<Binding>,
+}
+
+impl Component for Recorder {
+    fn render(&self) -> impl IntoElement {
+        let a11y_id = use_hook(AccessibilityId::new_unique);
+        let focus = use_focus(a11y_id);
+        let focused = focus.read().is_focused();
+        let mut draft = self.draft;
+        let palette = Palette::current();
+        let recorded = draft.read().combo.clone();
+        let label = match (focused, recorded.is_empty()) {
+            (true, _) => tr!("key-binding-recording").to_string(),
+            (false, true) => tr!("key-binding-click-to-set").to_string(),
+            (false, false) => shown(&recorded),
+        };
+        rect()
+            .a11y_id(a11y_id)
+            .a11y_focusable(true)
+            .a11y_role(AccessibilityRole::TextInput)
+            .a11y_alt(tr!("key-binding-shortcut"))
+            .width(Size::fill())
+            .padding(Gaps::new(SPACE_1, SPACE_2, SPACE_1, SPACE_2))
+            .corner_radius(SPACE_1)
+            .background(color(palette.control_background))
+            .border(
+                Border::new()
+                    .width(if focused { 2.0 } else { vow_design::HAIRLINE })
+                    .fill(color(if focused {
+                        palette.accent
+                    } else {
+                        palette.control_border
+                    })),
+            )
+            .on_press(move |_| a11y_id.request_focus())
+            .on_key_down(move |event: Event<KeyboardEventData>| {
+                let data = event.data();
+                if let Some(recorded) = combo(&data.key, data.modifiers) {
+                    event.stop_propagation();
+                    draft.write().combo = recorded;
+                    a11y_id.request_unfocus();
+                }
+            })
+            .child(text(
+                label,
+                if focused { CAPTION } else { TEXT },
+                palette.label,
+            ))
+    }
+}

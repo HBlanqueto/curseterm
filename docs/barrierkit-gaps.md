@@ -69,6 +69,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-037 | controles / avisos | `Alert` solo tiene dos botones y no se puede silenciar | baja | Workaround probado: hoja propia con `sheet` |
 | BK-038 | controles | `SearchField` no tiene menú de opciones | baja | Workaround probado: `PopUpButton` al lado |
 | BK-039 | controles / ventanas | Sin vista de contorno ni panel flotante | media | Workaround probado: panel dentro de la ventana |
+| BK-040 | controles | `PopUpButton` no se desplaza ni busca | media | Workaround probado: grupos y filtro |
 
 ## Gaps
 
@@ -886,6 +887,28 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Gravedad**: media
 - **Cómo reproducirlo**: buscar `Outline` o un panel flotante en
   `crates/barrier-kit/src`; no hay ninguno.
+
+### BK-040 — `PopUpButton` no se desplaza ni busca
+- **Área**: controles
+- **Qué necesitaba CurseTerm**: la acción de una combinación de teclas
+  (`iTermEditKeyActionWindowController.m`), una lista buscable de más de
+  treinta acciones en grupos, y Select Menu Item…, con todas las entradas del
+  menú.
+- **Qué ofrece hoy BarrierKit**: `PopUpButton` con elementos planos; su menú
+  crece hacia abajo y lo que no cabe en la ventana no se puede elegir.
+- **Qué falta**: desplazamiento en un menú largo, secciones con título y un
+  campo de búsqueda, como `iTermSearchableComboView`.
+- **Cómo lo resolví en CurseTerm**: dos desplegables, el grupo de iTerm2 y
+  sus acciones (seis como mucho), y para Select Menu Item… un campo que filtra
+  y un desplegable con las doce primeras coincidencias
+  (`key_bindings_pane.rs`).
+- **Coste del workaround**: dos controles donde iTerm2 tiene uno, y el
+  filtro en un campo aparte.
+- **API propuesta para el kit**: `PopUpButton::section(title)`, menú con
+  desplazamiento y `PopUpButton::searchable(true)`.
+- **Gravedad**: media
+- **Cómo reproducirlo**: un `PopUpButton` con cuarenta elementos en una
+  ventana de 700 de alto.
 
 ## Cosas que funcionaron bien
 

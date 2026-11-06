@@ -21,7 +21,7 @@ use barrier_kit_next::tokens::{SETTINGS_WINDOW_SIZE, TERMINAL};
 use freya_core::integration::AppComponent;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Size};
-use vow_design::{CAPTION, SIDEBAR, SPACE_1, SPACE_3, WINDOW_MIN_SIZE};
+use vow_design::{CAPTION, HEADLINE, SIDEBAR, SPACE_1, SPACE_3, WINDOW_MIN_SIZE};
 
 use crate::auxiliary::on_action;
 use crate::config::{
@@ -29,6 +29,7 @@ use crate::config::{
     Theme, Trigger, TriggerAction, WorkingDirectory, change_defaults,
 };
 use crate::itermcolors;
+use crate::key_bindings_pane::{KeyBindingsEditor, Owner};
 use crate::localize::tr;
 use crate::menu;
 use crate::snippets_pane::SnippetsPane;
@@ -38,7 +39,7 @@ thread_local! {
 }
 
 // BK-020: pop-up items take `&'static str`; scheme names are interned once.
-fn intern(text: &str) -> &'static str {
+pub fn intern(text: &str) -> &'static str {
     INTERNED.with(|interned| {
         let mut interned = interned.borrow_mut();
         match interned.get(text) {
@@ -105,6 +106,21 @@ impl App for Settings {
                                 defaults: defaults.clone(),
                                 opened: self.profile.clone(),
                             },
+                        )
+                        .tab(
+                            Symbol::SlidersVertical,
+                            tr!("pane-keys"),
+                            rect()
+                                .width(Size::fill())
+                                .height(Size::fill())
+                                .padding(Gaps::new_all(SPACE_3))
+                                .spacing(SPACE_1)
+                                .child(text(
+                                    tr!("key-bindings"),
+                                    HEADLINE,
+                                    Palette::current().label,
+                                ))
+                                .child(bindings_editor(&defaults, Owner::Global)),
                         )
                         .tab(
                             Symbol::SquareGrid,
@@ -316,8 +332,54 @@ impl Component for ProfilesPane {
                                     .on_change(move |choice| section.set(choice)),
                             ),
                     )
-                    .child(ScrollView::new().height(Size::flex(1.0)).child(form)),
+                    .child(
+                        ScrollView::new().height(Size::flex(1.0)).child(
+                            rect()
+                                .width(Size::fill())
+                                .direction(Direction::Vertical)
+                                .spacing(SPACE_3)
+                                .child(form)
+                                .maybe_child((*section.read() == 6).then(|| {
+                                    rect()
+                                        .width(Size::fill())
+                                        .direction(Direction::Vertical)
+                                        .spacing(SPACE_1)
+                                        .child(text(
+                                            tr!("key-mappings"),
+                                            HEADLINE,
+                                            Palette::current().label,
+                                        ))
+                                        .child(bindings_editor(defaults, Owner::Profile(index)))
+                                })),
+                        ),
+                    ),
             )
+    }
+}
+
+fn bindings_editor(defaults: &Defaults, owner: Owner) -> KeyBindingsEditor {
+    let profiles: Vec<String> = defaults
+        .profiles()
+        .into_iter()
+        .map(|profile| profile.name)
+        .collect();
+    KeyBindingsEditor {
+        owner,
+        bindings: match owner {
+            Owner::Global => defaults.key_bindings.clone(),
+            Owner::Profile(index) => defaults
+                .profiles()
+                .get(index)
+                .map(|profile| profile.key_mappings.clone())
+                .unwrap_or_default(),
+        },
+        menu_items: menu::action_items(&profiles),
+        profiles,
+        snippets: defaults
+            .snippets
+            .iter()
+            .map(|snippet| snippet.title.clone())
+            .collect(),
     }
 }
 

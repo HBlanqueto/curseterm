@@ -54,6 +54,7 @@ use crate::hint_view;
 use crate::hints::{self, HintAction, Hints, Typed};
 use crate::integration::Notification;
 use crate::io::AnnotationId;
+use crate::key_bindings::{self, Binding, BindingAction};
 use crate::key_report::{KITTY_FLAGS, KeyMode, Phase, Press, report};
 use crate::keys::{COPY_KEYS, CopyCommand, KeyAction, copy_command};
 use crate::links;
@@ -70,7 +71,7 @@ use crate::session::{
     self, GridSize, Launch, Listener, MarkJump, Session, SessionId, TerminalState,
 };
 use crate::session_note::NoteChange;
-use crate::snippets::{self, Snippet};
+use crate::snippets::{self, Escaping, Snippet};
 use crate::status;
 use crate::theme;
 use crate::windows;
@@ -477,6 +478,7 @@ impl App for Terminal {
             }
         });
         let add_events = events.clone();
+        let key_events = events.clone();
         use_menu_action({
             let handles = handles.clone();
             move |id| {
@@ -764,6 +766,22 @@ impl App for Terminal {
                         session.copy_mode_step(command);
                         *revision.write() += 1;
                     }
+                    return;
+                }
+                let binding = {
+                    let defaults = keyboard.defaults.peek();
+                    let profile = defaults.profile(&session.profile);
+                    key_bindings::find(
+                        &profile.key_mappings,
+                        &defaults.key_bindings,
+                        &data.key,
+                        data.modifiers,
+                    )
+                    .cloned()
+                };
+                if let Some(binding) = binding {
+                    perform_binding(&keyboard, &key_events, revision, session, &binding);
+                    *revision.write() += 1;
                     return;
                 }
                 let alt_key = keyboard.defaults.peek().profile(&session.profile).alt_key;
@@ -2240,6 +2258,75 @@ fn replay_bar(handles: &Handles, id: SessionId, index: usize) -> Element {
         .into_element()
 }
 
+// PTYSession.m -performKeyBindingAction:event:
+fn perform_binding(
+    handles: &Handles,
+    events: &Events,
+    revision: State<u64>,
+    session: &Rc<Session>,
+    binding: &Binding,
+) {
+    let menu = |id: &str| on_action(id, handles, events, revision);
+    let send = |bytes: Vec<u8>| {
+        for receiver in handles.receivers() {
+            receiver.write(bytes.clone());
+        }
+    };
+    let parameter = binding.parameter.as_str();
+    match binding.action {
+        BindingAction::Ignore => {}
+        BindingAction::SelectMenuItem => menu(parameter),
+        BindingAction::NewWindowWithProfile => windows::open(&["--profile", parameter]),
+        BindingAction::NewTabWithProfile => new_tab(handles, events, parameter, None),
+        BindingAction::DuplicateTab => menu(menu::DUPLICATE_TAB.id),
+        BindingAction::SplitHorizontallyWithProfile => {
+            split(handles, events, Axis::Column, parameter)
+        }
+        BindingAction::SplitVerticallyWithProfile => split(handles, events, Axis::Row, parameter),
+        BindingAction::NextTab => menu(menu::NEXT_TAB),
+        BindingAction::PreviousTab => menu(menu::PREVIOUS_TAB),
+        BindingAction::MoveTabLeft => menu(menu::MOVE_TAB_LEFT.id),
+        BindingAction::MoveTabRight => menu(menu::MOVE_TAB_RIGHT.id),
+        BindingAction::NextPane => menu(menu::NEXT_PANE.id),
+        BindingAction::PreviousPane => menu(menu::PREVIOUS_PANE.id),
+        BindingAction::PaneAbove => menu(menu::PANE_UP),
+        BindingAction::PaneBelow => menu(menu::PANE_DOWN),
+        BindingAction::PaneLeft => menu(menu::PANE_LEFT),
+        BindingAction::PaneRight => menu(menu::PANE_RIGHT),
+        BindingAction::ScrollToEnd => session.scroll(Scroll::Bottom),
+        BindingAction::ScrollToTop => session.scroll(Scroll::Top),
+        BindingAction::ScrollLineDown => session.scroll(Scroll::Delta(-1)),
+        BindingAction::ScrollLineUp => session.scroll(Scroll::Delta(1)),
+        BindingAction::ScrollPageDown => session.scroll(Scroll::PageDown),
+        BindingAction::ScrollPageUp => session.scroll(Scroll::PageUp),
+        BindingAction::SendCtrlH => send(vec![0x08]),
+        BindingAction::SendCtrlQuestion => send(vec![0x7f]),
+        BindingAction::SendEscapeSequence => send(format!("\x1b{parameter}").into_bytes()),
+        BindingAction::SendHexCode => send(key_bindings::hex_bytes(parameter)),
+        BindingAction::SendText => send(snippets::escape(parameter, Escaping::CStyle).into_bytes()),
+        BindingAction::SendSnippet => {
+            let snippet = handles
+                .defaults
+                .peek()
+                .snippets
+                .iter()
+                .find(|snippet| snippet.title == parameter)
+                .cloned();
+            if let Some(snippet) = snippet {
+                send_snippet(handles, &snippet);
+            }
+        }
+        BindingAction::RunCoprocess => start_coprocess(handles, session.id, parameter),
+        BindingAction::InstantReplay => menu(menu::INSTANT_REPLAY.id),
+        BindingAction::AlertOnNextMark => menu(menu::ALERT_ON_NEXT_MARK),
+        BindingAction::FindAgainDown => menu(menu::FIND_NEXT.id),
+        BindingAction::FindAgainUp => menu(menu::FIND_PREVIOUS.id),
+        BindingAction::CopyMode => menu(menu::COPY_MODE.id),
+        BindingAction::ToggleFullscreen => menu(menu::FULL_SCREEN.id),
+        BindingAction::ToggleMouseReporting => session.toggle_state(TerminalState::MouseReporting),
+    }
+}
+
 // PTYTextView+ARC.m -sendSnippet: with Option held the snippet opens in Advanced Paste;
 // otherwise PTYSession.m -writeTask: sends it to every session that hears this one.
 fn send_snippet(handles: &Handles, snippet: &Snippet) {
@@ -2836,11 +2923,11 @@ fn new_tab(handles: &Handles, events: &Events, profile: &str, directory: Option<
     }
 }
 
-fn split(handles: &Handles, events: &Events, axis: Axis) {
+fn split(handles: &Handles, events: &Events, axis: Axis, profile: &str) {
     let previous = handles
         .active()
         .and_then(|session| session.working_directory());
-    let launch = handles.launch(&handles.current_profile(), previous);
+    let launch = handles.launch(profile, previous);
     if let Some(id) = spawn(handles, events, launch) {
         let mut workspace = handles.workspace;
         workspace.write().split(id, axis);
@@ -3157,8 +3244,12 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         menu::WARN_ONE_LINE_PASTE => change_defaults(|defaults| {
             defaults.paste_warnings.one_line_at_prompt = !defaults.paste_warnings.one_line_at_prompt
         }),
-        _ if id == menu::SPLIT_VERTICALLY.id => split(handles, events, Axis::Row),
-        _ if id == menu::SPLIT_HORIZONTALLY.id => split(handles, events, Axis::Column),
+        _ if id == menu::SPLIT_VERTICALLY.id => {
+            split(handles, events, Axis::Row, &handles.current_profile())
+        }
+        _ if id == menu::SPLIT_HORIZONTALLY.id => {
+            split(handles, events, Axis::Column, &handles.current_profile())
+        }
         _ if id == menu::CLOSE.id => {
             if let Some(session) = active {
                 request_close(handles, Closing::Session(session.id));

@@ -69,6 +69,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-037 | controls / alerts | `Alert` has only two buttons and cannot be silenced | low | Tested workaround: own sheet with `sheet` |
 | BK-038 | controls | `SearchField` has no options menu | low | Tested workaround: a `PopUpButton` beside it |
 | BK-039 | controls / windows | No outline view nor floating panel | medium | Tested workaround: a panel inside the window |
+| BK-040 | controls | `PopUpButton` neither scrolls nor searches | medium | Tested workaround: groups and a filter |
 
 ## Gaps
 
@@ -883,6 +884,26 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Severity**: medium
 - **How to reproduce**: look for `Outline` or a floating panel in
   `crates/barrier-kit/src`; there is none.
+
+### BK-040 — `PopUpButton` neither scrolls nor searches
+- **Area**: controls
+- **What CurseTerm needed**: a key binding's action
+  (`iTermEditKeyActionWindowController.m`), a searchable list of more than
+  thirty actions in groups, and Select Menu Item…, with every menu entry.
+- **What BarrierKit offers today**: `PopUpButton` with flat items; its menu
+  grows downwards and what does not fit in the window cannot be chosen.
+- **What is missing**: scrolling in a long menu, titled sections and a
+  search field, like `iTermSearchableComboView`.
+- **How I solved it in CurseTerm**: two pop-ups, iTerm2's group and its
+  actions (six at most), and for Select Menu Item… a field that filters and
+  a pop-up with the first twelve matches (`key_bindings_pane.rs`).
+- **Cost of the workaround**: two controls where iTerm2 has one, and the
+  filter in a separate field.
+- **Proposed kit API**: `PopUpButton::section(title)`, a scrolling menu and
+  `PopUpButton::searchable(true)`.
+- **Severity**: medium
+- **How to reproduce**: a `PopUpButton` with forty items in a 700-high
+  window.
 
 ## Things that worked well
 

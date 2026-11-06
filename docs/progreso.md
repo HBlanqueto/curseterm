@@ -2529,3 +2529,59 @@ Report Associated Text con teclas reales (solo en los tests).
 sale de la distribución de EE. UU.; Super nunca llega a la shell (ADR 0003),
 tampoco con kitty; no avisa si una aplicación deja el informe de teclas
 puesto al salir.
+
+## Fase 57 — Combinaciones de teclas
+
+### Plan
+
+Ajustes › Keys › Key Bindings y Perfil › Keys › Key Mappings de iTerm2
+(`iTermKeyBindingAction.h`, `iTermKeyMappings.m`, `PTYSession.m
+-performKeyBindingAction:event:` e `iTermEditKeyActionWindowController.m`):
+
+1. **Combinaciones** globales y por perfil; las del perfil van primero. Se
+   comprueban antes de codificar la tecla.
+2. **Acciones** de los grupos de iTerm2 que CurseTerm tiene: Ignore, Select
+   Menu Item…, New Window/Tab with Profile, Duplicate Tab, Split
+   Horizontally/Vertically with Profile, Next/Previous Tab, Move Tab
+   Left/Right, Next/Previous Pane, Select Split Pane Above/Below/On Left/On
+   Right, los seis Scroll, Send ^H y ^? Backspace, Send Escape Sequence, Send
+   Hex Code, Send Text (escapes estilo C), Send Snippet, Run Coprocess, Start
+   Instant Replay, Alert on Next Mark, Find Again Down/Up, Copy Mode y Toggle
+   Fullscreen y Mouse Reporting. Lo que envía texto respeta Broadcast Input.
+3. **Ajustes:** la pestaña Keys entre Profiles y Pointer, y Key Mappings bajo
+   la sección Keys del perfil: la tabla Keyboard Shortcut y Action con los
+   glifos de iTerm2 (⌃⌥⇧⌘), +, − y Edit, y la hoja con el grabador del atajo
+   («Click to Set»), la acción y su parámetro.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos; un test nuevo comprueba los nombres de las combinaciones, la
+prioridad del perfil y los códigos hexadecimales.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Ctrl+Alt+T global, Send Text `echo global\n` | `echo global` se ejecuta | `fase57-combinaciones.png` |
+| Ctrl+Alt+P global y en el perfil con Send Hex Code: gana el perfil | `echo perfil` | `fase57-combinaciones.png` |
+| Ctrl+Alt+K, New Tab with Profile | se abre una pestaña | — |
+| La pestaña Keys lista las combinaciones con sus glifos | ✓ | `fase57-ajustes.png` |
+| +, grabar Ctrl+Alt+Y, Send Text y OK: se guarda y funciona en el terminal | ✓ | — |
+| Select Menu Item…, filtrar `vertically` y OK sin tocar el desplegable: guarda `split-vertically` y Ctrl+Alt+M divide | ✓ | `fase57-editar.png` |
+| Key Mappings en Perfil › Keys | ✓ | `fase57-perfil.png` |
+
+**Fallos encontrados y corregidos en la prueba:** el desplegable de 37
+acciones no se desplazaba y las últimas no se podían elegir; ahora hay un
+desplegable de grupo y otro de acciones (BK-040). Con Select Menu Item…, OK
+guardaba la primera entrada de todo el menú si no se tocaba el desplegable;
+ahora guarda la primera que se ve.
+
+**No probado:** con el kit tal cual; las acciones de pantalla completa,
+desplazamiento, paneles y Run Coprocess desde una combinación.
+
+**Difiere de iTerm2:** sin Bypass Terminal, remapeo de modificadores,
+pestañas recientes, ventanas siguiente y anterior, cambiar el tamaño o
+intercambiar paneles, cambiar de perfil o de colores, Paste…, Copy or Send,
+la selección, scripts, Sequence ni Send Text with “vim” Special Chars; sin
+presets; una combinación con Super que ya es un atajo del menú hace las dos
+cosas; el icono de Keys repite el de General porque el kit no tiene teclado
+(BK-024).

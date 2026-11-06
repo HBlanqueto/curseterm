@@ -537,6 +537,20 @@ pub struct SessionNoteMetrics {
     pub chevron: f32,
 }
 
+// iTermEditKeyActionWindowController.xib: the Edit Key Action window is 442 points wide.
+pub const KEY_BINDING_EDITOR: KeyBindingEditorMetrics = KeyBindingEditorMetrics {
+    width: 442.0,
+    table_height: 240.0,
+    menu_matches: 12,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KeyBindingEditorMetrics {
+    pub width: f32,
+    pub table_height: f32,
+    pub menu_matches: usize,
+}
+
 // iTermEditSnippetWindowController.xib: the Edit Snippet window and its Value box.
 pub const SNIPPET_EDITOR: SnippetEditorMetrics = SnippetEditorMetrics {
     width: 637.0,

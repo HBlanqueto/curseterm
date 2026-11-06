@@ -2509,3 +2509,59 @@ Associated Text with real keys (only in the tests).
 **Differs from iTerm2:** no Raw Key Reporting Mode; kitty's base key comes
 from the US layout; Super never reaches the shell (ADR 0003), not even with
 kitty; no warning when an app leaves key reporting on when it exits.
+
+## Phase 57 — Key bindings
+
+### Plan
+
+iTerm2's Settings › Keys › Key Bindings and Profile › Keys › Key Mappings
+(`iTermKeyBindingAction.h`, `iTermKeyMappings.m`, `PTYSession.m
+-performKeyBindingAction:event:` and `iTermEditKeyActionWindowController.m`):
+
+1. **Bindings**, global and per profile; the profile's come first. They are
+   checked before the key is encoded.
+2. **Actions** from iTerm2's groups that CurseTerm has: Ignore, Select Menu
+   Item…, New Window/Tab with Profile, Duplicate Tab, Split
+   Horizontally/Vertically with Profile, Next/Previous Tab, Move Tab
+   Left/Right, Next/Previous Pane, Select Split Pane Above/Below/On Left/On
+   Right, the six Scroll ones, Send ^H and ^? Backspace, Send Escape Sequence,
+   Send Hex Code, Send Text (C-style escapes), Send Snippet, Run Coprocess,
+   Start Instant Replay, Alert on Next Mark, Find Again Down/Up, Copy Mode and
+   Toggle Fullscreen and Mouse Reporting. What sends text honours Broadcast
+   Input.
+3. **Settings:** the Keys tab between Profiles and Pointer, and Key Mappings
+   under the profile's Keys section: the Keyboard Shortcut and Action table
+   with iTerm2's glyphs (⌃⌥⇧⌘), +, − and Edit, and the sheet with the
+   shortcut recorder («Click to Set»), the action and its parameter.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes; a new test checks binding names, the profile's priority and the hex
+codes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Global Ctrl+Alt+T, Send Text `echo global\n` | `echo global` runs | `fase57-combinaciones.png` |
+| Ctrl+Alt+P global and in the profile with Send Hex Code: the profile wins | `echo perfil` | `fase57-combinaciones.png` |
+| Ctrl+Alt+K, New Tab with Profile | a tab opens | — |
+| The Keys tab lists the bindings with their glyphs | ✓ | `fase57-ajustes.png` |
+| +, record Ctrl+Alt+Y, Send Text and OK: saved and works in the terminal | ✓ | — |
+| Select Menu Item…, filter `vertically` and OK without touching the pop-up: saves `split-vertically` and Ctrl+Alt+M splits | ✓ | `fase57-editar.png` |
+| Key Mappings in Profile › Keys | ✓ | `fase57-perfil.png` |
+
+**Bugs found and fixed while testing:** the 37-action pop-up did not scroll
+and the last ones could not be chosen; there is now a group pop-up and an
+action pop-up (BK-040). With Select Menu Item…, OK saved the first entry of
+the whole menu if the pop-up was not touched; it now saves the first one
+shown.
+
+**Not tested:** the kit as is; the full screen, scroll, pane and Run
+Coprocess actions from a binding.
+
+**Differs from iTerm2:** no Bypass Terminal, modifier remapping, recent
+tabs, next and previous window, pane resizing or swapping, changing profile
+or colors, Paste…, Copy or Send, selection moves, scripts, Sequence nor Send
+Text with “vim” Special Chars; no presets; a Super binding that is already a
+menu shortcut does both; the Keys icon repeats General's because the kit has
+no keyboard symbol (BK-024).

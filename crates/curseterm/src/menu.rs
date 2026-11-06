@@ -641,6 +641,28 @@ pub fn profile_items(profiles: &[String]) -> Vec<MenuItem> {
     open.into_iter().chain(listed).collect()
 }
 
+// iTermEditKeyActionWindowController.m Select Menu Item…: every action of the terminal menu.
+pub fn action_items(profiles: &[String]) -> Vec<(String, String)> {
+    fn walk(items: &[MenuItem], path: &str, found: &mut Vec<(String, String)>) {
+        for item in items {
+            match item {
+                MenuItem::Action { id, label, .. } => {
+                    found.push((id.clone(), format!("{path} › {label}")));
+                }
+                MenuItem::Submenu { label, items, .. } => {
+                    walk(items, &format!("{path} › {label}"), found)
+                }
+                _ => {}
+            }
+        }
+    }
+    let mut found = Vec::new();
+    for menu in terminal_menu(profiles).menus {
+        walk(&menu.items, &menu.title, &mut found);
+    }
+    found
+}
+
 pub fn auxiliary_menu() -> AppMenu {
     AppMenu::new(vec![
         app_menu(),

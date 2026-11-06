@@ -7,6 +7,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::arrangement::Arrangement;
 use crate::find_mode::FindMode;
+use crate::key_bindings::Binding;
 use crate::paste_warning::PasteWarnings;
 use crate::snippets::Snippet;
 
@@ -35,6 +36,7 @@ pub struct Defaults {
     pub filter_mode: FindMode,
     pub global_search_mode: FindMode,
     pub snippets: Vec<Snippet>,
+    pub key_bindings: Vec<Binding>,
 }
 
 impl Default for Defaults {
@@ -57,6 +59,7 @@ impl Default for Defaults {
             filter_mode: FindMode::default(),
             global_search_mode: FindMode::default(),
             snippets: Vec::new(),
+            key_bindings: Vec::new(),
         }
     }
 }
@@ -82,6 +85,7 @@ pub struct Profile {
     pub alt_key: AltKey,
     pub report_keys_csi_u: bool,
     pub apps_change_key_reporting: bool,
+    pub key_mappings: Vec<Binding>,
     pub notifications: bool,
     pub notify_bell: bool,
     pub notify_idle: bool,
@@ -228,6 +232,7 @@ impl Default for Profile {
             // iTermProfilePreferences.m: KEY_USE_LIBTICKIT_PROTOCOL NO, KEY_ALLOW_MODIFY_OTHER_KEYS YES.
             report_keys_csi_u: false,
             apps_change_key_reporting: true,
+            key_mappings: Vec::new(),
             notifications: false,
             notify_bell: true,
             notify_idle: false,
