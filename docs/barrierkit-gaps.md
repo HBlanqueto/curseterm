@@ -66,7 +66,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-034 | portapapeles | Sin selección primaria | media | Parche 0010 probado |
 | BK-035 | portapapeles | El portapapeles solo ofrece texto plano | baja | Parche 0011 probado |
 | BK-036 | controles | Sin vista de texto de varias líneas | media | Bloque probado `views::text_view` |
-| BK-037 | controles / avisos | `Alert` solo tiene dos botones y no se puede silenciar | baja | Workaround: Paste y Cancel |
+| BK-037 | controles / avisos | `Alert` solo tiene dos botones y no se puede silenciar | baja | Workaround probado: hoja propia con `sheet` |
 
 ## Gaps
 
@@ -825,10 +825,12 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Qué ofrece hoy BarrierKit**: `views::feedback::Alert` con un botón de
   confirmar y otro de cancelar (`feedback.rs:60`).
 - **Qué falta**: más acciones en un `Alert` y una casilla para silenciarlo.
-- **Cómo lo resolví en CurseTerm**: el aviso tiene Paste y Cancel; para no
-  verlo se desmarca Edit › Paste Special › Warn Before Multi-Line Paste.
-- **Coste del workaround**: sin Paste Without Newline ni Advanced…, ni «no
-  volver a preguntar» desde el propio aviso.
+- **Cómo lo resolví en CurseTerm**: los avisos de pegado son una hoja propia
+  (`paste_question_sheet` en `terminal.rs`) hecha con `sheet` y `Button` del
+  kit, con todos los botones de iTerm2; para no verlos se desmarcan las
+  casillas de Edit › Paste Special.
+- **Coste del workaround**: una hoja a mano en vez del `Alert` del kit, y sin
+  «no volver a preguntar» desde el propio aviso.
 - **API propuesta para el kit**: `Alert::action(label, callback)` para
   añadir botones y `Alert::suppression(label, State<bool>)`.
 - **Gravedad**: baja

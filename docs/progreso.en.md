@@ -2157,8 +2157,7 @@ escaping from the panel (they are in the tests).
 **Differs from iTerm2:** no Speed section (chunk size and delay) nor «Wait
 for shell prompt before pasting each line»; the original text cannot be
 edited in the panel; the number of spaces is fixed (4), with no control to
-change it; the regular expression is the `regex` crate's, not ICU's; the
-options are not remembered between uses.
+change it; the regular expression is the `regex` crate's, not ICU's.
 
 ## Phase 48 — Duplicate Window
 
@@ -2183,3 +2182,37 @@ modes.
 
 **Differs from iTerm2:** the new window copies neither the size and position
 nor the window's own title.
+
+## Phase 49 — Full paste warnings
+
+### Plan
+
+iTerm2's two paste warnings with all their buttons, in a sheet of its own
+because the kit's `Alert` only holds two (BK-037):
+
+1. **Tabs** (`PTYSession.m -pasteString:flags:` and `iTermPasteHelper.m
+   +pasteWithTabsWarningWithAccessoryController:`): when the program does not
+   ask for bracketed paste and the text has tabs, «You're about to paste a
+   string with tabs.» with OK, Cancel, Convert tabs to spaces (with the number
+   of spaces, 4 by default and saved) and Advanced….
+2. **Multiple lines** (phase 46): Paste, Paste Without Newline (only for one
+   line ending in a newline), Cancel and Advanced….
+3. **iTerm2's order:** tabs first, then lines.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `echo a<tab>b` and ⌘V: the tabs sheet with its four buttons | ✓ | `fase49-avisos-pegado.png` (bottom) |
+| Raising it to 6 spaces and Convert tabs to spaces: `echo a      b` is pasted and `paste_tab_spaces = 6` is saved | ✓ | — |
+| `echo sin salto` with a trailing newline at a marked prompt: Paste, Paste Without Newline, Cancel and Advanced… | ✓ | `fase49-avisos-pegado.png` (top) |
+| Paste Without Newline leaves the command typed without running it | ✓ | — |
+
+**Not tested:** the kit as is; Advanced… from the warnings; OK and Cancel in
+the tabs sheet.
+
+**Differs from iTerm2:** no «don't ask again» in the warnings; the sheet is
+our own, not an `NSAlert`.

@@ -2169,8 +2169,7 @@ escape de la shell desde el panel (están en los tests).
 **Difiere de iTerm2:** sin la sección Speed (tamaño de bloque y pausa) ni
 «Wait for shell prompt before pasting each line»; el texto original no se
 edita en el panel; el número de espacios es fijo (4), sin el control para
-cambiarlo; la expresión regular es la del crate `regex`, no la de ICU; las
-opciones no se recuerdan entre usos.
+cambiarlo; la expresión regular es la del crate `regex`, no la de ICU.
 
 ## Fase 48 — Duplicate Window
 
@@ -2195,3 +2194,37 @@ los dos modos.
 
 **Difiere de iTerm2:** la ventana nueva no copia el tamaño ni la posición, ni
 los títulos propios de la ventana.
+
+## Fase 49 — Avisos de pegado completos
+
+### Plan
+
+Los dos avisos de pegado de iTerm2 con todos sus botones, en una hoja propia
+porque el `Alert` del kit solo admite dos (BK-037):
+
+1. **Tabuladores** (`PTYSession.m -pasteString:flags:` y `iTermPasteHelper.m
+   +pasteWithTabsWarningWithAccessoryController:`): si el programa no pide
+   pegado entre corchetes y el texto tiene tabuladores, «You're about to paste
+   a string with tabs.» con OK, Cancel, Convert tabs to spaces (con el número
+   de espacios, 4 por defecto y guardado) y Advanced….
+2. **Varias líneas** (fase 46): Paste, Paste Without Newline (solo con una
+   línea que acaba en salto), Cancel y Advanced….
+3. **Orden de iTerm2:** primero los tabuladores y después las líneas.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `echo a<tab>b` y ⌘V: la hoja de tabuladores con sus cuatro botones | ✓ | `fase49-avisos-pegado.png` (abajo) |
+| Subir a 6 espacios y Convert tabs to spaces: se pega `echo a      b` y `paste_tab_spaces = 6` queda guardado | ✓ | — |
+| `echo sin salto` con salto final en un prompt marcado: Paste, Paste Without Newline, Cancel y Advanced… | ✓ | `fase49-avisos-pegado.png` (arriba) |
+| Paste Without Newline deja la orden escrita sin ejecutarla | ✓ | — |
+
+**No probado:** con el kit tal cual; Advanced… desde los avisos; OK y Cancel
+en la hoja de tabuladores.
+
+**Difiere de iTerm2:** sin «no volver a preguntar» en los avisos; la hoja es
+propia, no un `NSAlert`.

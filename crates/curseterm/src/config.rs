@@ -28,6 +28,7 @@ pub struct Defaults {
     pub alert_on_offscreen_marks: bool,
     pub theme: Theme,
     pub paste_warnings: PasteWarnings,
+    pub paste_tab_spaces: u8,
 }
 
 impl Default for Defaults {
@@ -44,6 +45,8 @@ impl Default for Defaults {
             alert_on_offscreen_marks: false,
             theme: Theme::default(),
             paste_warnings: PasteWarnings::default(),
+            // iTermNumberOfSpacesAccessoryViewController.m: four by default.
+            paste_tab_spaces: 4,
         }
     }
 }

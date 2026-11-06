@@ -66,7 +66,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-034 | clipboard | No primary selection | medium | Patch 0010 tested |
 | BK-035 | clipboard | The clipboard only offers plain text | low | Patch 0011 tested |
 | BK-036 | controls | No multi-line text view | medium | Tested block `views::text_view` |
-| BK-037 | controls / alerts | `Alert` has only two buttons and cannot be silenced | low | Workaround: Paste and Cancel |
+| BK-037 | controls / alerts | `Alert` has only two buttons and cannot be silenced | low | Tested workaround: own sheet with `sheet` |
 
 ## Gaps
 
@@ -823,10 +823,12 @@ Each gap says how it is solved (CurseTerm ADR 0001):
   button and a cancel button (`feedback.rs:60`).
 - **What is missing**: more actions in an `Alert` and a checkbox to silence
   it.
-- **How CurseTerm solves it**: the warning has Paste and Cancel; to stop it,
-  uncheck Edit › Paste Special › Warn Before Multi-Line Paste.
-- **Cost of the workaround**: no Paste Without Newline nor Advanced…, and no
-  «don't ask again» from the warning itself.
+- **How CurseTerm solves it**: the paste warnings are a sheet of its own
+  (`paste_question_sheet` in `terminal.rs`) built from the kit's `sheet` and
+  `Button`, with every iTerm2 button; to stop them, uncheck the boxes in
+  Edit › Paste Special.
+- **Cost of the workaround**: a hand-made sheet instead of the kit's
+  `Alert`, and no «don't ask again» from the warning itself.
 - **Proposed kit API**: `Alert::action(label, callback)` to add buttons and
   `Alert::suppression(label, State<bool>)`.
 - **Severity**: low

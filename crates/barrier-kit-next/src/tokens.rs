@@ -491,3 +491,5 @@ pub struct AdvancedPasteMetrics {
     pub preview_chars: usize,
     pub spaces: usize,
 }
+
+pub const PASTE_QUESTION_WIDTH: f32 = 480.0;

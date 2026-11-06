@@ -11,6 +11,7 @@ use alacritty_terminal::index::Direction as SearchDirection;
 use alacritty_terminal::term::TermMode;
 use barrier_kit::app::use_menu_action;
 use barrier_kit::app_menu::MenuHandle;
+use barrier_kit::compact::Stepper;
 use barrier_kit::controls::{Button, ButtonStyle, SearchField, Slider, TextField};
 use barrier_kit::platform::{DecorationResponse, Timers, WakeHandle, WindowControls};
 use barrier_kit::style::{Palette, text};
@@ -22,8 +23,8 @@ use barrier_kit::views::table::Table;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
 use barrier_kit_next::notifications::{self, Notice};
 use barrier_kit_next::tokens::{
-    ANNOTATION, PASTE_HISTORY_SIZE, RENAME_WIDTH, SHORTCUT_LABEL, TAB_STRIP, TERMINAL, TITLE_BAR,
-    TOOLBELT_WIDTH, TabStyle,
+    ANNOTATION, PASTE_HISTORY_SIZE, PASTE_QUESTION_WIDTH, RENAME_WIDTH, SHORTCUT_LABEL, TAB_STRIP,
+    TERMINAL, TITLE_BAR, TOOLBELT_WIDTH, TabStyle,
 };
 use barrier_kit_next::views::split_panes::SplitPanes;
 use barrier_kit_next::views::tab_bar::{Badge, TabBar};
@@ -134,6 +135,8 @@ enum Sheet {
     NamedMark(SessionId),
     CopyModeKeys,
     AdvancedPaste,
+    PasteWarning(Warning),
+    PasteTabs,
 }
 
 struct Buried {
@@ -177,7 +180,6 @@ enum Confirm {
     Close(Closing),
     RemoveAnnotation(SessionId, AnnotationId),
     MarkSet(SessionId),
-    Paste(Warning),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -589,6 +591,7 @@ impl App for Terminal {
         let sheet_view = (*sheet.read()).map(|open| match open {
             Sheet::Pick(picker) => pick_sheet(&handles, picker, revision),
             Sheet::CopyModeKeys => copy_mode_keys_sheet(&handles),
+            Sheet::PasteWarning(_) | Sheet::PasteTabs => paste_question_sheet(&handles, open),
             Sheet::AdvancedPaste => {
                 let (pasting, cancelling) = (handles.clone(), handles.clone());
                 advanced_paste_sheet(
@@ -1242,23 +1245,162 @@ fn paste_text(handles: &Handles, text: String) {
     paste_checked(handles, text, false);
 }
 
-// iTermPasteHelper.m -tryToPasteEvent: every paste, slow ones too, goes past the warning.
+// PTYSession.m -pasteString:flags: tabs are asked about first unless the program brackets.
 fn paste_checked(handles: &Handles, text: String, slowly: bool) {
-    let at_prompt = handles.active().is_some_and(|session| session.at_prompt());
-    let warnings = handles.defaults.peek().paste_warnings;
-    if let Some(warning) = paste_warning::warning(&text, at_prompt, warnings) {
-        let (mut pending, mut confirm) = (handles.pending_paste, handles.confirm);
-        if confirm.peek().is_none() {
-            pending.set(Some((text, slowly)));
-            confirm.set(Some(Confirm::Paste(warning)));
-        }
+    let bracketing = handles
+        .active()
+        .is_some_and(|session| session.mode().contains(TermMode::BRACKETED_PASTE));
+    if !bracketing && text.contains('\t') {
+        ask_paste(handles, text, slowly, Sheet::PasteTabs);
         return;
     }
+    paste_past_tabs(handles, text, slowly);
+}
+
+// iTermPasteHelper.m -tryToPasteEvent: every paste, slow ones too, goes past the warning.
+fn paste_past_tabs(handles: &Handles, text: String, slowly: bool) {
+    let at_prompt = handles.active().is_some_and(|session| session.at_prompt());
+    let warnings = handles.defaults.peek().paste_warnings;
+    match paste_warning::warning(&text, at_prompt, warnings) {
+        Some(warning) => ask_paste(handles, text, slowly, Sheet::PasteWarning(warning)),
+        None => deliver_paste(handles, text, slowly),
+    }
+}
+
+fn deliver_paste(handles: &Handles, text: String, slowly: bool) {
     if slowly {
         paste_slowly(handles, text);
     } else {
         paste_now(handles, text);
     }
+}
+
+fn ask_paste(handles: &Handles, text: String, slowly: bool, question: Sheet) {
+    if handles.sheet.peek().is_some() {
+        return;
+    }
+    let mut pending = handles.pending_paste;
+    pending.set(Some((text, slowly)));
+    open_sheet(handles, question);
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum PasteAnswer {
+    Paste,
+    WithoutNewline,
+    ConvertTabs,
+    Advanced,
+    Cancel,
+}
+
+// iTermPasteHelper.m -maybeWarnAboutMultiLinePaste: and +pasteWithTabsWarningWithAccessory…:
+// iTermWarning's buttons, which the kit's two-button Alert cannot hold (BK-037).
+fn paste_question_sheet(handles: &Handles, question: Sheet) -> Element {
+    let palette = Palette::current();
+    let (heading, message, answers) = match question {
+        Sheet::PasteWarning(warning) => {
+            let message = match warning {
+                Warning::Lines(count) => tr!("paste-lines", count = count),
+                Warning::LinesAtPrompt(count) => tr!("paste-lines-at-prompt", count = count),
+                Warning::OneLine => tr!("paste-one-line").to_string(),
+                Warning::OneLineAtPrompt => tr!("paste-one-line-at-prompt").to_string(),
+            };
+            let one_line = matches!(warning, Warning::OneLine | Warning::OneLineAtPrompt);
+            let mut answers = vec![(tr!("paste-confirm"), PasteAnswer::Paste)];
+            if one_line {
+                answers.push((tr!("paste-without-newline"), PasteAnswer::WithoutNewline));
+            }
+            answers.push((tr!("close-cancel"), PasteAnswer::Cancel));
+            answers.push((tr!("paste-advanced"), PasteAnswer::Advanced));
+            (Some(tr!("paste-warning-title")), message, answers)
+        }
+        _ => (
+            None,
+            tr!("paste-tabs-title").to_string(),
+            vec![
+                (tr!("mark-alert-ok"), PasteAnswer::Paste),
+                (tr!("close-cancel"), PasteAnswer::Cancel),
+                (tr!("paste-convert-tabs"), PasteAnswer::ConvertTabs),
+                (tr!("paste-advanced"), PasteAnswer::Advanced),
+            ],
+        ),
+    };
+    let spaces = (question == Sheet::PasteTabs).then(|| {
+        rect()
+            .direction(Direction::Horizontal)
+            .cross_align(Alignment::Center)
+            .spacing(SPACE_2)
+            .child(text(tr!("paste-spaces"), CAPTION, palette.label))
+            .child(
+                Stepper::new(tr!("paste-spaces"), 1, 100)
+                    .value(i64::from(handles.defaults.read().paste_tab_spaces))
+                    .on_change(|spaces: i64| {
+                        change_defaults(|defaults| defaults.paste_tab_spaces = spaces as u8)
+                    }),
+            )
+    });
+    let buttons = answers
+        .into_iter()
+        .enumerate()
+        .map(|(index, (label, answer))| {
+            let answering = handles.clone();
+            let button =
+                Button::new(label).on_press(move |_| answer_paste(&answering, question, answer));
+            if index == 0 {
+                button.style(ButtonStyle::Primary).into_element()
+            } else {
+                button.into_element()
+            }
+        });
+    sheet(
+        rect()
+            .width(Size::px(PASTE_QUESTION_WIDTH))
+            .direction(Direction::Vertical)
+            .spacing(SPACE_2)
+            .maybe_child(heading.map(|heading| text(heading, HEADLINE, palette.label)))
+            .child(text(message, CAPTION, palette.secondary_label))
+            .maybe_child(spaces)
+            .child(
+                rect()
+                    .width(Size::fill())
+                    .direction(Direction::Horizontal)
+                    .main_align(Alignment::End)
+                    .spacing(SPACE_2)
+                    .children(buttons),
+            ),
+    )
+    .into_element()
+}
+
+// BK-027: Enter also reaches the global handler, so the sheet closes one loop later.
+fn answer_paste(handles: &Handles, question: Sheet, answer: PasteAnswer) {
+    let later = handles.clone();
+    handles.after(Duration::ZERO, move || {
+        let mut sheet = later.sheet;
+        sheet.set(None);
+        let mut pending = later.pending_paste;
+        let Some((text, slowly)) = pending.write().take() else {
+            return;
+        };
+        let asked_about_tabs = question == Sheet::PasteTabs;
+        match answer {
+            PasteAnswer::Cancel => {}
+            PasteAnswer::Paste if asked_about_tabs => paste_past_tabs(&later, text, slowly),
+            PasteAnswer::Paste => deliver_paste(&later, text, slowly),
+            PasteAnswer::WithoutNewline => {
+                let trimmed = text.trim_end_matches(['\r', '\n']).to_string();
+                deliver_paste(&later, trimmed, slowly);
+            }
+            PasteAnswer::ConvertTabs => {
+                let spaces = " ".repeat(usize::from(later.defaults.peek().paste_tab_spaces));
+                paste_past_tabs(&later, text.replace('\t', &spaces), slowly);
+            }
+            PasteAnswer::Advanced => {
+                later.advanced.open(text);
+                open_sheet(&later, Sheet::AdvancedPaste);
+            }
+        }
+    });
 }
 
 fn paste_now(handles: &Handles, text: String) {
@@ -2591,15 +2733,6 @@ fn confirm_alert(handles: &Handles, pending: Confirm) -> Alert {
             tr!("remove-annotation-title"),
             tr!("remove-annotation-message"),
         ),
-        Confirm::Paste(warning) => {
-            let message = match warning {
-                Warning::Lines(count) => tr!("paste-lines", count = count),
-                Warning::LinesAtPrompt(count) => tr!("paste-lines-at-prompt", count = count),
-                Warning::OneLine => tr!("paste-one-line").to_string(),
-                Warning::OneLineAtPrompt => tr!("paste-one-line-at-prompt").to_string(),
-            };
-            Alert::new(tr!("paste-warning-title"), message)
-        }
         Confirm::MarkSet(id) => {
             let name = handles.workspace.peek().title(id).to_string();
             Alert::new(
@@ -2609,7 +2742,6 @@ fn confirm_alert(handles: &Handles, pending: Confirm) -> Alert {
         }
     };
     let (label, dismiss) = match pending {
-        Confirm::Paste(_) => (tr!("paste-confirm"), tr!("close-cancel")),
         Confirm::Close(_) => (tr!("close-confirm"), tr!("close-cancel")),
         Confirm::RemoveAnnotation(..) => (tr!("remove-annotation-confirm"), tr!("close-cancel")),
         Confirm::MarkSet(_) => (tr!("reveal"), tr!("mark-alert-ok")),
@@ -2625,14 +2757,6 @@ fn confirm_alert(handles: &Handles, pending: Confirm) -> Alert {
                     }
                 }
                 Confirm::MarkSet(id) => reveal(&handles, id, None),
-                Confirm::Paste(_) => {
-                    let mut pending = handles.pending_paste;
-                    match pending.write().take() {
-                        Some((text, true)) => paste_slowly(&handles, text),
-                        Some((text, false)) => paste_now(&handles, text),
-                        None => {}
-                    }
-                }
             });
         })
         .cancel(dismiss, move |_| dismiss_later(&cancel, || {}))
