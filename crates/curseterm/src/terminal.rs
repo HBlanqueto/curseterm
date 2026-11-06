@@ -283,6 +283,7 @@ impl Handles {
 pub struct Terminal {
     pub profile: Option<String>,
     pub arrangement: Option<String>,
+    pub layout: Option<Arrangement>,
 }
 
 impl App for Terminal {
@@ -429,8 +430,12 @@ impl App for Terminal {
             let (handles, events) = (handles.clone(), events.clone());
             let first = self.profile.clone();
             let arrangement = self.arrangement.clone();
+            let layout = self.layout.clone();
             move || {
                 if arrangement.is_some_and(|name| restore_arrangement(&handles, &events, &name)) {
+                    return;
+                }
+                if layout.is_some_and(|layout| open_layouts(&handles, &events, layout.tabs)) {
                     return;
                 }
                 let profile =
@@ -2373,8 +2378,12 @@ fn restore_arrangement(handles: &Handles, events: &Events, name: &str) -> bool {
     else {
         return false;
     };
+    open_layouts(handles, events, saved.tabs)
+}
+
+fn open_layouts(handles: &Handles, events: &Events, tabs: Vec<TabLayout>) -> bool {
     let mut restored = false;
-    for tab in saved.tabs {
+    for tab in tabs {
         restored |= open_layout(handles, events, tab);
     }
     restored
@@ -2731,6 +2740,23 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             }
         }
         menu::ARRANGE_EVENLY => workspace.write().arrange_evenly(),
+        // PseudoTerminal.m -duplicateWindow: the arrangement of every tab, without contents.
+        _ if id == menu::DUPLICATE_WINDOW.id => {
+            let tabs: Vec<TabLayout> = workspace
+                .peek()
+                .tabs
+                .iter()
+                .filter_map(|tab| tab_layout(handles, tab))
+                .collect();
+            let layout = Arrangement {
+                name: String::new(),
+                tabs,
+            };
+            match toml::to_string(&layout) {
+                Ok(layout) => windows::open(&["--layout", &layout]),
+                Err(error) => tracing::warn!(%error, "could not describe the window"),
+            }
+        }
         menu::WARN_MULTI_LINE_PASTE => change_defaults(|defaults| {
             defaults.paste_warnings.multi_line = !defaults.paste_warnings.multi_line
         }),

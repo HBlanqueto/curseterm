@@ -2167,3 +2167,27 @@ escape de la shell desde el panel (están en los tests).
 edita en el panel; el número de espacios es fijo (4), sin el control para
 cambiarlo; la expresión regular es la del crate `regex`, no la de ICU; las
 opciones no se recuerdan entre usos.
+
+## Fase 48 — Duplicate Window
+
+### Plan
+
+Shell › Duplicate Window de iTerm2 (`PseudoTerminal.m -duplicateWindow:` y
+`-arrangementForDuplicateWindow`): una ventana nueva con la disposición de
+todas las pestañas (paneles, perfiles y carpetas), sin el contenido. La
+disposición viaja en TOML con `--layout`, así que sirve igual en el mismo
+proceso (kit parcheado) que lanzando otro (kit tal cual).
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Dos paneles, el segundo en `/tmp`, y Duplicate Window: otra ventana con los dos paneles y el segundo en `/tmp` | ✓ | `fase48-duplicar-ventana.png` |
+
+**No probado:** con el kit tal cual (otro proceso).
+
+**Difiere de iTerm2:** la ventana nueva no copia el tamaño ni la posición, ni
+los títulos propios de la ventana.

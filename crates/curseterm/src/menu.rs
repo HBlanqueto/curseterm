@@ -30,6 +30,7 @@ pub const NEW_TAB: Action = Action::new("new-tab", || tr!("new-tab")).shortcut(s
 pub const NEW_TAB_PROFILE: Action = Action::new("new-tab-profile", || tr!("new-tab-profile"))
     .shortcut(super_with(Modifiers::ALT.union(Modifiers::SHIFT), 't'));
 pub const DUPLICATE_TAB: Action = Action::new("duplicate-tab", || tr!("duplicate-tab"));
+pub const DUPLICATE_WINDOW: Action = Action::new("duplicate-window", || tr!("duplicate-window"));
 pub const DUPLICATE_SESSION: Action = Action::new("duplicate-session", || tr!("duplicate-session"));
 pub const SELECT_CURRENT_COMMAND: Action =
     Action::new("select-current-command", || tr!("select-current-command"));
@@ -246,6 +247,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 NEW_TAB_PROFILE.item(true),
                 MenuItem::Separator,
                 DUPLICATE_TAB.item(true),
+                DUPLICATE_WINDOW.item(true),
                 MenuItem::Separator,
                 SPLIT_HORIZONTALLY.item(true),
                 SPLIT_VERTICALLY.item(true),

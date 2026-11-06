@@ -2155,3 +2155,27 @@ for shell prompt before pasting each line»; the original text cannot be
 edited in the panel; the number of spaces is fixed (4), with no control to
 change it; the regular expression is the `regex` crate's, not ICU's; the
 options are not remembered between uses.
+
+## Phase 48 — Duplicate Window
+
+### Plan
+
+iTerm2's Shell › Duplicate Window (`PseudoTerminal.m -duplicateWindow:` and
+`-arrangementForDuplicateWindow`): a new window with the arrangement of
+every tab (panes, profiles and folders), without the contents. The
+arrangement travels as TOML with `--layout`, so it works the same in the
+same process (patched kit) as launching another one (kit as is).
+
+### Result (2026-11-06)
+
+Tested on headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Two panes, the second in `/tmp`, and Duplicate Window: another window with both panes and the second in `/tmp` | ✓ | `fase48-duplicar-ventana.png` |
+
+**Not tested:** the kit as is (another process).
+
+**Differs from iTerm2:** the new window copies neither the size and position
+nor the window's own title.

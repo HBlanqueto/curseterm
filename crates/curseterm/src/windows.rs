@@ -11,6 +11,7 @@ use freya_core::prelude::{use_drop, use_hook};
 use rustix::process::{Pid, Signal, kill_process};
 use vow_design::{SPACE_2, WINDOW_MIN_SIZE};
 
+use crate::arrangement::Arrangement;
 use crate::config::{APP_ID, APP_NAME, Defaults};
 use crate::grid::Fonts;
 use crate::{auxiliary, menu, preferences, terminal, theme};
@@ -82,15 +83,17 @@ pub fn describe(arguments: &[&str]) -> (AppComponent, WindowOptions) {
         ["--settings", profile @ ..] => {
             preferences::window(profile.first().map(|name| name.to_string()))
         }
-        ["--profile", name, ..] => terminal_window(Some(name.to_string()), None),
-        ["--arrangement", name, ..] => terminal_window(None, Some(name.to_string())),
-        _ => terminal_window(None, None),
+        ["--profile", name, ..] => terminal_window(Some(name.to_string()), None, None),
+        ["--arrangement", name, ..] => terminal_window(None, Some(name.to_string()), None),
+        ["--layout", layout, ..] => terminal_window(None, None, toml::from_str(layout).ok()),
+        _ => terminal_window(None, None, None),
     }
 }
 
 fn terminal_window(
     profile: Option<String>,
     arrangement: Option<String>,
+    layout: Option<Arrangement>,
 ) -> (AppComponent, WindowOptions) {
     let size = terminal_size(profile.as_deref());
     let options = WindowOptions::new(APP_NAME, "curseterm")
@@ -102,6 +105,7 @@ fn terminal_window(
         AppComponent::new(terminal::Terminal {
             profile,
             arrangement,
+            layout,
         }),
         options,
     )

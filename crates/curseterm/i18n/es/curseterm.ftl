@@ -214,6 +214,7 @@ paste-with = por
 paste-regex-placeholder = Expresión regular
 paste-substitution-placeholder = Sustitución
 paste-preview = Vista previa
+duplicate-window = Duplicar ventana
 reveal = Mostrar
 set-named-mark = Poner una marca con nombre…
 named-marks-menu = Marcas con nombre
