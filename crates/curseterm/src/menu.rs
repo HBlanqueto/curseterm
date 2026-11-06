@@ -319,7 +319,7 @@ fn keyed(id: &'static str, label: &str, shortcut: &str) -> MenuItem {
     MenuItem::action(id, label).with_shortcut(shortcut)
 }
 
-pub fn terminal_menu(profiles: &[String]) -> AppMenu {
+pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
     AppMenu::new(vec![
         app_menu(),
         Menu::new(
@@ -677,20 +677,97 @@ pub fn arrangement_items(names: &[String], default: Option<&str>) -> Vec<MenuIte
         .collect()
 }
 
-pub fn profile_items(profiles: &[String]) -> Vec<MenuItem> {
+// The profiles' names and tags, in their order.
+pub type ProfileEntries = [(String, Vec<String>)];
+
+// iTermProfilesMenuController.m -addBookmark:…withTags:: untagged profiles at the top, the rest in
+// a submenu per tag, split at `/`.
+pub fn profile_items(profiles: &ProfileEntries) -> Vec<MenuItem> {
     let open = [OPEN_PROFILES.item(true), MenuItem::Separator];
-    let listed = profiles.iter().enumerate().map(|(index, name)| {
-        let item = MenuItem::action(format!("{PROFILE_PREFIX}{index}"), name.clone());
-        match index {
-            0..9 => item.with_shortcut(format!("Ctrl+Super+{}", index + 1)),
-            _ => item,
+    let item = |index: usize| {
+        MenuItem::action(
+            format!("{PROFILE_PREFIX}{index}"),
+            profiles[index].0.clone(),
+        )
+    };
+    let listed = profiles
+        .iter()
+        .enumerate()
+        .filter(|(_, (_, tags))| tags.is_empty())
+        .map(|(index, _)| match index {
+            0..9 => item(index).with_shortcut(format!("Ctrl+Super+{}", index + 1)),
+            _ => item(index),
+        });
+    let tags = TagFolder::of(profiles.iter().map(|(_, tags)| tags.as_slice()));
+    open.into_iter()
+        .chain(listed)
+        .chain(tags.items(&item))
+        .collect()
+}
+
+// iTermSnippetsMenuController.m and iTermProfilesMenuController.m: a submenu per tag, nested at
+// `/` and sorted by name, with the tagged entries inside.
+#[derive(Default)]
+pub struct TagFolder {
+    folders: Vec<(String, TagFolder)>,
+    entries: Vec<usize>,
+}
+
+impl TagFolder {
+    pub fn of<'a>(tags: impl Iterator<Item = &'a [String]>) -> Self {
+        let mut tree = Self::default();
+        for (index, tags) in tags.enumerate() {
+            for tag in tags {
+                tree.add(&tag.split('/').collect::<Vec<_>>(), index);
+            }
         }
-    });
-    open.into_iter().chain(listed).collect()
+        tree
+    }
+
+    fn add(&mut self, path: &[&str], index: usize) {
+        let Some((name, rest)) = path.split_first() else {
+            self.entries.push(index);
+            return;
+        };
+        let position = match self.folders.iter().position(|(other, _)| other == name) {
+            Some(position) => position,
+            None => {
+                self.folders.push((name.to_string(), Self::default()));
+                self.folders.len() - 1
+            }
+        };
+        self.folders[position].1.add(rest, index);
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.folders.is_empty()
+    }
+
+    pub fn items(&self, item: &impl Fn(usize) -> MenuItem) -> Vec<MenuItem> {
+        let mut folders: Vec<&(String, TagFolder)> = self.folders.iter().collect();
+        folders.sort_by(|left, right| left.0.cmp(&right.0));
+        folders
+            .into_iter()
+            .map(|(name, folder)| {
+                let mut items = folder.items(item);
+                if !items.is_empty() && !folder.entries.is_empty() {
+                    items.push(MenuItem::Separator);
+                }
+                items.extend(folder.entries.iter().map(|index| item(*index)));
+                MenuItem::Submenu {
+                    id: None,
+                    label: name.clone(),
+                    enabled: true,
+                    items,
+                    icon: None,
+                }
+            })
+            .collect()
+    }
 }
 
 // iTermEditKeyActionWindowController.m Select Menu Item…: every action of the terminal menu.
-pub fn action_items(profiles: &[String]) -> Vec<(String, String)> {
+pub fn action_items(profiles: &ProfileEntries) -> Vec<(String, String)> {
     fn walk(items: &[MenuItem], path: &str, found: &mut Vec<(String, String)>) {
         for item in items {
             match item {

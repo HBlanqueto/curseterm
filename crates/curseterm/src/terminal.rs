@@ -1432,12 +1432,17 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::SPLIT_PANE, split);
     use_submenu_items(menu::SELECT_TAB, menu::select_tab_items(&titles, active));
     let profiles = handles.defaults.read().profiles();
-    use_profiles_menu(profiles.into_iter().map(|profile| profile.name).collect());
+    use_profiles_menu(
+        profiles
+            .into_iter()
+            .map(|profile| (profile.name, profile.tags))
+            .collect(),
+    );
 }
 
-fn use_profiles_menu(names: Vec<String>) {
+fn use_profiles_menu(names: Vec<(String, Vec<String>)>) {
     let handle = use_hook(try_consume_root_context::<MenuHandle>);
-    let mut published = use_state(|| None::<Vec<String>>);
+    let mut published = use_state(|| None::<Vec<(String, Vec<String>)>>);
     if published.peek().as_ref() == Some(&names) {
         return;
     }
@@ -1449,7 +1454,7 @@ fn use_profiles_menu(names: Vec<String>) {
     handle.set_menu_items(tr!("menu-profiles"), menu::profile_items(&names));
     // BK-010: without patch 0004 only the entries the window opened with can change.
     #[cfg(not(feature = "kit-parcheado"))]
-    for (index, name) in names.iter().enumerate() {
+    for (index, (name, _)) in names.iter().enumerate() {
         handle.update(format!("{}{index}", menu::PROFILE_PREFIX), |item| {
             if let barrier_kit::menu::MenuItem::Action { label, .. } = item {
                 *label = name.clone();

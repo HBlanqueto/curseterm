@@ -2,6 +2,7 @@ use barrier_kit::menu::MenuItem;
 use serde::{Deserialize, Serialize};
 
 use crate::localize::tr;
+use crate::menu::TagFolder;
 
 pub const SNIPPET_PREFIX: &str = "snippet-";
 const DISPLAY_TITLE_CHARS: usize = 30;
@@ -105,75 +106,20 @@ pub fn menu_items(snippets: &[Snippet]) -> Vec<MenuItem> {
         .enumerate()
         .filter(|(_, snippet)| snippet.tags.is_empty())
         .map(|(index, snippet)| item(index, snippet));
-    let mut tree = Folder::default();
-    for (index, snippet) in snippets.iter().enumerate() {
-        for tag in &snippet.tags {
-            tree.add(&tag.split('/').collect::<Vec<_>>(), index);
-        }
-    }
+    let tree = TagFolder::of(snippets.iter().map(|snippet| snippet.tags.as_slice()));
     let mut items: Vec<MenuItem> = [hint, MenuItem::Separator]
         .into_iter()
         .chain(untagged)
         .collect();
-    if !tree.folders.is_empty() {
+    if !tree.is_empty() {
         items.push(MenuItem::Separator);
-        items.extend(tree.items(snippets));
+        items.extend(tree.items(&|index| item(index, &snippets[index])));
     }
     items
 }
 
 fn item(index: usize, snippet: &Snippet) -> MenuItem {
     MenuItem::action(format!("{SNIPPET_PREFIX}{index}"), snippet.display_title())
-}
-
-#[derive(Default)]
-struct Folder {
-    folders: Vec<(String, Folder)>,
-    snippets: Vec<usize>,
-}
-
-impl Folder {
-    fn add(&mut self, path: &[&str], index: usize) {
-        let Some((name, rest)) = path.split_first() else {
-            self.snippets.push(index);
-            return;
-        };
-        let position = match self.folders.iter().position(|(other, _)| other == name) {
-            Some(position) => position,
-            None => {
-                self.folders.push((name.to_string(), Folder::default()));
-                self.folders.len() - 1
-            }
-        };
-        self.folders[position].1.add(rest, index);
-    }
-
-    fn items(&self, snippets: &[Snippet]) -> Vec<MenuItem> {
-        let mut folders: Vec<&(String, Folder)> = self.folders.iter().collect();
-        folders.sort_by(|left, right| left.0.cmp(&right.0));
-        folders
-            .into_iter()
-            .map(|(name, folder)| {
-                let mut items = folder.items(snippets);
-                if !items.is_empty() && !folder.snippets.is_empty() {
-                    items.push(MenuItem::Separator);
-                }
-                items.extend(
-                    folder
-                        .snippets
-                        .iter()
-                        .map(|index| item(*index, &snippets[*index])),
-                );
-                MenuItem::Submenu {
-                    id: None,
-                    label: name.clone(),
-                    enabled: true,
-                    items,
-                    icon: None,
-                }
-            })
-            .collect()
-    }
 }
 
 #[cfg(test)]

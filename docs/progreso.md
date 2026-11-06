@@ -3032,3 +3032,32 @@ coprocess y Send text; la fila de Ajustes.
 macOS); la aplicación por omisión no recibe la línea; el archivo es la
 palabra pulsada, no la búsqueda de rutas de `iTermPathFinder.m` con espacios;
 las sustituciones son las numéricas, no las expresiones `\(…)`.
+
+## Fase 67 — Etiquetas de perfil
+
+### Plan
+
+Las etiquetas de iTerm2 (`ProfilesGeneralPreferencesViewController.m`,
+`iTermProfilesMenuController.m -addBookmark:…withTags:`):
+
+1. **Profiles › General › Tags:** separadas por comas.
+2. **Menú Profiles:** los perfiles sin etiqueta arriba, con ⌃⌘1…9; los demás,
+   en un submenú por etiqueta, anidado en cada `/` y ordenado por nombre.
+3. El árbol de etiquetas es el mismo que el de Edit › Snippets, que pasa a
+   compartirlo (`menu::TagFolder`).
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado y el menú por D-Bus.
+`./dev.sh check` limpio en los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Default sin etiqueta, Prod en `servers/prod` y Dev en `servers` y `work`: arriba solo Default; `servers` con `prod › Prod` y Dev; `work` con Dev | ✓ | — |
+
+**No probado:** con el kit tal cual (BK-010: el menú no cambia de forma
+después de abrir la ventana); el campo Tags de Ajustes; Snippets con
+etiquetas tras el cambio.
+
+**Difiere de iTerm2:** la lista de perfiles de Ajustes y Open Quickly no
+filtran por etiqueta; sin las etiquetas sugeridas al escribir.

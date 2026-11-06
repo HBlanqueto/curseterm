@@ -121,7 +121,7 @@ fn terminal_window(
         .app_id(APP_ID)
         .size(size)
         .min_size(Some(WINDOW_MIN_SIZE))
-        .menu(menu::terminal_menu(&profile_names()));
+        .menu(menu::terminal_menu(&profile_entries()));
     (
         AppComponent::new(terminal::Terminal {
             profile,
@@ -132,12 +132,12 @@ fn terminal_window(
     )
 }
 
-fn profile_names() -> Vec<String> {
+fn profile_entries() -> Vec<(String, Vec<String>)> {
     let defaults: Defaults = barrier_kit::app::load_defaults(APP_ID);
     defaults
         .profiles()
         .into_iter()
-        .map(|profile| profile.name)
+        .map(|profile| (profile.name, profile.tags))
         .collect()
 }
 

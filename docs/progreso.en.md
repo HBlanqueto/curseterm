@@ -3009,3 +3009,32 @@ Send text; the Settings row.
 the default app does not get the line; the file is the clicked word, not
 `iTermPathFinder.m`'s path search with spaces; the substitutions are the
 numeric ones, not `\(…)` expressions.
+
+## Phase 67 — Profile tags
+
+### Plan
+
+iTerm2's tags (`ProfilesGeneralPreferencesViewController.m`,
+`iTermProfilesMenuController.m -addBookmark:…withTags:`):
+
+1. **Profiles › General › Tags:** separated by commas.
+2. **Profiles menu:** untagged profiles at the top, with ⌃⌘1…9; the rest in a
+   submenu per tag, nested at each `/` and sorted by name.
+3. The tag tree is the same as Edit › Snippets', which now shares it
+   (`menu::TagFolder`).
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit and the D-Bus menu.
+`./dev.sh check` clean in both modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Default untagged, Prod in `servers/prod` and Dev in `servers` and `work`: only Default at the top; `servers` with `prod › Prod` and Dev; `work` with Dev | ✓ | — |
+
+**Not tested:** the kit as is (BK-010: the menu does not change shape after
+the window opens); the Tags field in Settings; tagged snippets after the
+change.
+
+**Differs from iTerm2:** the Settings profile list and Open Quickly do not
+filter by tag; no tag suggestions while typing.

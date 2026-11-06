@@ -457,11 +457,12 @@ impl Component for ShortcutsPane {
 }
 
 fn bindings_editor(defaults: &Defaults, owner: Owner) -> KeyBindingsEditor {
-    let profiles: Vec<String> = defaults
+    let entries: Vec<(String, Vec<String>)> = defaults
         .profiles()
         .into_iter()
-        .map(|profile| profile.name)
+        .map(|profile| (profile.name, profile.tags))
         .collect();
+    let profiles: Vec<String> = entries.iter().map(|(name, _)| name.clone()).collect();
     KeyBindingsEditor {
         owner,
         bindings: match owner {
@@ -473,7 +474,7 @@ fn bindings_editor(defaults: &Defaults, owner: Owner) -> KeyBindingsEditor {
                 .unwrap_or_default(),
             Owner::Actions => defaults.actions.iter().map(NamedAction::binding).collect(),
         },
-        menu_items: menu::action_items(&profiles),
+        menu_items: menu::action_items(&entries),
         profiles,
         snippets: defaults
             .snippets
@@ -505,6 +506,15 @@ fn general_section(defaults: &Defaults, index: usize, profile: &Profile) -> Sect
             field: Field::Name,
             value: profile.name.clone(),
         }))
+        .row(
+            Row::new(tr!("profile-tags"))
+                .detail(tr!("profile-tags-detail"))
+                .control(ProfileText {
+                    index,
+                    field: Field::Tags,
+                    value: profile.tags.join(", "),
+                }),
+        )
         .row(
             Row::new(tr!("profile-command"))
                 .detail(tr!("profile-command-detail"))
@@ -1338,6 +1348,7 @@ enum Field {
     SmartNotes(usize),
     SmartRegex(usize),
     BoundHost(usize),
+    Tags,
     SemanticText(SemanticAction),
     TriggerParameter(usize, TriggerAction),
     Scrollback,
@@ -1361,6 +1372,7 @@ impl Field {
             Self::TriggerRegex(_) | Self::SmartRegex(_) => tr!("trigger-regex"),
             Self::SmartNotes(_) => tr!("smart-selection-notes"),
             Self::BoundHost(_) => tr!("profile-switching-placeholder"),
+            Self::Tags => tr!("profile-tags-placeholder"),
             Self::SemanticText(SemanticAction::Url) => tr!("semantic-url-placeholder"),
             Self::SemanticText(SemanticAction::SendText) => tr!("semantic-text-placeholder"),
             Self::SemanticText(_) => tr!("semantic-command-placeholder"),
@@ -1381,6 +1393,7 @@ impl Field {
                     | Self::Badge
                     | Self::TriggerParameter(..)
                     | Self::SemanticText(_)
+                    | Self::Tags
             )
         {
             return;
@@ -1425,6 +1438,15 @@ impl Field {
                     }
                 }
                 Self::SemanticText(_) => profile.semantic_history.text = value.clone(),
+                // ProfilesGeneralPreferencesViewController.m: tags are typed separated by commas.
+                Self::Tags => {
+                    profile.tags = value
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|tag| !tag.is_empty())
+                        .map(str::to_string)
+                        .collect()
+                }
                 Self::BoundHost(position) => {
                     if let Some(rule) = profile.bound_hosts.get_mut(position) {
                         *rule = value.clone();
