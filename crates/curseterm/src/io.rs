@@ -69,6 +69,7 @@ pub struct Extras {
     pub bell: Option<Instant>,
     pub stamps: VecDeque<(i64, SystemTime)>,
     pub show_timestamps: bool,
+    pub cursor_guide: bool,
     pub log: Option<File>,
     pub replay: VecDeque<Snapshot>,
     pub coprocess: Option<ChildStdin>,

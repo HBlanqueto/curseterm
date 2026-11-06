@@ -713,6 +713,10 @@ fn use_live_menu(handles: &Handles) {
         .active()
         .is_some_and(|session| session.extras().show_timestamps);
     use_menu_checked(menu::SHOW_TIMESTAMPS.id, timestamps);
+    let guide = handles
+        .active()
+        .is_some_and(|session| session.extras().cursor_guide);
+    use_menu_checked(menu::CURSOR_GUIDE.id, guide);
     use_menu_checked(menu::TOOLBELT.id, *handles.toolbelt.shown.read());
     for state in TerminalState::ALL {
         let on = handles
@@ -1515,6 +1519,7 @@ fn spawn(handles: &Handles, events: &Events, launch: Launch) -> Option<SessionId
     match Session::spawn(id, size, launch, listener) {
         Ok(session) => {
             session.apply_profile(&profile);
+            session.extras().cursor_guide = profile.cursor_guide;
             if !profile.initial_text.is_empty() {
                 session.write(format!("{}\r", profile.initial_text).into_bytes());
             }
@@ -1909,6 +1914,12 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             if let Some(session) = &active {
                 let mut extras = session.extras();
                 extras.show_timestamps = !extras.show_timestamps;
+            }
+        }
+        _ if id == menu::CURSOR_GUIDE.id => {
+            if let Some(session) = &active {
+                let mut extras = session.extras();
+                extras.cursor_guide = !extras.cursor_guide;
             }
         }
         _ if id == menu::RESET_CHARSET.id => {

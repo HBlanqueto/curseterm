@@ -1350,3 +1350,31 @@ Fluent lo avisaba al arrancar.
 foco entre ventanas lo decide el compositor. Los iconos de General y
 Pointer no son los de iTerm2 (BK-024). Faltan el resto de opciones de los
 dos paneles.
+
+## Fase 30 — Guía del cursor
+
+### Plan
+
+1. **View › Show Cursor Guide (⌥⌘;):** una franja translúcida del color del
+   cursor cruza la línea del cursor. Es por sesión, como Show Timestamps.
+2. **Profiles › Colors › Cursor guide:** el valor con que empiezan las
+   sesiones nuevas del perfil.
+3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit tal cual: no necesita parche.
+`./dev.sh check` limpio en los dos modos del kit.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| ⌥⌘; tras `ls /`: el píxel de la línea del cursor pasa de (0, 43, 54) a otro más claro y la línea de encima no cambia | ✓ con alfa 0.25; con 0.15 apenas se distinguía | — |
+| `cursor_guide = true` en el perfil: la primera sesión ya sale con la guía; ⌥⌘; la quita | ✓ | `fase30-guia-del-cursor.png` |
+
+**No probado:** la casilla del menú en D-Bus y el interruptor de Ajustes
+(solo desde el `.domain`).
+
+**Difiere de iTerm2:** el color es el del cursor del esquema, no uno propio
+del perfil; cambiar la opción del perfil no afecta a las sesiones abiertas.

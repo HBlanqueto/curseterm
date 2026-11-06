@@ -1345,3 +1345,32 @@ Fluent warned about it at start.
 focus between windows is up to the compositor. The General and Pointer
 icons are not iTerm2's (BK-024). The other options of both panes are
 missing.
+
+## Phase 30 — Cursor guide
+
+### Plan
+
+1. **View › Show Cursor Guide (⌥⌘;):** a translucent stripe in the cursor
+   color crosses the cursor line. It is per session, like Show Timestamps.
+2. **Profiles › Colors › Cursor guide:** the value new sessions of the
+   profile start with.
+3. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the kit as is: it needs no patch. `./dev.sh
+check` clean in both kit modes.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| ⌥⌘; after `ls /`: the cursor line pixel goes from (0, 43, 54) to a lighter one and the line above does not change | ✓ with alpha 0.25; with 0.15 it was barely visible | — |
+| `cursor_guide = true` in the profile: the first session already starts with the guide; ⌥⌘; removes it | ✓ | `fase30-guia-del-cursor.png` |
+
+**Not tested:** the menu checkbox over D-Bus and the Settings switch (only
+from the `.domain`).
+
+**Differs from iTerm2:** the color is the scheme's cursor color, not a
+profile color of its own; changing the profile option does not affect open
+sessions.

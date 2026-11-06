@@ -424,6 +424,17 @@ fn colors_section(defaults: &Defaults, index: usize, profile: &Profile) -> Secti
                 .detail(tr!("import-colors-detail"))
                 .control(ImportColors { index }),
         )
+        .row(
+            Row::new(tr!("cursor-guide-row"))
+                .detail(tr!("cursor-guide-detail"))
+                .control(
+                    Switch::new(tr!("cursor-guide-row"))
+                        .on(profile.cursor_guide)
+                        .on_toggle(move |on: bool| {
+                            edit(index, |profile| profile.cursor_guide = on)
+                        }),
+                ),
+        )
 }
 
 fn text_section(index: usize, profile: &Profile) -> Section {

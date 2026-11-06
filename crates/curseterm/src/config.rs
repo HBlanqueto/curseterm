@@ -59,6 +59,7 @@ pub struct Profile {
     pub status_bar: bool,
     pub cursor: CursorType,
     pub blinking_cursor: bool,
+    pub cursor_guide: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -157,6 +158,7 @@ impl Default for Profile {
             status_bar: false,
             cursor: CursorType::Box,
             blinking_cursor: false,
+            cursor_guide: false,
         }
     }
 }

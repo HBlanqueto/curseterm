@@ -245,6 +245,12 @@ pub fn draw(
     let top = term.history_size() as i64 - i64::from(offset);
     draw_highlights(ctx, overlay.extras, top, fonts, scheme);
     draw_matches(ctx, overlay.matches, offset, term.columns(), fonts, scheme);
+    if overlay.extras.cursor_guide && overlay.replay.is_none() {
+        let mut ink = paint(scheme.cursor);
+        ink.set_alpha_f(TERMINAL.cursor_guide_alpha);
+        let y = (cursor.point.line.0 + offset) as f32 * fonts.cell_height;
+        fill_cells(ctx, &ink, y, 0..=term.columns() - 1, fonts);
+    }
     let frame = Frame {
         palette,
         fonts,
