@@ -1100,3 +1100,27 @@ composición en los campos de texto de las hojas.
 
 **Difiere de iTerm2:** la composición se dibuja encima de la línea, sin
 apartar el texto que hay a la derecha del cursor.
+
+## Fase 22 — Selección primaria
+
+### Plan
+
+1. **Parche 0010:** la selección primaria (`zwp_primary_selection`) con el
+   mismo `Clipboard` del kit y `WindowControls::primary_selection()` (BK-034).
+2. **CurseTerm:** al soltar el ratón con texto seleccionado, lo publica; el
+   botón central pega la primaria en la sesión.
+3. **Prueba** con `wl-copy --primary` y `wl-paste --primary`.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos del kit; 40 tests de la app y 1 del bloque.
+
+| Prueba | Resultado |
+|---|---|
+| Doble clic en `primaria`: `wl-paste --primary` da `primaria` | ✓ |
+| `wl-copy --primary "echo desde-fuera"` y botón central: la shell recibe la orden | ✓ |
+
+**No probado:** el botón central cuando el programa pide el ratón (se le
+manda el clic y no se pega nada, como en iTerm2); la primaria en los campos
+de texto de las hojas.

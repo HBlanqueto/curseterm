@@ -2,7 +2,7 @@
 
 BarrierKit version/commit used: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Summary: living document; state at the close of phase 21 (2026-11-06), tested on
+Summary: living document; state at the close of phase 22 (2026-11-06), tested on
 headless sway with lavapipe (`progreso.en.md`). The most serious: the
 `use_menu_action` handlers run outside Freya's context and abort the app if
 they touch the clipboard or `WindowControls::get()` (BK-017); the menu is only
@@ -63,6 +63,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-031 | window / appearance | A window cannot ask for a translucent background | medium | Patch 0007 tested |
 | BK-032 | platform | `Timers` callbacks outlive their window | high | Tested workaround: `alive` in `terminal.rs` |
 | BK-033 | input | No input method (`zwp_text_input_v3`) | high | Patch 0009 tested |
+| BK-034 | clipboard | No primary selection | medium | Patch 0010 tested |
 
 ## Gaps
 
@@ -721,6 +722,26 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Proposed kit API**: the patch's, or Freya's `ImePreedit` events delivered to the focused element.
 - **Severity**: high
 - **How to reproduce**: search `crates/barrier-kit/src/platform` for `text_input`: it does not appear.
+
+### BK-034 — No primary selection
+- **Area**: clipboard
+- **What CurseTerm needed**: the usual Linux behaviour: selecting with the
+  mouse publishes the text and the middle button pastes it, also across apps.
+- **What BarrierKit offers today**: the clipboard (`platform/clipboard.rs`)
+  only uses `wl_data_device`; smithay-client-toolkit 0.20 already ships
+  `primary_selection`, but the runner does not bind it.
+- **What is missing**: the `zwp_primary_selection` device and a provider for
+  the app.
+- **How CurseTerm solves it**: the patch
+  [`kit-parches/0010-seleccion-primaria.patch`](../kit-parches/0010-seleccion-primaria.patch)
+  adds `platform/primary.rs`, which reuses the kit's `Clipboard` with that
+  device, and `WindowControls::primary_selection()`. CurseTerm publishes the
+  selection on mouse release and pastes the primary one with the middle
+  button.
+- **Workaround cost**: without the patch, the middle button does nothing.
+- **Proposed kit API**: the patch's.
+- **Severity**: medium
+- **How to reproduce**: select in CurseTerm with the kit as is and run `wl-paste --primary`: it gives nothing.
 
 ## Things that worked well
 

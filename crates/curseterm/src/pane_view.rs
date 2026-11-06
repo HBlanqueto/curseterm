@@ -68,6 +68,7 @@ impl Component for TerminalPane {
         let find = self.find.clone();
         let on_focus = self.on_focus.clone();
         let held = self.held;
+        let primary = Primary::get();
         let mut pressed = use_state(|| None::<MouseButton>);
         let mut reported_cell = use_state(|| None::<(usize, usize)>);
         let badge = self.badge.clone();
@@ -152,6 +153,7 @@ impl Component for TerminalPane {
                     .on_mouse_down({
                         let session = session.clone();
                         let point_at = point_at.clone();
+                        let primary = primary.clone();
                         move |event: Event<MouseEventData>| {
                             let data = event.data();
                             let (point, side) = point_at(data.element_location.to_tuple());
@@ -161,6 +163,13 @@ impl Component for TerminalPane {
                                 on_focus.call(session.id);
                                 pressed.set(Some(button));
                                 send(&session, Pointer::Press(button), point, *held.peek());
+                                return;
+                            }
+                            if data.button == Some(MouseButton::Middle) {
+                                on_focus.call(session.id);
+                                if let Some(text) = primary.text() {
+                                    session.paste(&text);
+                                }
                                 return;
                             }
                             if data.button != Some(MouseButton::Left) {
@@ -193,8 +202,12 @@ impl Component for TerminalPane {
                     .on_mouse_up({
                         let session = session.clone();
                         let point_at = point_at.clone();
+                        let primary = primary.clone();
                         move |event: Event<MouseEventData>| {
                             let Some(button) = pressed.write().take() else {
+                                if let Some(text) = session.selected_text() {
+                                    primary.publish(text);
+                                }
                                 return;
                             };
                             if mouse::reported(session.mode(), *held.peek()) {
@@ -252,6 +265,33 @@ impl Component for TerminalPane {
                     })
                     .child(painter),
             )
+    }
+}
+
+#[derive(Clone)]
+struct Primary(#[cfg(feature = "kit-parcheado")] barrier_kit::platform::WindowControls);
+
+// BK-034: without patch 0010 there is no primary selection, so it reads nothing and keeps nothing.
+impl Primary {
+    fn get() -> Self {
+        Self(
+            #[cfg(feature = "kit-parcheado")]
+            barrier_kit::platform::WindowControls::get(),
+        )
+    }
+
+    fn publish(&self, text: String) {
+        #[cfg(feature = "kit-parcheado")]
+        let _ = self.0.primary_selection().set_contents(text);
+        #[cfg(not(feature = "kit-parcheado"))]
+        drop(text);
+    }
+
+    fn text(&self) -> Option<String> {
+        #[cfg(feature = "kit-parcheado")]
+        return self.0.primary_selection().get_contents().ok();
+        #[cfg(not(feature = "kit-parcheado"))]
+        None
     }
 }
 

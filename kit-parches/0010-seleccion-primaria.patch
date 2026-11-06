@@ -1,0 +1,332 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Fri, 6 Nov 2026 02:30:00 +0000
+Subject: [PATCH] feat(kit): selección primaria con zwp_primary_selection
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+El portapapeles del kit solo usaba wl_data_device. La selección primaria
+reutiliza el mismo Clipboard con el dispositivo de zwp_primary_selection
+y llega a la app con WindowControls::primary_selection. Lo nota CurseTerm
+(BK-034).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01F89v1xFeQ2WCVD25PBsobh
+---
+diff --git a/crates/barrier-kit/src/platform/clipboard.rs b/crates/barrier-kit/src/platform/clipboard.rs
+index baf53d2..f14c574 100644
+--- a/crates/barrier-kit/src/platform/clipboard.rs
++++ b/crates/barrier-kit/src/platform/clipboard.rs
+@@ -17,7 +17,7 @@ use sctk::reexports::client::{Connection, QueueHandle};
+ 
+ use super::runtime::Runtime;
+ 
+-const TEXT_MIMES: [&str; 3] = ["text/plain;charset=utf-8", "text/plain", "UTF8_STRING"];
++pub(crate) const TEXT_MIMES: [&str; 3] = ["text/plain;charset=utf-8", "text/plain", "UTF8_STRING"];
+ 
+ #[derive(Default)]
+ struct Shared {
+@@ -59,6 +59,28 @@ impl Clipboard {
+     pub(crate) fn provider(&self) -> Box<dyn ClipboardProvider> {
+         Box::new(self.clone())
+     }
++
++    pub(crate) fn take_publish(&self) -> bool {
++        self.shared
++            .lock()
++            .is_ok_and(|mut shared| std::mem::take(&mut shared.to_publish))
++    }
++
++    pub(crate) fn own(&self) -> Option<String> {
++        self.shared.lock().ok().and_then(|shared| shared.own.clone())
++    }
++
++    pub(crate) fn clear_own(&self) {
++        if let Ok(mut shared) = self.shared.lock() {
++            shared.own = None;
++        }
++    }
++
++    pub(crate) fn set_foreign(&self, foreign: Option<Arc<OnceLock<String>>>) {
++        if let Ok(mut shared) = self.shared.lock() {
++            shared.foreign = foreign;
++        }
++    }
+ }
+ 
+ impl ClipboardProvider for Clipboard {
+@@ -123,7 +145,10 @@ fn receive_text(offer: &SelectionOffer) -> Option<Arc<OnceLock<String>>> {
+             .into_iter()
+             .find(|mime| offered.iter().any(|offered| offered == mime))
+     })?;
+-    let mut pipe = offer.receive(mime.to_string()).ok()?;
++    offer.receive(mime.to_string()).ok().map(read_in_background)
++}
++
++pub(crate) fn read_in_background(mut pipe: sctk::data_device_manager::ReadPipe) -> Arc<OnceLock<String>> {
+     let text = Arc::new(OnceLock::new());
+     let slot = text.clone();
+     std::thread::spawn(move || {
+@@ -132,7 +157,7 @@ fn receive_text(offer: &SelectionOffer) -> Option<Arc<OnceLock<String>>> {
+             let _ = slot.set(read);
+         }
+     });
+-    Some(text)
++    text
+ }
+ 
+ impl DataDeviceHandler for Runtime {
+diff --git a/crates/barrier-kit/src/platform/input/seat.rs b/crates/barrier-kit/src/platform/input/seat.rs
+index 1b70da1..8378643 100644
+--- a/crates/barrier-kit/src/platform/input/seat.rs
++++ b/crates/barrier-kit/src/platform/input/seat.rs
+@@ -125,6 +125,7 @@ impl SeatHandler for Runtime {
+         self.seat_handle = Some(seat.clone());
+         self.attach_text_input(&seat);
+         self.attach_clipboard(&seat);
++        self.attach_primary(&seat);
+         if let Some(hooks) = self.extension_hooks() {
+             (hooks.new_seat)(self, &seat);
+         }
+diff --git a/crates/barrier-kit/src/platform/mod.rs b/crates/barrier-kit/src/platform/mod.rs
+index f735983..568343a 100644
+--- a/crates/barrier-kit/src/platform/mod.rs
++++ b/crates/barrier-kit/src/platform/mod.rs
+@@ -12,6 +12,7 @@ mod doc_shots;
+ pub(crate) mod extension;
+ mod focus;
+ mod ime;
++mod primary;
+ mod input;
+ mod popup;
+ pub(crate) mod runtime;
+diff --git a/crates/barrier-kit/src/platform/primary.rs b/crates/barrier-kit/src/platform/primary.rs
+new file mode 100644
+index 0000000..5f228bf
+--- /dev/null
++++ b/crates/barrier-kit/src/platform/primary.rs
+@@ -0,0 +1,108 @@
++//! zwp_primary_selection: the selection that the middle button pastes.
++
++use std::io::Write;
++
++use sctk::data_device_manager::WritePipe;
++use sctk::primary_selection::PrimarySelectionManagerState;
++use sctk::primary_selection::device::{PrimarySelectionDevice, PrimarySelectionDeviceHandler};
++use sctk::primary_selection::selection::{PrimarySelectionSource, PrimarySelectionSourceHandler};
++use sctk::reexports::client::protocol::wl_seat::WlSeat;
++use sctk::reexports::client::{Connection, QueueHandle};
++use sctk::reexports::protocols::wp::primary_selection::zv1::client::zwp_primary_selection_device_v1::ZwpPrimarySelectionDeviceV1;
++use sctk::reexports::protocols::wp::primary_selection::zv1::client::zwp_primary_selection_source_v1::ZwpPrimarySelectionSourceV1;
++
++use super::clipboard::{TEXT_MIMES, read_in_background};
++use super::runtime::Runtime;
++
++pub(crate) struct PrimaryDevice {
++    manager: PrimarySelectionManagerState,
++    device: Option<PrimarySelectionDevice>,
++    source: Option<PrimarySelectionSource>,
++}
++
++impl PrimaryDevice {
++    pub(crate) fn new(manager: PrimarySelectionManagerState) -> Self {
++        Self {
++            manager,
++            device: None,
++            source: None,
++        }
++    }
++}
++
++impl Runtime {
++    pub(crate) fn attach_primary(&mut self, seat: &WlSeat) {
++        if let Some(primary) = self.primary_device.as_mut() {
++            primary.device = Some(primary.manager.get_selection_device(&self.qh, seat));
++        }
++    }
++
++    pub(crate) fn publish_primary(&mut self) {
++        if !self.primary.take_publish() {
++            return;
++        }
++        let Some(primary) = self.primary_device.as_mut() else {
++            return;
++        };
++        let Some(device) = &primary.device else {
++            return;
++        };
++        let source = primary.manager.create_selection_source(&self.qh, TEXT_MIMES);
++        source.set_selection(device, self.last_input_serial.get());
++        primary.source = Some(source);
++    }
++}
++
++impl PrimarySelectionDeviceHandler for Runtime {
++    fn selection(&mut self, _: &Connection, _: &QueueHandle<Self>, _: &ZwpPrimarySelectionDeviceV1) {
++        let offer = self
++            .primary_device
++            .as_ref()
++            .and_then(|primary| primary.device.as_ref())
++            .and_then(|device| device.data().selection_offer());
++        let foreign = offer.and_then(|offer| {
++            let mime = offer.with_mime_types(|offered| {
++                TEXT_MIMES
++                    .into_iter()
++                    .find(|mime| offered.iter().any(|offered| offered == mime))
++            })?;
++            offer.receive(mime.to_string()).ok().map(read_in_background)
++        });
++        self.primary.set_foreign(foreign);
++    }
++}
++
++impl PrimarySelectionSourceHandler for Runtime {
++    fn send_request(
++        &mut self,
++        _: &Connection,
++        _: &QueueHandle<Self>,
++        _: &ZwpPrimarySelectionSourceV1,
++        _: String,
++        mut pipe: WritePipe,
++    ) {
++        if let Some(text) = self.primary.own() {
++            std::thread::spawn(move || {
++                if let Err(error) = pipe.write_all(text.as_bytes()) {
++                    tracing::warn!(%error, "primary selection: could not send the text");
++                }
++            });
++        }
++    }
++
++    fn cancelled(&mut self, _: &Connection, _: &QueueHandle<Self>, source: &ZwpPrimarySelectionSourceV1) {
++        let Some(primary) = self.primary_device.as_mut() else {
++            return;
++        };
++        if primary
++            .source
++            .as_ref()
++            .is_some_and(|current| current.inner() == source)
++        {
++            primary.source = None;
++            self.primary.clear_own();
++        }
++    }
++}
++
++sctk::delegate_primary_selection!(Runtime);
+diff --git a/crates/barrier-kit/src/platform/runtime.rs b/crates/barrier-kit/src/platform/runtime.rs
+index 4e847b2..b18977d 100644
+--- a/crates/barrier-kit/src/platform/runtime.rs
++++ b/crates/barrier-kit/src/platform/runtime.rs
+@@ -118,6 +118,8 @@ pub(crate) struct Runtime {
+     pub(crate) pending_menu_addresses: Arc<Mutex<Vec<(ObjectId, AppMenuAddress)>>>,
+     pub(crate) clipboard: Clipboard,
+     pub(crate) text_input_manager: Option<ZwpTextInputManagerV3>,
++    pub(crate) primary: Clipboard,
++    pub(crate) primary_device: Option<super::primary::PrimaryDevice>,
+     pub(crate) ime: super::ime::Ime,
+     pub(crate) activation: Option<XdgActivationV1>,
+     pub(crate) defaults_revision: State<u64>,
+@@ -202,6 +204,7 @@ fn insert_ping(event_loop: &mut EventLoop<Runtime>, shell: &mut Runtime) -> Resu
+                 }
+             }
+             shell.publish_clipboard();
++            shell.publish_primary();
+             shell.poll_all();
+             shell.process_popup_commands();
+             shell.install_timers(&handle);
+@@ -382,6 +385,10 @@ impl Runtime {
+                 .bind::<ZwpTextInputManagerV3, _, _>(&qh, 1..=1, ())
+                 .ok(),
+             ime: super::ime::Ime::default(),
++            primary: Clipboard::new(ping.clone()),
++            primary_device: sctk::primary_selection::PrimarySelectionManagerState::bind(&globals, &qh)
++                .ok()
++                .map(super::primary::PrimaryDevice::new),
+             activation: globals.bind::<XdgActivationV1, _, _>(&qh, 1..=1, ()).ok(),
+             defaults_revision: State::create_global(0),
+             clipboard_device: DataDeviceManagerState::bind(&globals, &qh)
+@@ -391,6 +398,7 @@ impl Runtime {
+         if let Some(seat) = shell.seat_handle.clone() {
+             shell.attach_clipboard(&seat);
+             shell.attach_text_input(&seat);
++            shell.attach_primary(&seat);
+         }
+         Ok(Connected {
+             conn,
+diff --git a/crates/barrier-kit/src/platform/tests.rs b/crates/barrier-kit/src/platform/tests.rs
+index 2a0be44..efcba84 100644
+--- a/crates/barrier-kit/src/platform/tests.rs
++++ b/crates/barrier-kit/src/platform/tests.rs
+@@ -26,6 +26,7 @@ use super::{
+ pub(super) fn window_controls(status: WindowStatus) -> WindowControls {
+     let (ping, _source) = calloop::ping::make_ping().unwrap();
+     WindowControls {
++        primary: super::clipboard::Clipboard::new(ping.clone()),
+         queue: Rc::new(RefCell::new(Vec::new())),
+         ping,
+         pointer_serial: Rc::new(std::cell::Cell::new(0)),
+diff --git a/crates/barrier-kit/src/platform/window.rs b/crates/barrier-kit/src/platform/window.rs
+index 63b7f4a..24c3f54 100644
+--- a/crates/barrier-kit/src/platform/window.rs
++++ b/crates/barrier-kit/src/platform/window.rs
+@@ -156,6 +156,7 @@ pub struct WindowControls {
+     pub fullscreen_push: State<bool>,
+     pub(crate) overlay_titlebar_height: State<f32>,
+     pub ime_preedit: State<String>,
++    pub(crate) primary: super::clipboard::Clipboard,
+ }
+ 
+ pub(crate) fn window_activated() -> bool {
+@@ -229,6 +230,10 @@ impl WindowControls {
+         self.ping.ping();
+     }
+ 
++    pub fn primary_selection(&self) -> Box<dyn freya_clipboard::copypasta::ClipboardProvider> {
++        self.primary.provider()
++    }
++
+     pub fn set_ime_cursor_area(&self, x: i32, y: i32, width: i32, height: i32) {
+         self.queue
+             .borrow_mut()
+@@ -483,6 +488,7 @@ impl Runtime {
+             fullscreen_push: State::create_global(options.fullscreen_push),
+             overlay_titlebar_height: State::create_global(0.0),
+             ime_preedit: State::create_global(String::new()),
++            primary: self.primary.clone(),
+         };
+         let focus_notice = self.focus_manager.as_ref().map(|manager| {
+             let notice = manager.get_focus_surface(&surface, qh, surface.id());
+diff --git a/docs/barrierkit/06-ventanas.en.md b/docs/barrierkit/06-ventanas.en.md
+index 0c1a252..10f503e 100644
+--- a/docs/barrierkit/06-ventanas.en.md
++++ b/docs/barrierkit/06-ventanas.en.md
+@@ -40,6 +40,10 @@ none) and the committed text arrives as a `Key::Character` key.
+ `set_ime_cursor_area(x, y, width, height)` tells the input method where the
+ cursor is, in the window's logical pixels.
+ 
++`primary_selection()` gives a `ClipboardProvider` for the primary selection
++(`zwp_primary_selection`), the one the middle button pastes: `set_contents`
++publishes it and `get_contents` reads another app's.
++
+ ## Window state
+ 
+ The state arrives with each compositor configure and is read with
+diff --git a/docs/barrierkit/06-ventanas.md b/docs/barrierkit/06-ventanas.md
+index 4dc8474..a4de5ff 100644
+--- a/docs/barrierkit/06-ventanas.md
++++ b/docs/barrierkit/06-ventanas.md
+@@ -40,6 +40,10 @@ texto confirmado llega como una tecla `Key::Character`.
+ `set_ime_cursor_area(x, y, ancho, alto)` dice al método de entrada dónde está
+ el cursor, en píxeles lógicos de la ventana.
+ 
++`primary_selection()` da un `ClipboardProvider` para la selección primaria
++(`zwp_primary_selection`), la que pega el botón central: `set_contents` la
++publica y `get_contents` lee la de otra app.
++
+ ## Estado de la ventana
+ 
+ El estado llega en cada configure del compositor y se lee con
+-- 
+2.47.0

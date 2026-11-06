@@ -1095,3 +1095,27 @@ in the sheets' text fields.
 
 **Differs from iTerm2:** the composition is drawn over the line, without
 moving aside the text right of the cursor.
+
+## Phase 22 — Primary selection
+
+### Plan
+
+1. **Patch 0010:** the primary selection (`zwp_primary_selection`) with the
+   kit's same `Clipboard` and `WindowControls::primary_selection()` (BK-034).
+2. **CurseTerm:** on mouse release with text selected, it publishes it; the
+   middle button pastes the primary selection into the session.
+3. **Test** with `wl-copy --primary` and `wl-paste --primary`.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the patched kit. `./dev.sh check` clean in both
+kit modes; 40 app tests and 1 block test.
+
+| Test | Result |
+|---|---|
+| Double click on `primaria`: `wl-paste --primary` gives `primaria` | ✓ |
+| `wl-copy --primary "echo desde-fuera"` and the middle button: the shell gets the command | ✓ |
+
+**Not tested:** the middle button when the program asks for the mouse (the
+click is sent to it and nothing is pasted, as in iTerm2); the primary
+selection in the sheets' text fields.

@@ -2,7 +2,7 @@
 
 Versión/commit de BarrierKit usado: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
 
-Resumen: documento vivo; estado al cerrar la fase 21 (2026-11-06), probado en
+Resumen: documento vivo; estado al cerrar la fase 22 (2026-11-06), probado en
 sway sin pantalla con lavapipe (`progreso.md`). Lo más serio: los handlers de
 `use_menu_action` corren fuera del contexto de Freya y hacen abortar la app si
 tocan el portapapeles o `WindowControls::get()` (BK-017); el menú solo se
@@ -63,6 +63,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-031 | ventana / apariencia | Una ventana no puede pedir fondo translúcido | media | Parche 0007 probado |
 | BK-032 | plataforma | Los avisos de `Timers` sobreviven a su ventana | alta | Workaround probado: `alive` en `terminal.rs` |
 | BK-033 | entrada | Sin método de entrada (`zwp_text_input_v3`) | alta | Parche 0009 probado |
+| BK-034 | portapapeles | Sin selección primaria | media | Parche 0010 probado |
 
 ## Gaps
 
@@ -726,6 +727,25 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **API propuesta para el kit**: la del parche, o los eventos `ImePreedit` de Freya entregados al elemento con foco.
 - **Gravedad**: alta
 - **Cómo reproducirlo**: buscar `text_input` en `crates/barrier-kit/src/platform`: no aparece.
+
+### BK-034 — Sin selección primaria
+- **Área**: portapapeles
+- **Qué necesitaba CurseTerm**: lo habitual en Linux: seleccionar con el ratón
+  publica el texto y el botón central lo pega, también entre apps.
+- **Qué ofrece hoy BarrierKit**: el portapapeles (`platform/clipboard.rs`)
+  solo usa `wl_data_device`; smithay-client-toolkit 0.20 ya trae
+  `primary_selection`, pero el runner no lo enlaza.
+- **Qué falta**: el dispositivo de `zwp_primary_selection` y un proveedor
+  para la app.
+- **Cómo lo resolví en CurseTerm**: el parche
+  [`kit-parches/0010-seleccion-primaria.patch`](../kit-parches/0010-seleccion-primaria.patch)
+  añade `platform/primary.rs`, que reutiliza el `Clipboard` del kit con ese
+  dispositivo, y `WindowControls::primary_selection()`. CurseTerm publica la
+  selección al soltar el ratón y pega la primaria con el botón central.
+- **Coste del workaround**: sin el parche, el botón central no hace nada.
+- **API propuesta para el kit**: la del parche.
+- **Gravedad**: media
+- **Cómo reproducirlo**: seleccionar en CurseTerm con el kit tal cual y `wl-paste --primary`: no da nada.
 
 ## Cosas que funcionaron bien
 
