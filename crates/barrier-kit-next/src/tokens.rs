@@ -50,6 +50,7 @@ pub struct TerminalMetrics {
     pub scrollbar_width: f32,
     pub scrollbar_alpha: f32,
     pub multi_click_ms: u64,
+    pub cursor_blink_ms: u64,
     pub font_sizes: (u32, u32),
 }
 
@@ -65,6 +66,7 @@ pub const TERMINAL: TerminalMetrics = TerminalMetrics {
     scrollbar_width: 4.0,
     scrollbar_alpha: 0.45,
     multi_click_ms: 400,
+    cursor_blink_ms: 500,
     font_sizes: (6, 72),
 };
 

@@ -204,6 +204,7 @@ pub struct Overlay<'a> {
     pub opacity: f32,
     pub preedit: Option<&'a str>,
     pub replay: Option<&'a [Vec<Cell>]>,
+    pub blink_off: bool,
 }
 
 pub fn draw(
@@ -274,7 +275,9 @@ pub fn draw(
         overlay.inset + (cursor.point.column.0 as f32 + 0.5) * fonts.cell_width,
         overlay.inset + ((cursor.point.line.0 + offset) as f32 + 0.5) * fonts.cell_height,
     );
-    draw_cursor(ctx, term, cursor, offset, &frame.palette, fonts, focused);
+    if !(focused && overlay.blink_off) {
+        draw_cursor(ctx, term, cursor, offset, &frame.palette, fonts, focused);
+    }
     if let Some(text) = overlay.preedit.filter(|text| !text.is_empty()) {
         let (x, y) = (
             cursor.point.column.0 as f32 * fonts.cell_width,

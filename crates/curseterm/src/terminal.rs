@@ -19,7 +19,7 @@ use barrier_kit::titlebar::Titlebar;
 use barrier_kit::views::feedback::{Alert, sheet};
 use barrier_kit::views::table::Table;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
-use barrier_kit_next::tokens::{PASTE_HISTORY_SIZE, RENAME_WIDTH, TOOLBELT_WIDTH};
+use barrier_kit_next::tokens::{PASTE_HISTORY_SIZE, RENAME_WIDTH, TERMINAL, TOOLBELT_WIDTH};
 use barrier_kit_next::views::split_panes::SplitPanes;
 use barrier_kit_next::views::tab_bar::{Badge, TabBar};
 use freya_clipboard::copypasta::ClipboardProvider;
@@ -77,6 +77,7 @@ struct Handles {
     alive: Rc<Cell<bool>>,
     dark: Rc<Cell<bool>>,
     clock_armed: Rc<Cell<bool>>,
+    blink_armed: Rc<Cell<bool>>,
     replay: State<Option<(SessionId, usize)>>,
     toolbelt: Toolbelt,
     clipboard: ClipboardState,
@@ -287,6 +288,7 @@ impl App for Terminal {
             alive: Rc::new(Cell::new(true)),
             dark: Rc::new(Cell::new(dark)),
             clock_armed: Rc::new(Cell::new(false)),
+            blink_armed: Rc::new(Cell::new(false)),
             replay,
             toolbelt,
             clipboard: consume_root_context(),
@@ -440,6 +442,7 @@ impl App for Terminal {
                 transparent,
                 preedit: ime_preedit(&handles),
                 replay: *replay.read(),
+                blink_off: window_focused && cursor_blink_off(&handles, revision),
             };
             pane_tree(&root, Vec::new(), &painting)
         });
@@ -588,6 +591,7 @@ struct Painting {
     transparent: bool,
     preedit: Option<Rc<str>>,
     replay: Option<(SessionId, usize)>,
+    blink_off: bool,
 }
 
 fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
@@ -611,6 +615,7 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                         .replay
                         .filter(|(replayed, _)| replayed == id)
                         .map(|(_, index)| index),
+                    blink_off: painting.blink_off && *id == painting.active,
                     opacity: if painting.transparent {
                         profile.opacity()
                     } else {
@@ -1237,20 +1242,46 @@ fn toolbelt_view(handles: &Handles, mut revision: State<u64>) -> Element {
         .into_element()
 }
 
+fn repaint_after(handles: &Handles, revision: State<u64>, armed: &Rc<Cell<bool>>, delay: Duration) {
+    if !armed.replace(true) {
+        let armed = armed.clone();
+        handles.after(delay, move || {
+            armed.set(false);
+            let mut revision = revision;
+            *revision.write() += 1;
+        });
+    }
+}
+
+fn cursor_blink_off(handles: &Handles, revision: State<u64>) -> bool {
+    let Some(session) = handles.active() else {
+        return false;
+    };
+    if !session.term.lock().cursor_style().blinking {
+        return false;
+    }
+    let period = TERMINAL.cursor_blink_ms;
+    repaint_after(
+        handles,
+        revision,
+        &handles.blink_armed,
+        Duration::from_millis(period),
+    );
+    (session.started.elapsed().as_millis() / u128::from(period)) % 2 == 1
+}
+
 fn status_bar(handles: &Handles, revision: State<u64>) -> Option<Element> {
     let session = handles.active()?;
     let profile = handles.defaults.read().profile(&session.profile);
     if !profile.status_bar {
         return None;
     }
-    if !handles.clock_armed.replace(true) {
-        let armed = handles.clock_armed.clone();
-        handles.after(Duration::from_secs(1), move || {
-            armed.set(false);
-            let mut revision = revision;
-            *revision.write() += 1;
-        });
-    }
+    repaint_after(
+        handles,
+        revision,
+        &handles.clock_armed,
+        Duration::from_secs(1),
+    );
     let directory = session.working_directory();
     let parts = [
         directory.as_ref().map(|path| path.display().to_string()),

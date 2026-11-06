@@ -41,6 +41,8 @@ pub struct Profile {
     pub badge: String,
     pub transparency: u8,
     pub status_bar: bool,
+    pub cursor: CursorType,
+    pub blinking_cursor: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -75,6 +77,19 @@ pub enum AltKey {
     Normal,
     #[default]
     Escape,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CursorType {
+    #[default]
+    Box,
+    VerticalBar,
+    Underline,
+}
+
+impl CursorType {
+    pub const ALL: [Self; 3] = [Self::Box, Self::VerticalBar, Self::Underline];
 }
 
 impl AltKey {
@@ -123,6 +138,8 @@ impl Default for Profile {
             badge: String::new(),
             transparency: 0,
             status_bar: false,
+            cursor: CursorType::Box,
+            blinking_cursor: false,
         }
     }
 }

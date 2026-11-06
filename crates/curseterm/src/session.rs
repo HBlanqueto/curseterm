@@ -19,12 +19,12 @@ use alacritty_terminal::term::search::{Match, RegexSearch};
 use alacritty_terminal::term::test::TermSize;
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::tty;
-use alacritty_terminal::vte::ansi::{Handler, Processor};
+use alacritty_terminal::vte::ansi::{CursorShape, CursorStyle, Handler, Processor};
 use barrier_kit::platform::WakeHandle;
 
 use rustix::process::{Pid, Signal, kill_process_group};
 
-use crate::config::{APP_NAME, Profile, SCROLLBACK_LIMIT};
+use crate::config::{APP_NAME, CursorType, Profile, SCROLLBACK_LIMIT};
 use crate::io::{self as pty_io, Extras};
 use crate::jobs;
 use crate::keys::CopyCommand;
@@ -111,7 +111,7 @@ pub struct Session {
     runs_command: bool,
     pub started: Instant,
     ended: Cell<bool>,
-    scrollback: Cell<usize>,
+    options: Cell<(usize, CursorStyle)>,
     coprocess: RefCell<Option<Child>>,
 }
 
@@ -175,7 +175,7 @@ impl Session {
             runs_command,
             started: Instant::now(),
             ended: Cell::new(false),
-            scrollback: Cell::new(Config::default().scrolling_history),
+            options: Cell::new((Config::default().scrolling_history, CursorStyle::default())),
             coprocess: RefCell::new(None),
         })
     }
@@ -183,9 +183,19 @@ impl Session {
     pub fn apply_profile(&self, profile: &Profile) {
         self.extras().set_triggers(&profile.triggers);
         let lines = profile.scrollback_lines.min(SCROLLBACK_LIMIT) as usize;
-        if self.scrollback.replace(lines) != lines {
+        let shape = match profile.cursor {
+            CursorType::Box => CursorShape::Block,
+            CursorType::VerticalBar => CursorShape::Beam,
+            CursorType::Underline => CursorShape::Underline,
+        };
+        let cursor = CursorStyle {
+            shape,
+            blinking: profile.blinking_cursor,
+        };
+        if self.options.replace((lines, cursor)) != (lines, cursor) {
             self.term.lock().set_options(Config {
                 scrolling_history: lines,
+                default_cursor_style: cursor,
                 ..Config::default()
             });
         }

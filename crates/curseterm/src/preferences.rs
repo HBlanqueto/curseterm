@@ -25,8 +25,8 @@ use vow_design::{CAPTION, SIDEBAR, SPACE_1, SPACE_3, WINDOW_MIN_SIZE};
 
 use crate::auxiliary::on_action;
 use crate::config::{
-    APP_ID, AltKey, ClosePrompt, Defaults, Profile, SCROLLBACK_LIMIT, SessionEnd, Trigger,
-    TriggerAction, WorkingDirectory, change_defaults,
+    APP_ID, AltKey, ClosePrompt, CursorType, Defaults, Profile, SCROLLBACK_LIMIT, SessionEnd,
+    Trigger, TriggerAction, WorkingDirectory, change_defaults,
 };
 use crate::itermcolors;
 use crate::localize::tr;
@@ -405,6 +405,27 @@ fn text_section(index: usize, profile: &Profile) -> Section {
                 )
                 .value(i64::from(profile.font_size))
                 .on_change(move |size: i64| edit(index, |profile| profile.font_size = size as u32)),
+            ),
+        )
+        .row(Row::new(tr!("cursor-type")).control(profile_choice(
+            index,
+            tr!("cursor-type"),
+            CursorType::ALL.map(|cursor| {
+                let name = match cursor {
+                    CursorType::Box => tr!("cursor-box"),
+                    CursorType::VerticalBar => tr!("cursor-vertical-bar"),
+                    CursorType::Underline => tr!("cursor-underline"),
+                };
+                (cursor, name)
+            }),
+            profile.cursor,
+            |profile, cursor| profile.cursor = cursor,
+        )))
+        .row(
+            Row::new(tr!("cursor-blinking")).control(
+                Switch::new(tr!("cursor-blinking"))
+                    .on(profile.blinking_cursor)
+                    .on_toggle(move |on: bool| edit(index, |profile| profile.blinking_cursor = on)),
             ),
         )
 }

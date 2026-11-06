@@ -1249,3 +1249,35 @@ repository with `git worktree` outside the `git_branch` test.
 
 **Differs from iTerm2:** the components are fixed; there is no bar editor,
 no CPU, memory or network, and no top position.
+
+## Phase 27 — Profile cursor
+
+### Plan
+
+1. **Profiles › Text › Cursor:** Box, Vertical Bar or Underline, and
+   **Blinking cursor**. It is alacritty's default style
+   (`default_cursor_style`): an app that asks for another with DECSCUSR
+   (`\e[2 q`) wins, and `\e[0 q` goes back to the profile's.
+2. **Blinking:** only in the active pane of the focused window. A single
+   timer per window repaints every `TERMINAL.cursor_blink_ms` (500 ms), the
+   same mechanism as the status bar clock.
+3. **Test** on headless sway and documentation in both languages.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the kit as is: it needs no patch. `./dev.sh
+check` clean in both kit modes.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `cursor = "vertical_bar"` and `blinking_cursor = true`: vertical bar; six screenshots 250 ms apart alternate between two images | ✓ | `fase27-cursor-parpadeo.png` |
+| `printf '\e[2 q'`: steady block, four identical screenshots; `printf '\e[0 q'`: the blinking bar comes back | ✓ | — |
+| Settings › Profiles › Text shows Cursor and Blinking cursor; turning the switch off writes `blinking_cursor = false` and the terminal, in another process, stops blinking | ✓ | `fase27-ajustes-cursor.png` |
+
+**Not tested:** picking another type in the pop-up (only from the `.domain`).
+
+**Differs from iTerm2:** typing does not restart the blink with the cursor
+visible; there is no profile cursor color of its own (it comes from the
+scheme), and no Cursor Guide.

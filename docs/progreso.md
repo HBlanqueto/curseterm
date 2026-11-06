@@ -1255,3 +1255,35 @@ repositorio real con `git worktree` fuera del test de `git_branch`.
 
 **Difiere de iTerm2:** los componentes son fijos; no hay editor de la barra,
 ni CPU, memoria o red, ni posición arriba.
+
+## Fase 27 — Cursor del perfil
+
+### Plan
+
+1. **Profiles › Text › Cursor:** Box, Vertical Bar o Underline, y
+   **Blinking cursor**. Es el estilo por omisión de alacritty
+   (`default_cursor_style`): una app que pide otro con DECSCUSR (`\e[2 q`)
+   gana, y `\e[0 q` vuelve al del perfil.
+2. **Parpadeo:** solo en el panel activo de la ventana con foco. Un único
+   temporizador por ventana repinta cada `TERMINAL.cursor_blink_ms` (500 ms),
+   el mismo mecanismo que el reloj de la barra de estado.
+3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit tal cual: no necesita parche.
+`./dev.sh check` limpio en los dos modos del kit.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `cursor = "vertical_bar"` y `blinking_cursor = true`: barra vertical; seis capturas cada 250 ms alternan entre dos imágenes | ✓ | `fase27-cursor-parpadeo.png` |
+| `printf '\e[2 q'`: bloque fijo, cuatro capturas iguales; `printf '\e[0 q'`: vuelve la barra parpadeante | ✓ | — |
+| Ajustes › Profiles › Text muestra Cursor y Blinking cursor; apagar el interruptor escribe `blinking_cursor = false` y el terminal, en otro proceso, deja de parpadear | ✓ | `fase27-ajustes-cursor.png` |
+
+**No probado:** elegir otro tipo en el desplegable (solo desde el `.domain`).
+
+**Difiere de iTerm2:** escribir no reinicia el parpadeo con el cursor
+visible; no hay color de cursor propio del perfil (sale del esquema), ni
+guía de cursor (Cursor Guide).
