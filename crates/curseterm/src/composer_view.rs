@@ -5,7 +5,7 @@ use barrier_kit::style::text;
 use barrier_kit::symbol::{Symbol, symbol};
 use barrier_kit::theme::color;
 use barrier_kit_next::canvas::{CanvasContext, canvas};
-use barrier_kit_next::tokens::COMPOSER;
+use barrier_kit_next::tokens::{COMPOSER, SHEET_MATERIAL_BLUR};
 use barrier_kit_next::views::text_view::{KeyPress, TextView};
 use freya_core::prelude::*;
 use freya_engine::prelude::{PaintStyle, RRect, Rect as SkRect, SaveLayerRec, TileMode, blur};
@@ -219,7 +219,12 @@ fn draw_material(ctx: &mut CanvasContext, tint: Rgba) {
     let shape = RRect::new_rect_xy(bounds, COMPOSER.radius, COMPOSER.radius);
     ctx.canvas.save();
     ctx.canvas.clip_rrect(shape, None, Some(true));
-    if let Some(filter) = blur((COMPOSER.blur, COMPOSER.blur), TileMode::Clamp, None, None) {
+    if let Some(filter) = blur(
+        (SHEET_MATERIAL_BLUR, SHEET_MATERIAL_BLUR),
+        TileMode::Clamp,
+        None,
+        None,
+    ) {
         ctx.canvas
             .save_layer(&SaveLayerRec::default().bounds(&bounds).backdrop(&filter));
         ctx.canvas.restore();

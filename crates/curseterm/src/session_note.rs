@@ -4,10 +4,12 @@ use barrier_kit::style::text;
 use barrier_kit::symbol::{Symbol, symbol};
 use barrier_kit::theme::color;
 use barrier_kit_next::canvas::{CanvasContext, canvas};
-use barrier_kit_next::tokens::SESSION_NOTE;
+use barrier_kit_next::tokens::{SESSION_NOTE, SHEET_MATERIAL_BLUR};
 use barrier_kit_next::views::text_view::{KeyPress, TextView};
 use freya_core::prelude::*;
-use freya_engine::prelude::{BlurStyle, MaskFilter, PaintStyle, RRect, Rect as SkRect};
+use freya_engine::prelude::{
+    BlurStyle, MaskFilter, PaintStyle, RRect, Rect as SkRect, SaveLayerRec, TileMode, blur,
+};
 use torin::prelude::{Alignment, Content, Direction, Gaps, Position, Size};
 use vow_design::{BG_WINDOW_DARK, BG_WINDOW_LIGHT, CAPTION, DARK, LIGHT, Rgba};
 
@@ -345,17 +347,31 @@ fn draw_material(ctx: &mut CanvasContext, room: f32, tint: Rgba, dark: bool) {
     let bounds = SkRect::new(room, room, ctx.width - room, ctx.height - room);
     let shape = RRect::new_rect_xy(bounds, SESSION_NOTE.radius, SESSION_NOTE.radius);
     let shadow = SESSION_NOTE.shadow;
-    let mut blur = rgba_paint(shadow.color);
-    blur.set_mask_filter(MaskFilter::blur(
+    let mut shade = rgba_paint(shadow.color);
+    shade.set_mask_filter(MaskFilter::blur(
         BlurStyle::Normal,
         shadow.blur / 2.0,
         false,
     ));
     ctx.canvas.save();
     ctx.canvas.translate((0.0, shadow.offset_y));
-    ctx.canvas.draw_rrect(shape, &blur);
+    ctx.canvas.draw_rrect(shape, &shade);
     ctx.canvas.restore();
+    // SessionNoteView.swift: a .sheet NSVisualEffectView, blurring what lies behind it.
+    ctx.canvas.save();
+    ctx.canvas.clip_rrect(shape, None, Some(true));
+    if let Some(filter) = blur(
+        (SHEET_MATERIAL_BLUR, SHEET_MATERIAL_BLUR),
+        TileMode::Clamp,
+        None,
+        None,
+    ) {
+        ctx.canvas
+            .save_layer(&SaveLayerRec::default().bounds(&bounds).backdrop(&filter));
+        ctx.canvas.restore();
+    }
     ctx.canvas.draw_rrect(shape, &rgba_paint(tint));
+    ctx.canvas.restore();
     if dark {
         let mut border = rgba_paint(SESSION_NOTE.dark_border);
         border.set_style(PaintStyle::Stroke);

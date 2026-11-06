@@ -3214,3 +3214,30 @@ divider's pixel. `./dev.sh check` clean in both modes.
 **Differs from iTerm2:** no `splitPaneColor` or `splitPaneDividerWidth`
 (advanced settings); Minimal does not hide the divider when inactive panes
 are dimmed.
+
+## Phase 73 — Blurred material in Session Note
+
+### Plan
+
+`SessionNoteView.swift` uses an `NSVisualEffectView` with the `.sheet`
+material within the window, like the Composer:
+
+1. Session Note blurs what lies behind it before painting its tint.
+2. The `.sheet` material's blur radius is a single token,
+   `SHEET_MATERIAL_BLUR`, shared by the Composer and Session Note.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Note over an empty background: grey 243, deviation 0.44 | ✓ | — |
+| Note over 40 lines of 130 digits: grey 239, deviation 0.63, no glyph edges | ✓ | `fase73-nota-desenfocada.png` |
+
+**Not tested:** the kit as is; the dark theme.
+
+**Not done:** the tabs' 0.2 s hover animation (`PSMTabBarCell.m
+-highlightAmount`). With `use_animation_transition` the value stays at 0
+although the hover arrives, so the instant colour change stays.

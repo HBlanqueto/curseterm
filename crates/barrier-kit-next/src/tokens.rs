@@ -183,7 +183,6 @@ pub struct ComposerMetrics {
     pub radius: f32,
     pub border: Rgba,
     pub tint_alpha: f32,
-    pub blur: f32,
     pub text_inset: f32,
     pub accessory_height: f32,
     pub close: f32,
@@ -193,6 +192,9 @@ pub struct ComposerMetrics {
     pub tip_min_width: f32,
     pub fade_ms: u64,
 }
+
+// NSVisualEffectView's .sheet material within the window, behind the Composer and Session Note.
+pub const SHEET_MATERIAL_BLUR: f32 = 20.0;
 
 pub const COMPOSER: ComposerMetrics = ComposerMetrics {
     side_margin: 20.0,
@@ -204,7 +206,6 @@ pub const COMPOSER: ComposerMetrics = ComposerMetrics {
     radius: 6.0,
     border: Rgba::rgba8(128, 128, 128, 1.0),
     tint_alpha: 0.85,
-    blur: 20.0,
     text_inset: 5.0,
     accessory_height: 19.0,
     close: 16.0,

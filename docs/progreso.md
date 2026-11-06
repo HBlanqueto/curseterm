@@ -3236,3 +3236,31 @@ el píxel del divisor. `./dev.sh check` limpio en los dos modos.
 **Difiere de iTerm2:** sin `splitPaneColor` ni `splitPaneDividerWidth`
 (ajustes avanzados); Minimal no oculta el divisor cuando se atenúan los
 paneles inactivos.
+
+## Fase 73 — Material desenfocado en Session Note
+
+### Plan
+
+`SessionNoteView.swift` usa un `NSVisualEffectView` con material `.sheet`
+dentro de la ventana, como el Composer:
+
+1. Session Note desenfoca lo que tiene detrás antes de pintar su tinte.
+2. El radio del desenfoque del material `.sheet` es un solo token,
+   `SHEET_MATERIAL_BLUR`, que comparten el Composer y Session Note.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Nota sobre fondo vacío: gris 243, desviación 0,44 | ✓ | — |
+| Nota sobre 40 líneas de 130 cifras: gris 239, desviación 0,63, sin bordes de letra | ✓ | `fase73-nota-desenfocada.png` |
+
+**No probado:** con el kit tal cual; el tema oscuro.
+
+**No hecho:** la animación de 0,2 s del hover de las pestañas
+(`PSMTabBarCell.m -highlightAmount`). Con `use_animation_transition` el valor
+se queda en 0 aunque el hover llega, y se deja el cambio de color
+instantáneo.
