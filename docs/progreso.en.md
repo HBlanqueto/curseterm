@@ -1147,3 +1147,16 @@ the lab); block selections.
 
 **Differs from iTerm2:** iTerm2 copies RTF; CurseTerm copies HTML, the rich
 format Linux apps understand.
+
+## Phase 24 — Instant Replay
+
+### Plan
+
+1. **Recording:** the I/O loop keeps a snapshot of the visible screen (cells
+   and cursor) after output, at most one every half second and the last 120,
+   which cover at least the last minute of activity.
+2. **View › Start Instant Replay (⌥⌘B):** the active pane shows the chosen
+   snapshot instead of the screen; a bar at the bottom has a slider, the
+   snapshot's time and "Done". ← and → change snapshot; Escape or Done go
+   back to the present.
+3. **Test** on headless sway and documentation in both languages.

@@ -1152,3 +1152,16 @@ laboratorio); selecciones en bloque.
 
 **Difiere de iTerm2:** iTerm2 copia RTF; CurseTerm copia HTML, el formato
 con formato que entienden las apps de Linux.
+
+## Fase 24 — Instant Replay
+
+### Plan
+
+1. **Grabación:** el bucle de E/S guarda una foto de la pantalla visible
+   (celdas y cursor) tras la salida, como mucho una cada medio segundo y las
+   120 últimas, que cubren al menos el último minuto de actividad.
+2. **View › Start Instant Replay (⌥⌘B):** el panel activo muestra la foto
+   elegida en lugar de la pantalla; una barra abajo tiene un deslizador, la
+   hora de la foto y «Done». ← y → cambian de foto; Escape o Done vuelven al
+   presente.
+3. **Prueba** en sway sin pantalla y documentación en los dos idiomas.
