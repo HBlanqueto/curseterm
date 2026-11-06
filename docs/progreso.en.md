@@ -1791,7 +1791,7 @@ iTerm2's Edit › Marks and Annotations › Alerts (`MainMenu.xib`,
    Play a Sound (success or error by the exit code of the previous command,
    now read from `OSC 133;D;code`).
 4. **Notifications and sounds** in the `notifications` block of
-   `barrier-kit-next` (BK-037).
+   `barrier-kit-next` (BK-026).
 5. **Generic test**, without Malaysia: headless sway with `mako` as the
    notification server, `dbus-monitor` to see the calls and a fake
    `canberra-gtk-play` that logs what it is asked for.

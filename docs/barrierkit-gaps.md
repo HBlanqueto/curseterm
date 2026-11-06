@@ -55,7 +55,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-023 | app | Sin selector de archivos | media | Workaround: ruta en un campo y `--import-colors` |
 | BK-024 | símbolos | Faltan símbolos para una barra de ajustes, la campana y la papelera | baja | Se usan `SlidersVertical`, `CircleHalf`, `ListBullet`, `SquareGrid` y `SpeakerWave`; la papelera se dibuja en el lienzo |
 | BK-025 | plataforma / input | Sin atajos globales ni forma de ocultar y mostrar la ventana | media | Workaround probado: `curseterm --hotkey` |
-| BK-026 | app / plataforma | Sin campana, petición de atención ni notificaciones | baja | Workaround probado: campana visual |
+| BK-026 | app / plataforma | Sin campana, petición de atención ni notificaciones | media | Workaround probado: campana visual; bloque probado `notifications` |
 | BK-027 | controles / input | Una vista con teclado global no sabe si un campo de texto o un `Alert` se quedan la tecla | baja | Workaround probado: foco seguido y cierre diferido del `Alert` |
 | BK-028 | controles | Las etiquetas de `SegmentedControl` se parten en dos líneas | baja | Workaround: Ajustes a 980 px |
 | BK-029 | controles | `TextField` no puede tomar el foco al abrirse | media | Parche 0006 probado |
@@ -66,7 +66,6 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-034 | portapapeles | Sin selección primaria | media | Parche 0010 probado |
 | BK-035 | portapapeles | El portapapeles solo ofrece texto plano | baja | Parche 0011 probado |
 | BK-036 | controles | Sin vista de texto de varias líneas | media | Bloque probado `views::text_view` |
-| BK-037 | plataforma | Sin notificaciones del escritorio ni sonidos de evento | media | Bloque probado `notifications` |
 
 ## Gaps
 
@@ -573,7 +572,9 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Área**: app / plataforma
 - **Qué necesitaba CurseTerm**: la campana (BEL y el trigger «Ring Bell»),
   que en iTerm2 suena, pide atención si la ventana no tiene el foco y puede
-  publicar una notificación.
+  publicar una notificación; y las alertas de marca y del perfil (fases 40 y
+  41), que usan `NSUserNotificationCenter` y `NSSound` y muestran la sesión
+  al pulsar la notificación.
 - **Qué ofrece hoy BarrierKit**: nada; en `crates/barrier-kit/src` no hay
   sonido, urgencia ni notificaciones (solo aparece «notifies» en un test de
   menús).
@@ -581,11 +582,21 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
   por `org.freedesktop.portal.Notification`.
 - **Cómo lo resolví en CurseTerm**: campana visual: el panel se aclara un
   20 % con el color del texto durante `DURATION_FAST_MS` y `Timers::after`
-  lo repinta al terminar.
-- **Coste del workaround**: sin sonido; con la ventana sin foco nadie se
-  entera.
-- **API propuesta para el kit**: `app::beep()` y `app::notify(title, body)`.
-- **Gravedad**: baja
+  lo repinta al terminar. Para las notificaciones y los sonidos, el bloque
+  `notifications` en `barrier-kit-next`: `post(Notice, clicked)` llama a
+  `Notify` de `org.freedesktop.Notifications` en un hilo, con la acción
+  `default` y la pista `desktop-entry`; un hilo escucha `ActivationToken`,
+  `ActionInvoked` y `NotificationClosed` y llama a `clicked` con el token de
+  activación si el servidor lo manda. `play_event_sound(nombre)` lanza
+  `canberra-gtk-play --id nombre` con un nombre de la especificación de
+  sonidos de freedesktop.
+- **Coste del workaround**: la campana sigue sin sonido ni petición de
+  atención; `canberra-gtk-play` es un programa externo y, si no está, solo
+  queda un aviso en el log; `zbus` ya estaba en el árbol por el menú global.
+- **API propuesta para el kit**: `app::beep()`, y `notifications::post` y
+  `notifications::play_event_sound` como el bloque, con el nombre y el
+  `desktop-entry` sacados de la app.
+- **Gravedad**: media
 - **Cómo reproducirlo**: `grep -rni "bell\|attention\|notif" crates/barrier-kit/src`.
 
 ### BK-027 — Una vista con teclado global no sabe si un campo de texto tiene el foco
@@ -798,32 +809,6 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Gravedad**: media
 - **Cómo reproducirlo**: buscar en `crates/barrier-kit/src/controls.rs` un
   control que acepte Enter como salto de línea.
-
-### BK-037 — Sin notificaciones del escritorio ni sonidos de evento
-- **Área**: plataforma
-- **Qué necesitaba CurseTerm**: Alerts › Post Notification y Play a Sound de
-  iTerm2, que usan `NSUserNotificationCenter` y `NSSound`
-  (`PTYSession.m -screenDidAddMark:alert:completion:`), y mostrar la sesión
-  al pulsar la notificación.
-- **Qué ofrece hoy BarrierKit**: nada para enviar notificaciones ni sonidos;
-  `zbus` ya está en el árbol por el menú global.
-- **Qué falta**: un cliente de `org.freedesktop.Notifications` que avise de
-  las pulsaciones y un sonido de evento por nombre.
-- **Cómo lo resolví en CurseTerm**: el bloque `notifications` en
-  `barrier-kit-next`. `post(Notice, clicked)` llama a `Notify` en un hilo con
-  la acción `default` y la pista `desktop-entry`; un hilo escucha
-  `ActivationToken`, `ActionInvoked` y `NotificationClosed`, y llama a
-  `clicked` con el token de activación si el servidor lo manda.
-  `play_event_sound(nombre)` lanza `canberra-gtk-play --id nombre` con un
-  nombre de la especificación de sonidos de freedesktop.
-- **Coste del workaround**: `canberra-gtk-play` es un programa externo; si no
-  está, solo queda un aviso en el log.
-- **API propuesta para el kit**: `notifications::post` y
-  `notifications::play_event_sound`, como el bloque, con el nombre y el
-  `desktop-entry` sacados de la app.
-- **Gravedad**: media
-- **Cómo reproducirlo**: buscar `org.freedesktop.Notifications` en
-  `crates/barrier-kit/src`.
 
 ## Cosas que funcionaron bien
 

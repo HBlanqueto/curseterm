@@ -1797,7 +1797,7 @@ Edit › Marks and Annotations › Alerts de iTerm2 (`MainMenu.xib`,
    Sound (éxito o error según el código de salida del comando anterior, que
    ahora se lee de `OSC 133;D;código`).
 4. **Notificaciones y sonidos** en el bloque `notifications` de
-   `barrier-kit-next` (BK-037).
+   `barrier-kit-next` (BK-026).
 5. **Prueba** genérica, sin Malaysia: sway sin pantalla con `mako` como
    servidor de notificaciones, `dbus-monitor` para ver las llamadas y un
    `canberra-gtk-play` falso que apunta lo que se le pide.
