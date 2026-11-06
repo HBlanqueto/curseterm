@@ -130,6 +130,7 @@ find = Buscar…
 find-next = Buscar siguiente
 find-previous = Buscar anterior
 use-selection-for-find = Usar la selección para buscar
+find-urls = Buscar las URL
 find-placeholder = Buscar
 find-close = Cerrar la búsqueda
 marks-menu = Marcas y anotaciones

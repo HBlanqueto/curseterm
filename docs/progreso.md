@@ -1679,3 +1679,56 @@ foco solo al pulsarlo, BK-029); varias marcas con el mismo nombre.
 **Difiere de iTerm2:** sin la herramienta Named Marks del Toolbelt ni
 renombrar o borrar desde ella; al saltar no destella la marca; las marcas
 con nombre no van en Open Quickly.
+
+## Fase 38 — Find URLs
+
+### Plan
+
+Edit › Find › Find URLs (⌥⌘U) de iTerm2 (`PseudoTerminal.m -findUrls:`,
+`findUrlsRegex` de `iTermAdvancedSettingsModel.m`,
+`PTYTextView+ARC.m -convertVisibleSearchResultsToContentNavigationShortcutsWithAction:`,
+`ContentNavigationShortcut.swift` e `iTermShortcutNavigationModeHandler` en
+`iTermCopyModeHandler.m`):
+
+1. **Búsqueda:** la misma expresión de iTerm2 sobre las líneas visibles, con la
+   búsqueda de `alacritty_terminal`, que sigue las líneas partidas. Los
+   resultados se resaltan como los de Find.
+2. **Atajos** (`hints.rs`): 1 a 9 y después letras, tantas como pida el número
+   de resultados (A…Z; AA, AB… si hay más de 26).
+3. **Etiquetas** (`hint_view.rs`): cápsula del color de acento con borde blanco
+   al 95 % y sombra negra al 40 %, texto blanco de 11 puntos; a la izquierda del
+   resultado, a 2 puntos, y alineada arriba si la fila es más alta que ella.
+   Entran escalando 0,25 → 1,3 → 1 en 0,2 s.
+4. **Teclas** (`validKeyEquivalentForEvent:`): con ⌘ o ⌃ pasan; Escape sale;
+   prefijo más tecla, o la tecla sola, que coincida abre la URL (con ⌥ la
+   copia); un prefijo deja la parte tecleada al 50 % y quita las que no
+   encajan; otra tecla va al terminal. Un clic sale.
+5. **Salida:** la elegida estalla (×2, fundido, media vuelta) y las demás se
+   disuelven (×0,1, fundido) en 0,2 s; después se quita el resaltado.
+6. **Prueba** en sway sin pantalla y documentación.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit tal cual. `./dev.sh check` limpio en
+los dos modos; un test nuevo para los atajos y el prefijo.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| Dos líneas con tres URL y ⌥⌘U: resaltadas, con 1, 2 y 3 a su izquierda | ✓ | `fase38-find-urls.png` |
+| La URL del comando, partida en dos líneas, se encuentra entera | ✓ | — |
+| Doce URL: atajos 1–9, A, B y C | ✓ | — |
+| ⌥5 copia `https://github.com/gnachman/iTerm2` (`wl-paste`) y sale | ✓ | — |
+| `q`, que no es atajo, llega a la shell y el modo sigue | ✓ | — |
+| Escape y un clic salen sin escribir nada en la shell | ✓ | — |
+
+**No probado:** que «1» abra el navegador (en el laboratorio no hay ninguno;
+la orden sale sin error), atajos de dos letras con la app (sí en el test) y
+el kit parcheado.
+
+**Difiere de iTerm2:** al copiar no se selecciona el texto ni sale el aviso
+«Copied»; la animación de estallar y disolver no se ha visto en una captura;
+la expresión no se puede cambiar en Ajustes. La cápsula y su texto se
+dibujan en un lienzo porque Freya pinta encima de ellos el lienzo del
+terminal, que está más hondo en el árbol.

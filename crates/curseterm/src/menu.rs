@@ -92,6 +92,8 @@ pub const FIND_NEXT: Action =
     Action::new("find-next", || tr!("find-next")).shortcut(super_key('g'));
 pub const FIND_PREVIOUS: Action = Action::new("find-previous", || tr!("find-previous"))
     .shortcut(super_with(Modifiers::SHIFT, 'g'));
+pub const FIND_URLS: Action =
+    Action::new("find-urls", || tr!("find-urls")).shortcut(super_with(Modifiers::ALT, 'u'));
 pub const USE_SELECTION_FOR_FIND: Action =
     Action::new("use-selection-for-find", || tr!("use-selection-for-find"))
         .shortcut(super_key('e'));
@@ -272,6 +274,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                         FIND_NEXT.item(true),
                         FIND_PREVIOUS.item(true),
                         USE_SELECTION_FOR_FIND.item(false),
+                        FIND_URLS.item(true),
                     ],
                 ),
                 submenu(

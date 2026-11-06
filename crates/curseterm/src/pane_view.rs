@@ -7,7 +7,7 @@ use alacritty_terminal::index::{Column, Line, Point, Side};
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::TermMode;
 use barrier_kit_next::canvas::canvas;
-use barrier_kit_next::tokens::{ANNOTATION, COMPOSER, TERMINAL};
+use barrier_kit_next::tokens::{ANNOTATION, COMPOSER, SHORTCUT_LABEL, TERMINAL};
 use freya_core::prelude::*;
 use torin::prelude::Size;
 use vow_design::SPACE_2;
@@ -16,6 +16,8 @@ use crate::composer::Composer;
 use crate::composer_view::{ComposerEvent, ComposerView};
 use crate::config::Scheme;
 use crate::grid::{self, Fonts};
+use crate::hint_view::{self, HintLabel};
+use crate::hints::Hints;
 use crate::io::{Annotation, AnnotationId};
 use crate::links;
 use crate::mouse::{self, Pointer};
@@ -43,6 +45,7 @@ pub struct TerminalPane {
     pub dark: bool,
     pub on_note: Callback<(AnnotationId, NoteEvent), ()>,
     pub composer: Composer,
+    pub hints: Option<Hints>,
     pub on_composer: Callback<ComposerEvent, ()>,
 }
 
@@ -63,6 +66,7 @@ impl PartialEq for TerminalPane {
             && self.annotations == other.annotations
             && self.dark == other.dark
             && self.composer == other.composer
+            && self.hints == other.hints
     }
 }
 
@@ -126,11 +130,18 @@ impl Component for TerminalPane {
                     .iter()
                     .map(|note| (note.start, note.end))
                     .collect::<Vec<_>>(),
+                self.hints.as_ref().map(|hints| hints.items.len()),
             ),
             &scheme.name,
             fonts.cell_width.to_bits(),
         )
             .hash(&mut look);
+        let hinted: Vec<((i64, usize), (i64, usize))> = self
+            .hints
+            .iter()
+            .flat_map(|hints| hints.items.iter().map(|hint| (hint.start, hint.end)))
+            .collect();
+        let labels = hint_labels(&session, &fonts, self.hints.as_ref());
         let painter = {
             let session = session.clone();
             let fonts = fonts.clone();
@@ -138,10 +149,21 @@ impl Component for TerminalPane {
             canvas(look.finish(), move |ctx| {
                 let term = session.term.lock();
                 let extras = session.extras();
-                let matches = find
+                let history = term.history_size() as i64;
+                let point = |(line, column): (i64, usize)| {
+                    Point::new(Line((line - history) as i32), Column(column))
+                };
+                let matches: Vec<_> = find
                     .as_deref()
                     .map(|query| session::visible_matches(&term, query))
-                    .unwrap_or_default();
+                    .unwrap_or_default()
+                    .into_iter()
+                    .chain(
+                        hinted
+                            .iter()
+                            .map(|(start, end)| point(*start)..=point(*end)),
+                    )
+                    .collect();
                 let overlay = grid::Overlay {
                     extras: &extras,
                     matches: &matches,
@@ -319,6 +341,7 @@ impl Component for TerminalPane {
                     .child(painter),
             )
             .children(notes)
+            .children(labels)
             .maybe_child(
                 composer_opacity(&self.composer).map(|opacity| ComposerView {
                     text: self.composer.text.clone(),
@@ -334,6 +357,56 @@ impl Component for TerminalPane {
                 }),
             )
     }
+}
+
+fn hint_labels(session: &Session, fonts: &Fonts, hints: Option<&Hints>) -> Vec<Element> {
+    let Some(hints) = hints else {
+        return Vec::new();
+    };
+    let top = {
+        let term = session.term.lock();
+        term.history_size() as i64 - term.grid().display_offset() as i64
+    };
+    let prefix = hints.prefix.to_lowercase();
+    hints
+        .items
+        .iter()
+        .enumerate()
+        .filter_map(|(index, hint)| {
+            let matches_prefix = hint.key.to_lowercase().starts_with(&prefix);
+            let motion = match (hints.ended, hints.narrowed) {
+                (Some((at, chosen)), _) if chosen == Some(index) => hint_view::popping(at),
+                (Some((at, _)), _) => hint_view::dissolving(at),
+                (None, Some(at)) if !matches_prefix => hint_view::popping(at),
+                _ => hint_view::entering(hints.shown),
+            };
+            (motion.opacity > 0.0).then(|| {
+                let first = hint.start.1.min(hint.end.1) as f32;
+                HintLabel {
+                    key: hint.key.clone(),
+                    typed: if matches_prefix { prefix.len() } else { 0 },
+                    target: (
+                        first * fonts.cell_width + SPACE_2,
+                        (hint.start.0 - top) as f32 * fonts.cell_height + SPACE_2,
+                        fonts.cell_height,
+                    ),
+                    motion,
+                    diff_key: DiffKey::None,
+                }
+                .key(index)
+                .into_element()
+            })
+        })
+        .collect()
+}
+
+pub fn hints_animating(hints: &Hints) -> bool {
+    let busy = |since: Instant, ms| !hint_view::settled(since, ms);
+    busy(hints.shown, SHORTCUT_LABEL.enter_ms)
+        || hints
+            .narrowed
+            .is_some_and(|at| busy(at, SHORTCUT_LABEL.exit_ms))
+        || hints.ended.is_some()
 }
 
 fn rgb(color: alacritty_terminal::vte::ansi::Rgb) -> vow_design::Rgba {

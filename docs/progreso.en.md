@@ -1673,3 +1673,56 @@ the focus when clicked, BK-029); several marks with the same name.
 **Differs from iTerm2:** no Named Marks tool in the Toolbelt nor renaming or
 deleting from it; jumping does not flash the mark; named marks are not in
 Open Quickly.
+
+## Phase 38 — Find URLs
+
+### Plan
+
+iTerm2's Edit › Find › Find URLs (⌥⌘U) (`PseudoTerminal.m -findUrls:`,
+`findUrlsRegex` in `iTermAdvancedSettingsModel.m`,
+`PTYTextView+ARC.m -convertVisibleSearchResultsToContentNavigationShortcutsWithAction:`,
+`ContentNavigationShortcut.swift` and `iTermShortcutNavigationModeHandler` in
+`iTermCopyModeHandler.m`):
+
+1. **Search:** iTerm2's own expression over the visible lines, with the
+   `alacritty_terminal` search, which follows wrapped lines. Results are
+   highlighted like Find results.
+2. **Shortcuts** (`hints.rs`): 1 to 9 and then letters, as many as the number
+   of results needs (A…Z; AA, AB… beyond 26).
+3. **Labels** (`hint_view.rs`): an accent capsule with a white border at 95 %
+   and a black shadow at 40 %, 11-point white text; left of the result, 2
+   points away, and top-aligned when the row is taller than the label. They
+   come in scaling 0.25 → 1.3 → 1 in 0.2 s.
+4. **Keys** (`validKeyEquivalentForEvent:`): with ⌘ or ⌃ they pass; Escape
+   leaves; prefix plus key, or the key alone, that matches opens the URL (with
+   ⌥ it copies it); a prefix leaves the typed part at 50 % and removes those
+   that do not fit; any other key goes to the terminal. A click leaves.
+5. **Exit:** the chosen one pops (×2, fade, half a turn) and the rest
+   dissolve (×0.1, fade) in 0.2 s; then the highlight goes away.
+6. **Test** on headless sway and documentation.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the kit as is. `./dev.sh check` clean in both
+modes; a new test for the shortcuts and the prefix.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| Two lines with three URLs and ⌥⌘U: highlighted, with 1, 2 and 3 on their left | ✓ | `fase38-find-urls.png` |
+| The URL in the command, wrapped over two lines, is found whole | ✓ | — |
+| Twelve URLs: shortcuts 1–9, A, B and C | ✓ | — |
+| ⌥5 copies `https://github.com/gnachman/iTerm2` (`wl-paste`) and leaves | ✓ | — |
+| `q`, which is not a shortcut, reaches the shell and the mode stays | ✓ | — |
+| Escape and a click leave without typing anything into the shell | ✓ | — |
+
+**Not tested:** that «1» opens the browser (the lab has none; the command
+runs without error), two-letter shortcuts in the app (they are in the test)
+and the patched kit.
+
+**Differs from iTerm2:** copying neither selects the text nor shows the
+«Copied» toast; the pop and dissolve animation has not been seen in a
+screenshot; the expression cannot be changed in Settings. The capsule and
+its text are drawn on a canvas because Freya paints the terminal canvas,
+deeper in the tree, over them.

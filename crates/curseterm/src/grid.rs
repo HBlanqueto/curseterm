@@ -83,14 +83,14 @@ impl Fonts {
     }
 }
 
-fn typeface(manager: &FontMgr, family: &str, style: FontStyle) -> Typeface {
+pub fn typeface(manager: &FontMgr, family: &str, style: FontStyle) -> Typeface {
     manager
         .match_family_style(family, style)
         .or_else(|| manager.legacy_make_typeface(None, style))
         .expect("the font manager has no fonts")
 }
 
-fn font(typeface: Typeface, size: f32) -> Font {
+pub fn font(typeface: Typeface, size: f32) -> Font {
     let mut font = Font::from_typeface(typeface, size);
     font.set_edging(FontEdging::AntiAlias);
     font.set_subpixel(true);

@@ -212,3 +212,38 @@ pub const COMPOSER: ComposerMetrics = ComposerMetrics {
     tip_min_width: 180.0,
     fade_ms: 125,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ShortcutLabelMetrics {
+    pub height: f32,
+    pub padding_x: f32,
+    pub gap: f32,
+    pub font_size: f32,
+    pub stroke: Rgba,
+    pub shadow: Shadow,
+    pub typed_alpha: f32,
+    pub enter_ms: u64,
+    pub exit_ms: u64,
+    pub enter_scales: [(f32, f32); 3],
+    pub pop_scale: f32,
+    pub dissolve_scale: f32,
+}
+
+pub const SHORTCUT_LABEL: ShortcutLabelMetrics = ShortcutLabelMetrics {
+    height: 16.0,
+    padding_x: 2.0,
+    gap: 2.0,
+    font_size: 11.0,
+    stroke: Rgba::rgba8(255, 255, 255, 0.95),
+    shadow: Shadow {
+        color: Rgba::rgba8(0, 0, 0, 0.4),
+        offset_y: 0.0,
+        blur: 2.0,
+    },
+    typed_alpha: 0.5,
+    enter_ms: 200,
+    exit_ms: 200,
+    enter_scales: [(0.0, 0.25), (0.3, 1.3), (1.0, 1.0)],
+    pop_scale: 2.0,
+    dissolve_scale: 0.1,
+};

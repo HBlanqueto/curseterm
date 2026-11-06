@@ -5,6 +5,8 @@ mod composer;
 mod composer_view;
 mod config;
 mod grid;
+mod hint_view;
+mod hints;
 mod integration;
 mod io;
 mod itermcolors;

@@ -27,6 +27,7 @@ use rustix::process::{Pid, Signal, kill_process_group};
 
 use crate::composer::Composer;
 use crate::config::{APP_NAME, CursorType, Profile, SCROLLBACK_LIMIT};
+use crate::hints;
 use crate::io::{self as pty_io, Extras};
 use crate::jobs;
 use crate::keys::CopyCommand;
@@ -812,6 +813,27 @@ impl Drop for Session {
     fn drop(&mut self) {
         self.stop_coprocess();
     }
+}
+
+pub fn visible_urls(term: &Term<Listener>) -> Vec<hints::Found> {
+    let Ok(mut regex) = RegexSearch::new(hints::URL_PATTERN) else {
+        return Vec::new();
+    };
+    let offset = term.grid().display_offset() as i32;
+    let start = Point::new(Line(-offset), Column(0));
+    let end = Point::new(
+        Line(term.screen_lines() as i32 - 1 - offset),
+        Column(term.columns() - 1),
+    );
+    let history = term.history_size() as i64;
+    let absolute = |point: &Point| (history + i64::from(point.line.0), point.column.0);
+    matches_with(term, &mut regex, start, end)
+        .into_iter()
+        .map(|found| {
+            let text = term.bounds_to_string(*found.start(), *found.end());
+            (absolute(found.start()), absolute(found.end()), text)
+        })
+        .collect()
 }
 
 pub fn visible_matches(term: &Term<Listener>, query: &str) -> Vec<Match> {

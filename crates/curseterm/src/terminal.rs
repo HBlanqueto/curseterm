@@ -20,7 +20,7 @@ use barrier_kit::views::feedback::{Alert, sheet};
 use barrier_kit::views::table::Table;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
 use barrier_kit_next::tokens::{
-    ANNOTATION, PASTE_HISTORY_SIZE, RENAME_WIDTH, TERMINAL, TOOLBELT_WIDTH,
+    ANNOTATION, PASTE_HISTORY_SIZE, RENAME_WIDTH, SHORTCUT_LABEL, TERMINAL, TOOLBELT_WIDTH,
 };
 use barrier_kit_next::views::split_panes::SplitPanes;
 use barrier_kit_next::views::tab_bar::{Badge, TabBar};
@@ -40,6 +40,8 @@ use crate::config::{
     APP_ID, AltKey, ClosePrompt, Defaults, Profile, SessionEnd, WorkingDirectory, change_defaults,
 };
 use crate::grid::Fonts;
+use crate::hint_view;
+use crate::hints::{Hints, Typed};
 use crate::io::AnnotationId;
 use crate::keys::{COPY_KEYS, CopyCommand, KeyAction, copy_command, encode};
 use crate::links;
@@ -86,6 +88,7 @@ struct Handles {
     blink_armed: Rc<Cell<bool>>,
     notes_armed: Rc<Cell<bool>>,
     editing: State<bool>,
+    hints: State<Option<Hints>>,
     replay: State<Option<(SessionId, usize)>>,
     toolbelt: Toolbelt,
     clipboard: ClipboardState,
@@ -280,6 +283,7 @@ impl App for Terminal {
         let mut held = use_state(Modifiers::empty);
         let transparency = use_state(|| true);
         let editing = use_state(|| false);
+        let hints = use_state(|| None::<Hints>);
         let replay = use_state(|| None::<(SessionId, usize)>);
         let toolbelt = Toolbelt {
             shown: use_state(|| false),
@@ -312,6 +316,7 @@ impl App for Terminal {
             blink_armed: Rc::new(Cell::new(false)),
             notes_armed: Rc::new(Cell::new(false)),
             editing,
+            hints,
             replay,
             toolbelt,
             clipboard: consume_root_context(),
@@ -546,6 +551,9 @@ impl App for Terminal {
                 let Some(session) = &keyboard.active() else {
                     return;
                 };
+                if navigate_hints(&keyboard, session, &data.key, data.modifiers) {
+                    return;
+                }
                 if session.copy_mode() {
                     if let Some(command) = copy_command(&data.key, data.modifiers) {
                         if command == CopyCommand::Copy {
@@ -636,7 +644,15 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                     revision: painting.revision,
                     broadcast: painting.receivers.contains(id),
                     find: painting.find.clone().filter(|_| *id == painting.active),
-                    on_focus: Callback::new(move |id| workspace.write().focus(id)),
+                    on_focus: {
+                        let mut hints = painting.handles.hints;
+                        Callback::new(move |id| {
+                            if let Some(shown) = hints.write().as_mut() {
+                                shown.end(None);
+                            }
+                            workspace.write().focus(id)
+                        })
+                    },
                     on_hover: {
                         let defaults = painting.handles.defaults;
                         Callback::new(move |id| {
@@ -663,6 +679,12 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                     annotations: session.extras().annotations.clone(),
                     dark: painting.dark,
                     composer: session.composer.borrow().clone(),
+                    hints: painting
+                        .handles
+                        .hints
+                        .read()
+                        .clone()
+                        .filter(|hints| hints.session == *id),
                     on_composer: {
                         let handles = painting.handles.clone();
                         let session = session.clone();
@@ -1446,7 +1468,54 @@ fn composer_event(handles: &Handles, session: &Rc<Session>, event: ComposerEvent
     workspace.write();
 }
 
+// iTermCopyModeHandler.m iTermShortcutNavigationModeHandler: Command and Control keys pass
+// through, Escape leaves, and an unknown key goes on to the terminal.
+fn navigate_hints(handles: &Handles, session: &Rc<Session>, key: &Key, held: Modifiers) -> bool {
+    let mut state = handles.hints;
+    let mut state = state.write();
+    let Some(hints) = state
+        .as_mut()
+        .filter(|hints| hints.session == session.id && hints.ended.is_none())
+    else {
+        return false;
+    };
+    if held.intersects(Modifiers::META | Modifiers::CONTROL) {
+        return false;
+    }
+    match key {
+        Key::Named(NamedKey::Escape) => {
+            hints.end(None);
+            true
+        }
+        Key::Character(typed) => match hints.type_key(typed) {
+            Typed::Chosen(index) => {
+                let url = hints.items[index].url.clone();
+                hints.end(Some(index));
+                drop(state);
+                if held.contains(Modifiers::ALT) {
+                    copy_text(handles, url);
+                } else {
+                    links::open(&url);
+                }
+                true
+            }
+            Typed::Narrowed => true,
+            Typed::Unhandled => false,
+        },
+        _ => false,
+    }
+}
+
 fn animate_notes(handles: &Handles, revision: State<u64>) {
+    let mut hints = handles.hints;
+    let finished = hints.peek().as_ref().is_some_and(|shown| {
+        shown
+            .ended
+            .is_some_and(|(at, _)| hint_view::settled(at, SHORTCUT_LABEL.exit_ms))
+    });
+    if finished {
+        hints.set(None);
+    }
     let animating = handles.sessions.peek().values().any(|session| {
         session
             .extras()
@@ -1454,7 +1523,10 @@ fn animate_notes(handles: &Handles, revision: State<u64>) {
             .iter()
             .any(pane_view::note_animating)
             || pane_view::composer_animating(&session.composer.borrow())
-    });
+    }) || hints
+        .peek()
+        .as_ref()
+        .is_some_and(pane_view::hints_animating);
     if animating {
         repaint_after(
             handles,
@@ -2235,6 +2307,15 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             if let Some(session) = &active {
                 let mut extras = session.extras();
                 extras.show_timestamps = !extras.show_timestamps;
+            }
+        }
+        _ if id == menu::FIND_URLS.id => {
+            if let Some(session) = &active {
+                let found = session::visible_urls(&session.term.lock());
+                if !found.is_empty() {
+                    let mut hints = handles.hints;
+                    hints.set(Some(Hints::new(session.id, found)));
+                }
             }
         }
         _ if id == menu::ADD_ANNOTATION.id => {

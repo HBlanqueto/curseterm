@@ -130,6 +130,7 @@ find = Find…
 find-next = Find Next
 find-previous = Find Previous
 use-selection-for-find = Use Selection for Find
+find-urls = Find URLs
 find-placeholder = Find
 find-close = Close Find
 marks-menu = Marks and Annotations
