@@ -16,6 +16,7 @@ mod integration;
 mod io;
 mod itermcolors;
 mod jobs;
+mod key_report;
 mod keys;
 mod links;
 mod localize;

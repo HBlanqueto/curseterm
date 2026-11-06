@@ -2472,3 +2472,60 @@ edición acaba una vuelta después.
 **Difiere de iTerm2:** sin el desenfoque del material, sin animación al
 plegar, no se guarda en las disposiciones de ventana ni hay API; las
 esquinas no redimensionan en dos ejes a la vez.
+
+## Fase 56 — Modos de informe de teclas
+
+### Plan
+
+Session › Terminal State de iTerm2 (`MainMenu.xib`, `PTYSession.m
+-updateKeyMapper` y `-screenSendModifiersDidChange`) y sus codificadores
+(`iTermModifyOtherKeysMapper.m`, `iTermModifyOtherKeysMapper1.m`,
+`iTermTermkeyKeyMapper.m` e `iTermModernKeyMapper.swift`):
+
+1. **Modo de la sesión** (radio): Standard Key Reporting Mode,
+   modifyOtherKeys Mode 1, modifyOtherKeys Mode 2 y CSI u Mode. Una aplicación
+   lo cambia con `CSI > 4 ; n m`; `alacritty_terminal` no guarda esa
+   secuencia, así que el hilo lector la busca en la salida.
+2. **Protocolo de teclado de kitty** (casillas): Disambiguate Escape, Report
+   All Event Types, Report Alternate Keys, Report All Keys as Escape Codes y
+   Report Associated Text. `alacritty_terminal` guarda las banderas y
+   responde a `CSI ? u` con `kitty_keyboard`; CurseTerm codifica las teclas,
+   las repeticiones y las teclas soltadas. Con alguna bandera, kitty manda,
+   como en iTerm2.
+3. **Perfil › Keys:** Report keys using CSI u (apagado) y Apps can change
+   how keys are reported (encendido), con los valores de
+   `iTermProfilePreferences.m`.
+4. **Raw Key Reporting Mode** no se porta: informa de los códigos de tecla
+   de macOS.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado, con un lector en modo
+crudo de Python. `./dev.sh check` limpio en los dos modos; tests nuevos para
+cada codificador y para el detector de `CSI > 4 ; n m` partido entre dos
+lecturas.
+
+| Prueba | Bytes recibidos | Captura |
+|---|---|---|
+| Sin modos: Ctrl+A y Escape | `\x01`, `\x1b` | — |
+| `CSI > 1 u`: Ctrl+A, Escape, Intro y `a` | `\x1b[97;5u`, `\x1b[27u`, `\r`, `a` | `fase56-kitty.png` |
+| `CSI ? u` | la respuesta `CSI ? 1 u` | `fase56-kitty.png` |
+| `CSI = 3 u` y `a` | `a` y al soltar `\x1b[97;1:3u` | — |
+| Las casillas del menú D-Bus siguen a las banderas y apagarlas desde él las quita | ✓ | — |
+| `CSI > 4 ; 2 m`: Ctrl+A, ⇧↩ y `A`; el radio pasa a modifyOtherKeys Mode 2 | `\x1b[27;5;97~`, `\x1b[27;2;13~`, `A` | `fase56-mok.png` |
+| CSI u Mode desde el menú: Ctrl+I, Ctrl+A, ⇧⇥, Ctrl+⇧+A y Ctrl+Alt+X | `\x1b[105;5u`, `\x01`, `\x1b[Z`, `\x1b[65;5u`, `\x1b[120;7u` | `fase56-csiu.png` |
+| Report keys using CSI u en el perfil: Ctrl+I y ⇧↩ en una sesión nueva | `\x1b[105;5u`, `\x1b[13;2u` | — |
+
+**Fallo encontrado y corregido en la prueba:** con Control pulsado la tecla
+llega sin Mayúsculas aplicadas, y Ctrl+⇧+A salía como `97`; iTerm2 usa la
+letra ya desplazada (`-charactersIgnoringModifiers`), así que CSI u,
+modifyOtherKeys y la tecla alternativa de kitty la pasan a mayúscula.
+
+**No probado:** con el kit tal cual; los interruptores del perfil en la
+ventana de Ajustes (el valor sí, en el `.domain`); Report Alternate Keys y
+Report Associated Text con teclas reales (solo en los tests).
+
+**Difiere de iTerm2:** sin Raw Key Reporting Mode; la tecla base de kitty
+sale de la distribución de EE. UU.; Super nunca llega a la shell (ADR 0003),
+tampoco con kitty; no avisa si una aplicación deja el informe de teclas
+puesto al salir.

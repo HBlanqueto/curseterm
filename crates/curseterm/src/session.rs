@@ -33,6 +33,7 @@ use crate::config::{APP_NAME, CursorType, Profile, SCROLLBACK_LIMIT};
 use crate::hints;
 use crate::io::{self as pty_io, Extras};
 use crate::jobs;
+use crate::key_report::{KITTY_FLAGS, KeyMode};
 use crate::keys::CopyCommand;
 use crate::links;
 use crate::session_note::SessionNote;
@@ -118,7 +119,7 @@ pub struct Session {
     runs_command: bool,
     pub started: Instant,
     ended: Cell<bool>,
-    options: Cell<(usize, CursorStyle)>,
+    options: Cell<(usize, CursorStyle, bool)>,
     coprocess: RefCell<Option<Child>>,
     pub composer: RefCell<Composer>,
     pub note: RefCell<SessionNote>,
@@ -183,7 +184,11 @@ impl Session {
             runs_command,
             started: Instant::now(),
             ended: Cell::new(false),
-            options: Cell::new((Config::default().scrolling_history, CursorStyle::default())),
+            options: Cell::new((
+                Config::default().scrolling_history,
+                CursorStyle::default(),
+                false,
+            )),
             coprocess: RefCell::new(None),
             composer: RefCell::default(),
             note: RefCell::default(),
@@ -193,7 +198,17 @@ impl Session {
     }
 
     pub fn apply_profile(&self, profile: &Profile) {
-        self.extras().set_triggers(&profile.triggers);
+        {
+            let mut extras = self.extras();
+            extras.set_triggers(&profile.triggers);
+            extras.apps_change_key_mode = profile.apps_change_key_reporting;
+            // PTYSession.m -setProfile: a profile asking for CSI u sets the session's mode.
+            match (profile.report_keys_csi_u, extras.key_mode) {
+                (true, KeyMode::Standard) => extras.key_mode = KeyMode::CsiU,
+                (false, KeyMode::CsiU) => extras.key_mode = KeyMode::Standard,
+                _ => {}
+            }
+        }
         let lines = profile.scrollback_lines.min(SCROLLBACK_LIMIT) as usize;
         let shape = match profile.cursor {
             CursorType::Box => CursorShape::Block,
@@ -204,13 +219,35 @@ impl Session {
             shape,
             blinking: profile.blinking_cursor,
         };
-        if self.options.replace((lines, cursor)) != (lines, cursor) {
+        let kitty = profile.apps_change_key_reporting;
+        if self.options.replace((lines, cursor, kitty)) != (lines, cursor, kitty) {
             self.term.lock().set_options(Config {
                 scrolling_history: lines,
                 default_cursor_style: cursor,
+                kitty_keyboard: kitty,
                 ..Config::default()
             });
         }
+    }
+
+    pub fn key_mode(&self) -> KeyMode {
+        self.extras().key_mode
+    }
+
+    pub fn set_key_mode(&self, mode: KeyMode) {
+        self.extras().key_mode = mode;
+    }
+
+    // PTYSession.m -terminalStateToggle…: tags 12 to 16 flip one kitty flag, CSI = flags ; 1 u.
+    pub fn toggle_kitty_flag(&self, flag: TermMode) {
+        let mode = self.mode();
+        let bits = KITTY_FLAGS
+            .iter()
+            .enumerate()
+            .filter(|(_, known)| mode.contains(**known) != (**known == flag))
+            .map(|(index, _)| 1u8 << index)
+            .sum::<u8>();
+        self.feed(format!("\x1b[={bits};1u").as_bytes());
     }
 
     pub fn write(&self, bytes: impl Into<Cow<'static, [u8]>>) {

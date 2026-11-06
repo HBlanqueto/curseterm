@@ -109,7 +109,7 @@ pub fn copy_command(key: &Key, modifiers: Modifiers) -> Option<CopyCommand> {
         .map(|(_, command)| *command)
 }
 
-fn modifier_param(modifiers: Modifiers) -> u8 {
+pub fn modifier_param(modifiers: Modifiers) -> u8 {
     1 + u8::from(modifiers.contains(Modifiers::SHIFT))
         + 2 * u8::from(modifiers.contains(Modifiers::ALT))
         + 4 * u8::from(modifiers.contains(Modifiers::CONTROL))

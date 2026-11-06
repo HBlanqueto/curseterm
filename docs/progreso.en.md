@@ -2457,3 +2457,55 @@ ends one loop later.
 **Differs from iTerm2:** no material blur, no collapse animation, not saved
 in window arrangements and no API; corners do not resize on both axes at
 once.
+
+## Phase 56 — Key reporting modes
+
+### Plan
+
+iTerm2's Session › Terminal State (`MainMenu.xib`, `PTYSession.m
+-updateKeyMapper` and `-screenSendModifiersDidChange`) and its encoders
+(`iTermModifyOtherKeysMapper.m`, `iTermModifyOtherKeysMapper1.m`,
+`iTermTermkeyKeyMapper.m` and `iTermModernKeyMapper.swift`):
+
+1. **Session mode** (radio): Standard Key Reporting Mode, modifyOtherKeys
+   Mode 1, modifyOtherKeys Mode 2 and CSI u Mode. An app changes it with
+   `CSI > 4 ; n m`; `alacritty_terminal` does not keep that sequence, so the
+   reader thread looks for it in the output.
+2. **kitty keyboard protocol** (checkboxes): Disambiguate Escape, Report All
+   Event Types, Report Alternate Keys, Report All Keys as Escape Codes and
+   Report Associated Text. `alacritty_terminal` keeps the flags and answers
+   `CSI ? u` with `kitty_keyboard`; CurseTerm encodes keys, repeats and
+   releases. With any flag set, kitty wins, as in iTerm2.
+3. **Profile › Keys:** Report keys using CSI u (off) and Apps can change how
+   keys are reported (on), with `iTermProfilePreferences.m`'s defaults.
+4. **Raw Key Reporting Mode** is not ported: it reports macOS key codes.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit, with a raw-mode Python reader.
+`./dev.sh check` clean in both modes; new tests for each encoder and for the
+`CSI > 4 ; n m` detector split across two reads.
+
+| Test | Bytes received | Screenshot |
+|---|---|---|
+| No modes: Ctrl+A and Escape | `\x01`, `\x1b` | — |
+| `CSI > 1 u`: Ctrl+A, Escape, Enter and `a` | `\x1b[97;5u`, `\x1b[27u`, `\r`, `a` | `fase56-kitty.png` |
+| `CSI ? u` | the reply `CSI ? 1 u` | `fase56-kitty.png` |
+| `CSI = 3 u` and `a` | `a` and on release `\x1b[97;1:3u` | — |
+| The D-Bus menu checkboxes follow the flags and turning them off there clears them | ✓ | — |
+| `CSI > 4 ; 2 m`: Ctrl+A, ⇧↩ and `A`; the radio moves to modifyOtherKeys Mode 2 | `\x1b[27;5;97~`, `\x1b[27;2;13~`, `A` | `fase56-mok.png` |
+| CSI u Mode from the menu: Ctrl+I, Ctrl+A, ⇧⇥, Ctrl+⇧+A and Ctrl+Alt+X | `\x1b[105;5u`, `\x01`, `\x1b[Z`, `\x1b[65;5u`, `\x1b[120;7u` | `fase56-csiu.png` |
+| Report keys using CSI u in the profile: Ctrl+I and ⇧↩ in a new session | `\x1b[105;5u`, `\x1b[13;2u` | — |
+
+**Bug found and fixed while testing:** with Control held the key arrives
+without Shift applied, and Ctrl+⇧+A came out as `97`; iTerm2 uses the
+shifted letter (`-charactersIgnoringModifiers`), so CSI u, modifyOtherKeys
+and kitty's alternate key uppercase it.
+
+**Not tested:** the kit as is; the profile switches in the Settings window
+(the value is, in the `.domain`); Report Alternate Keys and Report
+Associated Text with real keys (only in the tests).
+
+**Differs from iTerm2:** no Raw Key Reporting Mode; kitty's base key comes
+from the US layout; Super never reaches the shell (ADR 0003), not even with
+kitty; no warning when an app leaves key reporting on when it exits.

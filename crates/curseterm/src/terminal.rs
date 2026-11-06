@@ -54,7 +54,8 @@ use crate::hint_view;
 use crate::hints::{self, HintAction, Hints, Typed};
 use crate::integration::Notification;
 use crate::io::AnnotationId;
-use crate::keys::{COPY_KEYS, CopyCommand, KeyAction, copy_command, encode};
+use crate::key_report::{KITTY_FLAGS, KeyMode, Phase, Press, report};
+use crate::keys::{COPY_KEYS, CopyCommand, KeyAction, copy_command};
 use crate::links;
 use crate::localize::tr;
 use crate::menu;
@@ -340,6 +341,7 @@ impl App for Terminal {
         };
         let sheet = use_state(|| None::<Sheet>);
         let mut held = use_state(Modifiers::empty);
+        let pressed = use_hook(|| Rc::new(RefCell::new(Vec::<Code>::new())));
         let transparency = use_state(|| true);
         let editing = use_state(|| false);
         let hints = use_state(|| None::<Hints>);
@@ -662,13 +664,46 @@ impl App for Terminal {
             } else {
                 palette.window_background
             }))
-            .on_global_key_up(move |event: Event<KeyboardEventData>| {
-                let data = event.data();
-                held.set_if_modified(data.modifiers.difference(key_modifier(&data.key)));
+            .on_global_key_up({
+                let keyboard = handles.clone();
+                let pressed = pressed.clone();
+                move |event: Event<KeyboardEventData>| {
+                    let data = event.data();
+                    let modifiers = data.modifiers.difference(key_modifier(&data.key));
+                    held.set_if_modified(modifiers);
+                    pressed.borrow_mut().retain(|code| *code != data.code);
+                    if keyboard.confirm.peek().is_some() || *keyboard.editing.peek() {
+                        return;
+                    }
+                    if let Some(session) = keyboard.active() {
+                        let release = Press {
+                            key: &data.key,
+                            code: data.code,
+                            modifiers,
+                            phase: Phase::Release,
+                        };
+                        let key_mode = session.key_mode();
+                        if let KeyAction::Write(bytes) = report(&release, session.mode(), key_mode)
+                        {
+                            for receiver in keyboard.receivers() {
+                                receiver.write(bytes.clone());
+                            }
+                        }
+                    }
+                }
             })
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
                 let data = event.data();
                 held.set_if_modified(data.modifiers.union(key_modifier(&data.key)));
+                let phase = {
+                    let mut pressed = pressed.borrow_mut();
+                    if pressed.contains(&data.code) {
+                        Phase::Repeat
+                    } else {
+                        pressed.push(data.code);
+                        Phase::Press
+                    }
+                };
                 if keyboard.confirm.peek().is_some() || *keyboard.editing.peek() {
                     return;
                 }
@@ -738,7 +773,19 @@ impl App for Terminal {
                     }
                     _ => data.modifiers,
                 };
-                match encode(&data.key, modifiers, session.mode()) {
+                let press = Press {
+                    key: &data.key,
+                    code: data.code,
+                    modifiers: match data.key {
+                        Key::Named(NamedKey::Shift | NamedKey::Control | NamedKey::Alt) => {
+                            modifiers.union(key_modifier(&data.key))
+                        }
+                        _ => modifiers,
+                    },
+                    phase,
+                };
+                let key_mode = session.key_mode();
+                match report(&press, session.mode(), key_mode) {
                     KeyAction::Write(bytes) => {
                         for receiver in keyboard.receivers() {
                             receiver.clear_selection();
@@ -1108,12 +1155,21 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::SELECT_MATCHES.id, searching);
     use_menu_enabled(menu::CLEAR_FIND.id, !handles.find.query.read().is_empty());
     use_menu_checked(menu::TOOLBELT.id, *handles.toolbelt.shown.read());
-    for state in TerminalState::ALL {
-        let on = handles
-            .active()
-            .is_some_and(|session| session.has_state(state));
-        use_menu_checked(menu::terminal_state_entry(state).0, on);
-    }
+    let current = handles.active();
+    let states = TerminalState::ALL.map(|state| {
+        current
+            .as_ref()
+            .is_some_and(|session| session.has_state(state))
+    });
+    let key_mode = current
+        .as_ref()
+        .map_or(KeyMode::Standard, |session| session.key_mode());
+    let mode = current.as_ref().map(|session| session.mode());
+    let flags = KITTY_FLAGS.map(|flag| mode.is_some_and(|mode| mode.contains(flag)));
+    use_submenu_items(
+        menu::TERMINAL_STATE_MENU,
+        menu::terminal_state_items(states, key_mode, flags),
+    );
     use_menu_enabled(menu::USE_TRANSPARENCY.id, transparency_supported());
     use_menu_checked(menu::USE_TRANSPARENCY.id, *handles.transparency.read());
     let marks = handles.active().is_some_and(|session| session.has_marks());
@@ -3286,6 +3342,19 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             windows::open(&["--settings", &profile]);
         }
         _ if id == menu::HELP.id => links::open(env!("CARGO_PKG_REPOSITORY")),
+        _ if let Some(mode) = KeyMode::ALL
+            .into_iter()
+            .find(|mode| menu::key_mode_entry(*mode).0 == id) =>
+        {
+            if let Some(session) = &active {
+                session.set_key_mode(mode);
+            }
+        }
+        _ if let Some(index) = menu::KITTY_FLAG_IDS.iter().position(|flag| *flag == id) => {
+            if let Some(session) = &active {
+                session.toggle_kitty_flag(KITTY_FLAGS[index]);
+            }
+        }
         _ if let Some(state) = TerminalState::ALL
             .into_iter()
             .find(|state| menu::terminal_state_entry(*state).0 == id) =>

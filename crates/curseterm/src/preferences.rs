@@ -634,17 +634,35 @@ fn keys_section(index: usize, profile: &Profile) -> Section {
         };
         (key, name)
     });
-    Section::titled(tr!("section-keys")).row(
-        Row::new(tr!("alt-key"))
-            .detail(tr!("alt-key-detail"))
-            .control(profile_choice(
-                index,
-                tr!("alt-key"),
-                keys,
-                profile.alt_key,
-                |profile, key| profile.alt_key = key,
-            )),
-    )
+    let switch = |label: &'static str, on: bool, set: fn(&mut Profile, bool)| {
+        Row::new(label).control(
+            Switch::new(label)
+                .on(on)
+                .on_toggle(move |on: bool| edit(index, |profile| set(profile, on))),
+        )
+    };
+    Section::titled(tr!("section-keys"))
+        .row(
+            Row::new(tr!("alt-key"))
+                .detail(tr!("alt-key-detail"))
+                .control(profile_choice(
+                    index,
+                    tr!("alt-key"),
+                    keys,
+                    profile.alt_key,
+                    |profile, key| profile.alt_key = key,
+                )),
+        )
+        .row(switch(
+            tr!("report-keys-csi-u"),
+            profile.report_keys_csi_u,
+            |profile, on| profile.report_keys_csi_u = on,
+        ))
+        .row(switch(
+            tr!("apps-change-key-reporting"),
+            profile.apps_change_key_reporting,
+            |profile, on| profile.apps_change_key_reporting = on,
+        ))
 }
 
 fn terminal_section(index: usize, profile: &Profile) -> Section {

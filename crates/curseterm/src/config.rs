@@ -80,6 +80,8 @@ pub struct Profile {
     pub when_session_ends: SessionEnd,
     pub prompt_before_closing: ClosePrompt,
     pub alt_key: AltKey,
+    pub report_keys_csi_u: bool,
+    pub apps_change_key_reporting: bool,
     pub notifications: bool,
     pub notify_bell: bool,
     pub notify_idle: bool,
@@ -223,6 +225,9 @@ impl Default for Profile {
             when_session_ends: SessionEnd::Close,
             prompt_before_closing: ClosePrompt::IfJobs,
             alt_key: AltKey::Escape,
+            // iTermProfilePreferences.m: KEY_USE_LIBTICKIT_PROTOCOL NO, KEY_ALLOW_MODIFY_OTHER_KEYS YES.
+            report_keys_csi_u: false,
+            apps_change_key_reporting: true,
             notifications: false,
             notify_bell: true,
             notify_idle: false,

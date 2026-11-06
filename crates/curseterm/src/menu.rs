@@ -5,6 +5,7 @@ use barrier_kit_next::app_menu::submenu;
 use freya_core::prelude::Modifiers;
 
 use crate::config::{APP_NAME, MarkAlert};
+use crate::key_report::KeyMode;
 use crate::localize::tr;
 use crate::session::TerminalState;
 use crate::workspace::Broadcast;
@@ -223,6 +224,64 @@ pub const DIVIDER_DOWN: &str = "divider-down";
 pub const DIVIDER_LEFT: &str = "divider-left";
 pub const DIVIDER_RIGHT: &str = "divider-right";
 
+pub fn key_mode_entry(mode: KeyMode) -> (&'static str, &'static str) {
+    match mode {
+        KeyMode::Standard => ("key-mode-standard", tr!("key-mode-standard")),
+        KeyMode::ModifyOtherKeys1 => (
+            "key-mode-modify-other-keys-1",
+            tr!("key-mode-modify-other-keys-1"),
+        ),
+        KeyMode::ModifyOtherKeys2 => (
+            "key-mode-modify-other-keys-2",
+            tr!("key-mode-modify-other-keys-2"),
+        ),
+        KeyMode::CsiU => ("key-mode-csi-u", tr!("key-mode-csi-u")),
+    }
+}
+
+pub const KITTY_FLAG_IDS: [&str; 5] = [
+    "kitty-disambiguate-escape",
+    "kitty-report-event-types",
+    "kitty-report-alternate-keys",
+    "kitty-report-all-keys",
+    "kitty-report-associated-text",
+];
+
+// MainMenu.xib Session › Terminal State: the modes, then the key reporting mode's radio group and
+// the kitty keyboard flags.
+pub fn terminal_state_items(
+    states: [bool; 6],
+    key_mode: KeyMode,
+    flags: [bool; 5],
+) -> Vec<MenuItem> {
+    let modes = TerminalState::ALL.iter().zip(states).map(|(state, on)| {
+        let (id, label) = terminal_state_entry(*state);
+        MenuItem::action(id, label).with_check(CheckState::Checkbox(on))
+    });
+    let key_modes = KeyMode::ALL.map(|mode| {
+        let (id, label) = key_mode_entry(mode);
+        MenuItem::action(id, label).with_check(CheckState::Radio(mode == key_mode))
+    });
+    let labels = [
+        tr!("kitty-disambiguate-escape"),
+        tr!("kitty-report-event-types"),
+        tr!("kitty-report-alternate-keys"),
+        tr!("kitty-report-all-keys"),
+        tr!("kitty-report-associated-text"),
+    ];
+    let kitty = KITTY_FLAG_IDS
+        .iter()
+        .zip(labels)
+        .zip(flags)
+        .map(|((id, label), on)| MenuItem::action(*id, label).with_check(CheckState::Checkbox(on)));
+    modes
+        .chain([MenuItem::Separator])
+        .chain(key_modes)
+        .chain([MenuItem::Separator])
+        .chain(kitty)
+        .collect()
+}
+
 pub fn terminal_state_entry(state: TerminalState) -> (&'static str, &'static str) {
     match state {
         TerminalState::AlternateScreen => ("state-alternate-screen", tr!("state-alternate-screen")),
@@ -410,12 +469,7 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                 submenu(
                     TERMINAL_STATE_MENU,
                     tr!("terminal-state-menu"),
-                    TerminalState::ALL
-                        .map(|state| {
-                            let (id, label) = terminal_state_entry(state);
-                            MenuItem::action(id, label).with_check(CheckState::Checkbox(false))
-                        })
-                        .to_vec(),
+                    terminal_state_items([false; 6], KeyMode::Standard, [false; 5]),
                 ),
                 MenuItem::Separator,
                 submenu(

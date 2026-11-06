@@ -25,6 +25,7 @@ use rustix::event::{PollFd, PollFlags, Timespec, poll};
 
 use crate::config::{Trigger, TriggerAction};
 use crate::integration::{self, Dimension, InlineImage, Notification, Report};
+use crate::key_report::{KeyMode, ModifyOtherKeysWatch};
 use crate::osc::{Piece, Splitter};
 use crate::session::Listener;
 
@@ -100,6 +101,8 @@ pub struct Extras {
     pub alert_on_next_mark: bool,
     pub notifications: Vec<Notification>,
     pub sub_selections: Vec<((i64, usize), (i64, usize))>,
+    pub key_mode: KeyMode,
+    pub apps_change_key_mode: bool,
     triggers: Vec<Trigger>,
     compiled: Vec<Compiled>,
 }
@@ -363,6 +366,7 @@ fn read_loop(
 ) {
     let mut processor: Processor = Processor::new();
     let mut splitter = Splitter::default();
+    let mut modify_other_keys = ModifyOtherKeysWatch::default();
     let mut buffer = vec![0; READ_BUFFER];
     let mut scanned = 0;
     loop {
@@ -388,6 +392,12 @@ fn read_loop(
             Err(_) => break,
         };
         tee_output(&extras, &buffer[..read]);
+        if let Some(level) = modify_other_keys.feed(&buffer[..read])
+            && let Ok(mut extras) = extras.lock()
+            && extras.apps_change_key_mode
+        {
+            extras.key_mode = KeyMode::from_modify_other_keys(level);
+        }
         {
             let mut term = term.lock();
             for piece in splitter.feed(&buffer[..read]) {
