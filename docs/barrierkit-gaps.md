@@ -73,6 +73,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-041 | ventanas | Un configure confirmado sale con la geometría vieja | alta | Parche 0012 probado |
 | BK-042 | controles | `PopUpButton` no tiene modo desplegable (pull-down) | baja | Workaround probado: remontar con `key` |
 | BK-043 | controles | `TextField` no puede abrirse con el texto seleccionado | baja | Sin workaround: ⌃A lo selecciona |
+| BK-044 | vistas | Sin vista flotante que se mueva y redimensione dentro de la ventana | media | Bloque probado: `views::floating_pane` |
 
 ## Gaps
 
@@ -969,6 +970,24 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Gravedad**: baja
 - **Cómo reproducirlo**: Window › Tab › Add Tab to New Group… y escribir: el
   texto se añade al título en vez de reemplazarlo.
+
+### BK-044 — Sin vista flotante que se mueva y redimensione dentro de la ventana
+- **Área**: vistas
+- **Qué necesitaba CurseTerm**: los paneles flotantes de iTerm2
+  (`iTermFloatingPaneView.swift`): un panel sobre los demás, con barra de
+  título para moverlo, una banda de 6 pt para redimensionarlo por bordes y
+  esquinas, contorno de 1 pt y sombra.
+- **Qué ofrece hoy BarrierKit**: `SplitPanes` reparte el espacio sin solapar y
+  `sheet` bloquea la ventana; nada se mueve ni se redimensiona con el ratón.
+- **Qué falta**: una vista con marco propio que se arrastre y redimensione.
+- **Cómo lo resolví en CurseTerm**: `barrier_kit_next::views::floating_pane`
+  (`FloatingPane` y `PaneFrame`); CurseTerm guarda el marco y lo ajusta a la
+  pestaña.
+- **Coste del workaround**: ninguno; el bloque es pequeño.
+- **API propuesta para el kit**: la de `FloatingPane`, con `on_frame` y
+  `on_raise`.
+- **Gravedad**: media
+- **Cómo reproducirlo**: no aplica; es una vista que falta.
 
 ## Cosas que funcionaron bien
 

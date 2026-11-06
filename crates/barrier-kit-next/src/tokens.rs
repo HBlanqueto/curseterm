@@ -21,6 +21,32 @@ pub const TAB_BAR: TabBarMetrics = TabBarMetrics {
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FloatingPaneMetrics {
+    pub title_height: f32,
+    pub outline: f32,
+    pub resize_band: f32,
+    pub shadow_opacity: f32,
+    pub shadow_blur: f32,
+    pub shadow_y: f32,
+    pub initial_fraction: f32,
+    pub min_cells: f32,
+}
+
+// iTermFloatingPaneView.swift outlineWidth, resizeBandWidth and its layer shadow;
+// SessionView.m iTermGetSessionViewTitleHeight (statusBarHeight 21 + 1); floating-panes-design.md
+// §5: a new float takes 80 % of the tab, and none is smaller than 2×2 cells.
+pub const FLOATING_PANE: FloatingPaneMetrics = FloatingPaneMetrics {
+    title_height: 22.0,
+    outline: 1.0,
+    resize_band: 6.0,
+    shadow_opacity: 0.4,
+    shadow_blur: 8.0,
+    shadow_y: 3.0,
+    initial_fraction: 0.8,
+    min_cells: 2.0,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TabGroupMetrics {
     pub name_pad: f32,
     pub colored_area: f32,

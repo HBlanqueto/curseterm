@@ -73,6 +73,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-041 | windows | An acked configure goes out with the old geometry | high | Patch 0012 tested |
 | BK-042 | controls | `PopUpButton` has no pull-down mode | low | Workaround tested: remount with `key` |
 | BK-043 | controls | `TextField` cannot open with its text selected | low | No workaround: ⌃A selects it |
+| BK-044 | views | No floating view that moves and resizes inside the window | medium | Block tested: `views::floating_pane` |
 
 ## Gaps
 
@@ -963,6 +964,26 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Severity**: low
 - **How to reproduce**: Window › Tab › Add Tab to New Group… and type: the
   text is added to the title instead of replacing it.
+
+### BK-044 — No floating view that moves and resizes inside the window
+- **Area**: views
+- **What CurseTerm needed**: iTerm2's floating panes
+  (`iTermFloatingPaneView.swift`): a pane above the others, with a title bar
+  to move it, a 6 pt band to resize it by edges and corners, a 1 pt outline
+  and a shadow.
+- **What BarrierKit offers today**: `SplitPanes` shares the space without
+  overlap and `sheet` blocks the window; nothing moves or resizes with the
+  mouse.
+- **What is missing**: a view with its own frame that can be dragged and
+  resized.
+- **How I solved it in CurseTerm**: `barrier_kit_next::views::floating_pane`
+  (`FloatingPane` and `PaneFrame`); CurseTerm keeps the frame and fits it to
+  the tab.
+- **Cost of the workaround**: none; the block is small.
+- **Proposed kit API**: that of `FloatingPane`, with `on_frame` and
+  `on_raise`.
+- **Severity**: medium
+- **How to reproduce**: not applicable; it is a missing view.
 
 ## Things that worked well
 

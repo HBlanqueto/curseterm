@@ -24,9 +24,10 @@ use barrier_kit::views::table::Table;
 use barrier_kit_next::app_menu::{use_menu_checked, use_menu_enabled, use_submenu_items};
 use barrier_kit_next::notifications::{self, Notice};
 use barrier_kit_next::tokens::{
-    ANNOTATION, PASTE_HISTORY_SIZE, PASTE_QUESTION_WIDTH, RENAME_WIDTH, SHORTCUT_LABEL, TAB_GROUP,
-    TAB_STRIP, TITLE_BAR, TOOLBELT_WIDTH, TabStyle, TitleBarColors,
+    ANNOTATION, FLOATING_PANE, PASTE_HISTORY_SIZE, PASTE_QUESTION_WIDTH, RENAME_WIDTH,
+    SHORTCUT_LABEL, TAB_GROUP, TAB_STRIP, TITLE_BAR, TOOLBELT_WIDTH, TabStyle, TitleBarColors,
 };
+use barrier_kit_next::views::floating_pane::{FloatingPane, PaneFrame};
 use barrier_kit_next::views::split_panes::SplitPanes;
 use barrier_kit_next::views::tab_bar::{Badge, TabBar, TabGroupMark};
 use freya_clipboard::copypasta::ClipboardProvider;
@@ -45,7 +46,7 @@ use base64::engine::general_purpose::STANDARD;
 use crate::add_trigger::AddTriggerSheet;
 use crate::advanced;
 use crate::advanced_paste::{AdvancedPaste, advanced_paste_sheet};
-use crate::arrangement::{self, Arrangement, TabLayout};
+use crate::arrangement::{self, Arrangement, SavedFloat, TabLayout};
 use crate::clock::{local_date_time, local_time};
 use crate::command_history;
 use crate::composer_view::ComposerEvent;
@@ -83,7 +84,7 @@ use crate::snippets::{self, Escaping, Snippet};
 use crate::status;
 use crate::theme;
 use crate::windows;
-use crate::workspace::{Broadcast, Closed, Tab, Workspace};
+use crate::workspace::{Broadcast, Closed, Float, Tab, Workspace};
 use vow_appearance::ColorScheme;
 
 const INITIAL_GRID: (u16, u16) = (80, 24);
@@ -138,6 +139,7 @@ struct Handles {
     transparency: State<bool>,
     question: State<Option<Question>>,
     layout_locked: State<bool>,
+    body_size: State<(f32, f32)>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -375,6 +377,7 @@ impl App for Terminal {
         let transparency = use_state(|| true);
         let question = use_state(|| None);
         let layout_locked = use_state(|| false);
+        let body_size = use_state(|| (0.0, 0.0));
         let editing = use_state(|| false);
         let hints = use_state(|| None::<Hints>);
         let replay = use_state(|| None::<(SessionId, usize)>);
@@ -445,6 +448,7 @@ impl App for Terminal {
             transparency,
             question,
             layout_locked,
+            body_size,
         });
         handles.dark.set(dark);
         use_drop({
@@ -654,7 +658,7 @@ impl App for Terminal {
         let transparent = transparency_supported() && *transparency.read();
         let body = state.active_tab().map(|tab| {
             let root = if tab.zoomed {
-                Pane::Leaf(tab.active)
+                Pane::Leaf(tab.tiled_target())
             } else {
                 tab.root.clone()
             };
@@ -689,7 +693,25 @@ impl App for Terminal {
                 divider: theme::divider_color(theme, dark, terminal_background),
             };
             animate_notes(&handles, revision);
-            pane_tree(&root, Vec::new(), &painting)
+            let floats: Vec<Element> = if tab.floats_hidden {
+                Vec::new()
+            } else {
+                tab.floats
+                    .iter()
+                    .map(|float| floating_pane(float, &state, &painting, dark))
+                    .collect()
+            };
+            let mut body_size = handles.body_size;
+            rect()
+                .width(Size::fill())
+                .height(Size::fill())
+                .on_sized(move |event: Event<SizedEventData>| {
+                    let area = event.data().area;
+                    body_size.set_if_modified((area.width(), area.height()));
+                })
+                .child(pane_tree(&root, Vec::new(), &painting))
+                .children(floats)
+                .into_element()
         });
         drop(state);
         #[cfg(feature = "kit-parcheado")]
@@ -1150,6 +1172,107 @@ struct Painting {
     divider: Rgba,
 }
 
+// PTYTab.m floats: each sits over the tiled panes in its own wrapper, clamped inside the tab.
+fn floating_pane(float: &Float, workspace: &Workspace, painting: &Painting, dark: bool) -> Element {
+    let id = float.id;
+    let active = id == painting.active;
+    let (colors, ink, _) = title_colors(dark, active && painting.window_focused);
+    let handles = painting.handles.clone();
+    let mut raising = painting.workspace;
+    let mut moving = painting.workspace;
+    FloatingPane {
+        frame: clamped(
+            float.frame,
+            *handles.body_size.peek(),
+            float_cell(&handles, id),
+        ),
+        title: workspace.title(id).to_string(),
+        active,
+        accent: Palette::current().accent,
+        title_bar: colors.background,
+        title_ink: ink,
+        content: pane_tree(&Pane::Leaf(id), Vec::new(), painting),
+        on_raise: Callback::new(move |_| raising.write().focus(id)),
+        on_frame: Callback::new(move |frame| {
+            if !*handles.layout_locked.peek() {
+                let frame = clamped(frame, *handles.body_size.peek(), float_cell(&handles, id));
+                moving.write().set_float_frame(id, frame);
+            }
+        }),
+    }
+    .into_element()
+}
+
+fn float_cell(handles: &Handles, id: SessionId) -> (f32, f32) {
+    let profile = handles
+        .sessions
+        .peek()
+        .get(&id)
+        .map(|session| session.profile())
+        .unwrap_or_default();
+    let fonts = handles.fonts_for(&handles.defaults.peek().profile(&profile));
+    (fonts.cell_width, fonts.cell_height)
+}
+
+// floating-panes-design.md §5: no overhang, and nothing smaller than the chrome plus 2×2 cells.
+fn clamped(
+    frame: PaneFrame,
+    (width, height): (f32, f32),
+    (cell_width, cell_height): (f32, f32),
+) -> PaneFrame {
+    let fit = |size: f32, room: f32, least: f32| size.min(room).max(least.min(room));
+    let least_width = FLOATING_PANE.min_cells * cell_width;
+    let least_height = FLOATING_PANE.title_height + FLOATING_PANE.min_cells * cell_height;
+    let (frame_width, frame_height) = (
+        fit(frame.width, width, least_width),
+        fit(frame.height, height, least_height),
+    );
+    PaneFrame {
+        x: frame.x.clamp(0.0, (width - frame_width).max(0.0)),
+        y: frame.y.clamp(0.0, (height - frame_height).max(0.0)),
+        width: frame_width,
+        height: frame_height,
+    }
+}
+
+// §5: 80 % of the tab, rounded down to whole cells of the float's font, centred.
+fn new_float_frame(handles: &Handles, profile: &str) -> PaneFrame {
+    let (width, height) = *handles.body_size.peek();
+    let fonts = handles.fonts_for(&handles.defaults.peek().profile(profile));
+    let cells =
+        |room: f32, cell: f32| (room * FLOATING_PANE.initial_fraction / cell).floor() * cell;
+    let frame_width = cells(width, fonts.cell_width);
+    let frame_height =
+        cells(height - FLOATING_PANE.title_height, fonts.cell_height) + FLOATING_PANE.title_height;
+    PaneFrame {
+        x: (width - frame_width) / 2.0,
+        y: (height - frame_height) / 2.0,
+        width: frame_width,
+        height: frame_height,
+    }
+}
+
+// PseudoTerminal.m -moveActiveFloatingPaneByColumns:rows: and §6.2: the Move Divider items
+// resize a float by one cell.
+fn nudge_float(handles: &Handles, columns: f32, rows: f32, resize: bool) {
+    let mut workspace = handles.workspace;
+    let Some(float) = workspace.peek().active_float().cloned() else {
+        return;
+    };
+    let cell = float_cell(handles, float.id);
+    let (dx, dy) = (columns * cell.0, rows * cell.1);
+    let mut frame = float.frame;
+    if resize {
+        frame.width += dx;
+        frame.height += dy;
+    } else {
+        frame.x += dx;
+        frame.y += dy;
+    }
+    let frame = clamped(frame, *handles.body_size.peek(), cell);
+    workspace.write().set_float_frame(float.id, frame);
+}
+
 fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
     match node {
         Pane::Leaf(id) => match painting.sessions.get(id) {
@@ -1304,6 +1427,9 @@ fn use_live_menu(handles: &Handles) {
     let state = handles.workspace.read();
     let tabs = state.tabs.len();
     let split = state.active_tab().is_some_and(|tab| tab.root.is_split());
+    let floating = state.active_float().is_some();
+    let has_floats = state.active_tab().is_some_and(|tab| !tab.floats.is_empty());
+    let floats_hidden = state.active_tab().is_some_and(|tab| tab.floats_hidden);
     let zoomed = state.active_tab().is_some_and(|tab| tab.zoomed);
     let grouped = state.active_group().is_some();
     let titles = state.tab_titles();
@@ -1517,7 +1643,25 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::PREVIOUS_TAB, tabs > 1);
     use_menu_enabled(menu::MOVE_TAB_LEFT.id, tabs > 1 && unlocked);
     use_menu_enabled(menu::MOVE_TAB_RIGHT.id, tabs > 1 && unlocked);
-    use_menu_enabled(menu::SPLIT_PANE, split);
+    use_menu_enabled(menu::SPLIT_PANE, split || floating);
+    for id in [
+        menu::BRING_TO_FRONT.id,
+        menu::SEND_TO_BACK.id,
+        menu::DOCK_FLOATING_PANE.id,
+        menu::MOVE_FLOATING_PANE_UP,
+        menu::MOVE_FLOATING_PANE_DOWN,
+        menu::MOVE_FLOATING_PANE_LEFT,
+        menu::MOVE_FLOATING_PANE_RIGHT,
+    ] {
+        use_menu_enabled(
+            id,
+            floating && (id == menu::BRING_TO_FRONT.id || id == menu::SEND_TO_BACK.id || unlocked),
+        );
+    }
+    use_menu_enabled(menu::HIDE_FLOATING_PANES.id, has_floats);
+    use_menu_checked(menu::HIDE_FLOATING_PANES.id, floats_hidden);
+    use_menu_enabled(menu::SPLIT_VERTICALLY.id, unlocked && !floating);
+    use_menu_enabled(menu::SPLIT_HORIZONTALLY.id, unlocked && !floating);
     use_submenu_items(menu::SELECT_TAB, menu::select_tab_items(&titles, active));
     let profiles = handles.defaults.read().profiles();
     use_profiles_menu(
@@ -1844,7 +1988,7 @@ fn pick_entries(handles: &Handles, picker: Picker) -> Vec<(String, Choice)> {
             workspace
                 .tabs
                 .iter()
-                .flat_map(|tab| tab.root.leaves())
+                .flat_map(Tab::sessions)
                 .filter_map(|id| {
                     let profile = &sessions.get(&id)?.profile();
                     let label = format!("{} — {profile}", workspace.title(id));
@@ -2740,7 +2884,7 @@ fn search_globally(handles: &Handles, defaults: &Defaults) {
     let found = workspace
         .tabs
         .iter()
-        .flat_map(|tab| tab.root.leaves())
+        .flat_map(Tab::sessions)
         .filter_map(|id| {
             let snippets = sessions.get(&id)?.snippets(&pattern);
             (!snippets.is_empty()).then(|| SessionResults {
@@ -3312,33 +3456,65 @@ fn tab_layout(handles: &Handles, tab: &Tab) -> Option<TabLayout> {
         let session = sessions.get(&id)?;
         Some((session.profile(), session.working_directory()))
     };
+    let floats = tab
+        .floats
+        .iter()
+        .filter_map(|float| {
+            Some(SavedFloat {
+                session: arrangement::capture(&Pane::Leaf(float.id), &describe)?,
+                x: float.frame.x,
+                y: float.frame.y,
+                width: float.frame.width,
+                height: float.frame.height,
+            })
+        })
+        .collect();
     Some(TabLayout {
         title: tab.title.clone(),
         root: arrangement::capture(&tab.root, &describe)?,
         group: tab.group.clone(),
+        floats,
+        floats_hidden: tab.floats_hidden,
     })
 }
 
 fn open_layout(handles: &Handles, events: &Events, tab: TabLayout) -> bool {
-    let root = arrangement::build(&tab.root, &mut |profile, directory| {
+    let mut launch = |profile: &str, directory: Option<PathBuf>| {
         let mut launch = handles.launch(profile, None);
         if directory.is_some() {
             launch.directory = directory;
         }
         spawn(handles, events, launch)
-    });
-    let Some(root) = root else {
+    };
+    let Some(root) = arrangement::build(&tab.root, &mut launch) else {
         return false;
     };
-    let active = root.leaves()[0];
+    let floats = tab
+        .floats
+        .iter()
+        .filter_map(
+            |saved| match arrangement::build(&saved.session, &mut launch)? {
+                Pane::Leaf(id) => Some(Float {
+                    id,
+                    frame: PaneFrame {
+                        x: saved.x,
+                        y: saved.y,
+                        width: saved.width,
+                        height: saved.height,
+                    },
+                }),
+                Pane::Split { .. } => None,
+            },
+        )
+        .collect();
     let mut workspace = handles.workspace;
-    workspace.write().restore(Tab {
+    workspace.write().restore(Tab::restored(
         root,
-        active,
-        zoomed: false,
-        title: tab.title,
-        group: tab.group,
-    });
+        tab.title,
+        tab.group,
+        floats,
+        tab.floats_hidden,
+    ));
     true
 }
 
@@ -3393,7 +3569,7 @@ fn request_close(handles: &Handles, closing: Closing) {
         Closing::Session(id) => vec![id],
         Closing::TabOf(id) => workspace
             .tab_of(id)
-            .map(|index| workspace.tabs[index].root.leaves())
+            .map(|index| workspace.tabs[index].sessions())
             .unwrap_or_default(),
         Closing::Window => workspace.receivers(Broadcast::AllTabs),
     };
@@ -3430,7 +3606,7 @@ fn close_now(handles: &Handles, closing: Closing) {
         (Closing::Session(id), Some(tab), _) => {
             bury(
                 handles,
-                if tab.root.is_split() {
+                if tab.root.is_split() || !tab.floats.is_empty() {
                     Tab::single(id)
                 } else {
                     tab
@@ -3448,7 +3624,7 @@ fn close_now(handles: &Handles, closing: Closing) {
 }
 
 fn bury(handles: &Handles, tab: Tab) {
-    let ids = tab.root.leaves();
+    let ids = tab.sessions();
     let sessions = ids
         .iter()
         .filter_map(|id| handles.sessions.peek().get(id).cloned())
@@ -4390,11 +4566,43 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
                 workspace.write().focus_toward(toward);
             }
         }
+        menu::DIVIDER_UP | menu::DIVIDER_DOWN | menu::DIVIDER_LEFT | menu::DIVIDER_RIGHT
+            if workspace.peek().active_float().is_some() =>
+        {
+            if !*handles.layout_locked.peek() {
+                let (columns, rows) = match id {
+                    menu::DIVIDER_UP => (0.0, -1.0),
+                    menu::DIVIDER_DOWN => (0.0, 1.0),
+                    menu::DIVIDER_LEFT => (-1.0, 0.0),
+                    _ => (1.0, 0.0),
+                };
+                nudge_float(handles, columns, rows, true);
+            }
+        }
         menu::DIVIDER_UP | menu::DIVIDER_DOWN | menu::DIVIDER_LEFT | menu::DIVIDER_RIGHT => {
             if let Some(toward) = toward {
                 workspace.write().move_divider(toward, DIVIDER_STEP);
             }
         }
+        menu::MOVE_FLOATING_PANE_UP => nudge_float(handles, 0.0, -1.0, false),
+        menu::MOVE_FLOATING_PANE_DOWN => nudge_float(handles, 0.0, 1.0, false),
+        menu::MOVE_FLOATING_PANE_LEFT => nudge_float(handles, -1.0, 0.0, false),
+        menu::MOVE_FLOATING_PANE_RIGHT => nudge_float(handles, 1.0, 0.0, false),
+        _ if id == menu::NEW_FLOATING_PANE.id => {
+            let profile = handles.current_profile();
+            let previous = active
+                .as_ref()
+                .and_then(|session| session.working_directory());
+            let launch = handles.launch(&profile, previous);
+            if let Some(id) = spawn(handles, events, launch) {
+                let frame = new_float_frame(handles, &profile);
+                workspace.write().open_float(id, frame);
+            }
+        }
+        _ if id == menu::BRING_TO_FRONT.id => workspace.write().restack_active_float(true),
+        _ if id == menu::SEND_TO_BACK.id => workspace.write().restack_active_float(false),
+        _ if id == menu::DOCK_FLOATING_PANE.id => workspace.write().dock_active_float(),
+        _ if id == menu::HIDE_FLOATING_PANES.id => workspace.write().toggle_floats_hidden(),
         _ => {}
     }
 }

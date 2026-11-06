@@ -3534,3 +3534,56 @@ ventana; ⌃A en el campo del nombre.
 **Difiere de iTerm2:** sin menú contextual de la pestaña (añadir a un grupo
 existente, renombrar el grupo) ni arrastre de pestañas; el nombre no aparece
 seleccionado (BK-043).
+
+## Fase 82 — Paneles flotantes
+
+### Plan
+
+`docs/floating-panes-design.md` de iTerm2, para paneles nativos (sin tmux):
+
+1. **Modelo.** Cada pestaña guarda sus flotantes de atrás adelante y si están
+   ocultos. Las sesiones de una pestaña son las del árbol más los flotantes;
+   difusión, campanas, cierre y Open Quickly las cuentan a todas. Un flotante
+   no se divide, y si se cierra el último panel del árbol el flotante de
+   delante ocupa su sitio (§3.2).
+2. **Crear.** Shell › New Floating Pane with Current Profile (⌥⌘N): el 80 % de
+   la pestaña, en celdas enteras de su fuente, centrado (§5).
+3. **Mover y redimensionar.** La barra de título lo arrastra y una banda de
+   6 pt lo redimensiona por bordes y esquinas, siempre dentro de la pestaña y
+   con al menos 2×2 celdas. Window › Floating Panes › Move Floating Pane… lo
+   mueve una celda, y Move Divider… lo redimensiona una celda (§6.2).
+4. **Foco y orden.** Pulsar un flotante lo activa y lo sube. Bring to Front y
+   Send to Back cambian el orden. El contorno es el acento si está activo
+   (§4.3). Next y Previous Pane recorren el árbol y luego los flotantes
+   (§6.4).
+5. **Ocultar.** Hide Floating Panes los oculta y pasa el foco al último panel
+   del árbol; entrar en un flotante los vuelve a mostrar (§6.5).
+6. **Acoplar.** Dock Floating Pane lo pone a la derecha del último panel del
+   árbol usado (`-dockFloatingSession:`).
+7. Lock Layout bloquea crear, mover, redimensionar y acoplar.
+8. Las disposiciones guardan los flotantes, su marco y si están ocultos
+   (§10.1).
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| ⌥⌘N abre el flotante centrado y escribe en él | ✓ | `fase82-flotante.png` |
+| Arrastrar la barra lo mueve y se queda dentro de la pestaña | ✓ | — |
+| Pulsar el panel de debajo le da el foco; el contorno pasa a neutro | ✓ | — |
+| Move Floating Pane Right ×5 y Move Divider Down lo mueven y lo agrandan | ✓ | — |
+| Hide Floating Panes lo oculta; otra vez lo muestra | ✓ | — |
+| Dock Floating Pane lo pone a la derecha y conserva el foco | ✓ | `fase82-flotante.png` |
+| Guardar y abrir una disposición conserva el flotante y su marco | ✓ | — |
+
+**No probado:** con el kit tal cual; redimensionar con la banda; Bring to
+Front y Send to Back con dos flotantes; Lock Layout con flotantes.
+
+**Difiere de iTerm2:** sin indicador de flotantes ocultos ni lectura del
+tamaño al redimensionar; el marco no se ajusta a celdas al arrastrar; al
+cambiar el tamaño de la ventana el flotante solo se recorta, no recuerda el
+tamaño deseado; sin maximizar un flotante, sin menú en su barra de título y
+sin integración con tmux.

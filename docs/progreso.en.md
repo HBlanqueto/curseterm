@@ -3510,3 +3510,54 @@ modes. Tests for the logic in `tab_groups.rs`.
 
 **Differs from iTerm2:** no tab context menu (add to an existing group,
 rename the group) nor tab dragging; the name does not show selected (BK-043).
+
+## Phase 82 — Floating panes
+
+### Plan
+
+iTerm2's `docs/floating-panes-design.md`, for native panes (no tmux):
+
+1. **Model.** Each tab keeps its floats back to front and whether they are
+   hidden. A tab's sessions are the tree's plus the floats; broadcast, bells,
+   closing and Open Quickly count them all. A float cannot be split, and if
+   the tree's last pane closes the front float takes its place (§3.2).
+2. **Create.** Shell › New Floating Pane with Current Profile (⌥⌘N): 80 % of
+   the tab, in whole cells of its font, centred (§5).
+3. **Move and resize.** The title bar drags it and a 6 pt band resizes it by
+   edges and corners, always inside the tab and at least 2×2 cells.
+   Window › Floating Panes › Move Floating Pane… moves it one cell, and Move
+   Divider… resizes it one cell (§6.2).
+4. **Focus and order.** Pressing a float activates and raises it. Bring to
+   Front and Send to Back change the order. The outline is the accent when
+   active (§4.3). Next and Previous Pane go through the tree, then the floats
+   (§6.4).
+5. **Hide.** Hide Floating Panes hides them and hands the focus to the tree's
+   last pane; entering a float shows them again (§6.5).
+6. **Dock.** Dock Floating Pane puts it to the right of the tree's pane used
+   last (`-dockFloatingSession:`).
+7. Lock Layout blocks creating, moving, resizing and docking.
+8. Arrangements keep the floats, their frame and whether they are hidden
+   (§10.1).
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| ⌥⌘N opens the float centred and types into it | ✓ | `fase82-flotante.png` |
+| Dragging the title bar moves it and keeps it inside the tab | ✓ | — |
+| Pressing the pane below gives it the focus; the outline turns neutral | ✓ | — |
+| Move Floating Pane Right ×5 and Move Divider Down move and grow it | ✓ | — |
+| Hide Floating Panes hides it; again shows it | ✓ | — |
+| Dock Floating Pane puts it on the right and keeps the focus | ✓ | `fase82-flotante.png` |
+| Saving and opening an arrangement keeps the float and its frame | ✓ | — |
+
+**Not tested:** the kit as is; resizing with the band; Bring to Front and
+Send to Back with two floats; Lock Layout with floats.
+
+**Differs from iTerm2:** no hidden-floats indicator nor size readout while
+resizing; the frame does not snap to cells while dragging; when the window
+resizes the float is only clipped and does not remember its desired size; no
+maximizing a float, no menu in its title bar and no tmux integration.

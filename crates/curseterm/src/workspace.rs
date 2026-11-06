@@ -3,6 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use barrier_kit_next::views::floating_pane::PaneFrame;
+
 use crate::advanced;
 use crate::config::APP_NAME;
 use crate::panes::{Axis, Pane, Toward};
@@ -16,6 +18,17 @@ pub struct Tab {
     pub zoomed: bool,
     pub title: Option<String>,
     pub group: Option<TabGroup>,
+    pub floats: Vec<Float>,
+    pub floats_hidden: bool,
+    last_tiled: Option<SessionId>,
+}
+
+// floating-panes-design.md §3: a float holds one session above the tiled panes; the list goes
+// back to front.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Float {
+    pub id: SessionId,
+    pub frame: PaneFrame,
 }
 
 // iTermTabGroup.swift: every member carries the group's name, colour and collapsed state.
@@ -35,6 +48,66 @@ impl Tab {
             zoomed: false,
             title: None,
             group: None,
+            floats: Vec::new(),
+            floats_hidden: false,
+            last_tiled: None,
+        }
+    }
+
+    pub fn restored(
+        root: Pane,
+        title: Option<String>,
+        group: Option<TabGroup>,
+        floats: Vec<Float>,
+        floats_hidden: bool,
+    ) -> Self {
+        let active = root.leaves()[0];
+        Self {
+            root,
+            active,
+            title,
+            group,
+            floats,
+            floats_hidden,
+            ..Self::single(active)
+        }
+    }
+
+    // The tiled panes, then the floats back to front.
+    pub fn sessions(&self) -> Vec<SessionId> {
+        let mut sessions = self.root.leaves();
+        sessions.extend(self.floats.iter().map(|float| float.id));
+        sessions
+    }
+
+    pub fn is_float(&self, id: SessionId) -> bool {
+        self.floats.iter().any(|float| float.id == id)
+    }
+
+    // PTYTab.m -mostRecentlyActiveTiledSession.
+    pub fn tiled_target(&self) -> SessionId {
+        let leaves = self.root.leaves();
+        self.last_tiled
+            .filter(|id| leaves.contains(id))
+            .or_else(|| leaves.contains(&self.active).then_some(self.active))
+            .unwrap_or(leaves[0])
+    }
+
+    // §6.5: focus entering a float unhides the floats.
+    fn activate(&mut self, id: SessionId) {
+        if !self.is_float(self.active) {
+            self.last_tiled = Some(self.active);
+        }
+        self.active = id;
+        if self.is_float(id) {
+            self.floats_hidden = false;
+        }
+    }
+
+    fn raise(&mut self, id: SessionId) {
+        if let Some(at) = self.floats.iter().position(|float| float.id == id) {
+            let float = self.floats.remove(at);
+            self.floats.push(float);
         }
     }
 }
@@ -79,11 +152,8 @@ impl Workspace {
     pub fn receivers(&self, broadcast: Broadcast) -> Vec<SessionId> {
         match broadcast {
             Broadcast::Off => self.active_session().into_iter().collect(),
-            Broadcast::CurrentTab => self
-                .active_tab()
-                .map(|tab| tab.root.leaves())
-                .unwrap_or_default(),
-            Broadcast::AllTabs => self.tabs.iter().flat_map(|tab| tab.root.leaves()).collect(),
+            Broadcast::CurrentTab => self.active_tab().map(Tab::sessions).unwrap_or_default(),
+            Broadcast::AllTabs => self.tabs.iter().flat_map(Tab::sessions).collect(),
         }
     }
 
@@ -144,7 +214,8 @@ impl Workspace {
         let Some(tab) = self.active_tab_mut() else {
             return false;
         };
-        let split = tab.root.split(tab.active, id, axis);
+        // floating-panes-design.md §6.6: a float cannot be split.
+        let split = !tab.is_float(tab.active) && tab.root.split(tab.active, id, axis);
         if split {
             tab.active = id;
             tab.zoomed = false;
@@ -162,6 +233,25 @@ impl Workspace {
     pub fn detach(&mut self, id: SessionId) -> Option<Closed> {
         let index = self.tab_of(id)?;
         let tab = &mut self.tabs[index];
+        if let Some(at) = tab.floats.iter().position(|float| float.id == id) {
+            tab.floats.remove(at);
+            // §6.3: the next float in z-order, else the last active tiled session.
+            if tab.active == id {
+                tab.active = tab
+                    .floats
+                    .last()
+                    .map_or_else(|| tab.tiled_target(), |float| float.id);
+            }
+            return Some(Closed::Pane);
+        }
+        // §3.2: a tab keeps a tiled session, so the topmost float takes the last one's place.
+        if tab.root == Pane::Leaf(id)
+            && let Some(float) = tab.floats.pop()
+        {
+            tab.root = Pane::Leaf(float.id);
+            tab.active = float.id;
+            return Some(Closed::Pane);
+        }
         if tab.root == Pane::Leaf(id) {
             self.remove_tab(index);
             return Some(if self.tabs.is_empty() {
@@ -212,7 +302,7 @@ impl Workspace {
         let Some(tab) = self.tabs.get(index) else {
             return Vec::new();
         };
-        let sessions = tab.root.leaves();
+        let sessions = tab.sessions();
         for id in &sessions {
             self.forget(*id);
         }
@@ -245,7 +335,7 @@ impl Workspace {
 
     fn hear_active_tab(&mut self) {
         if let Some(tab) = self.tabs.get(self.active) {
-            for id in tab.root.leaves() {
+            for id in tab.sessions() {
                 self.bells.remove(&id);
             }
         }
@@ -254,20 +344,21 @@ impl Workspace {
     pub fn rang_tabs(&self) -> Vec<bool> {
         self.tabs
             .iter()
-            .map(|tab| tab.root.leaves().iter().any(|id| self.bells.contains(id)))
+            .map(|tab| tab.sessions().iter().any(|id| self.bells.contains(id)))
             .collect()
     }
 
     pub fn tab_of(&self, id: SessionId) -> Option<usize> {
         self.tabs
             .iter()
-            .position(|tab| tab.root.leaves().contains(&id))
+            .position(|tab| tab.sessions().contains(&id))
     }
 
     pub fn focus(&mut self, id: SessionId) {
         if let Some(index) = self.tab_of(id) {
             self.active = index;
-            self.tabs[index].active = id;
+            self.tabs[index].activate(id);
+            self.tabs[index].raise(id);
             self.hear_active_tab();
         }
     }
@@ -427,9 +518,74 @@ impl Workspace {
         }
     }
 
+    // §6.4: Next and Previous Pane go through the tiled panes, then the floats in z-order.
     pub fn cycle_pane(&mut self, step: isize) {
         if let Some(tab) = self.active_tab_mut() {
-            tab.active = tab.root.cycle(tab.active, step);
+            let order = tab.sessions();
+            let count = order.len() as isize;
+            let at = order.iter().position(|id| *id == tab.active).unwrap_or(0) as isize;
+            let next = order[(at + step).rem_euclid(count) as usize];
+            tab.activate(next);
+        }
+    }
+
+    pub fn open_float(&mut self, id: SessionId, frame: PaneFrame) {
+        if let Some(tab) = self.active_tab_mut() {
+            tab.floats.push(Float { id, frame });
+            tab.activate(id);
+        }
+    }
+
+    pub fn set_float_frame(&mut self, id: SessionId, frame: PaneFrame) {
+        let float = self
+            .tabs
+            .iter_mut()
+            .flat_map(|tab| tab.floats.iter_mut())
+            .find(|float| float.id == id);
+        if let Some(float) = float {
+            float.frame = frame;
+        }
+    }
+
+    pub fn active_float(&self) -> Option<&Float> {
+        let tab = self.active_tab()?;
+        tab.floats.iter().find(|float| float.id == tab.active)
+    }
+
+    // PTYTab.m -bringFloatingPaneToFront: and -sendFloatingPaneToBack:.
+    pub fn restack_active_float(&mut self, to_front: bool) {
+        if let Some(tab) = self.active_tab_mut()
+            && let Some(at) = tab.floats.iter().position(|float| float.id == tab.active)
+        {
+            let float = tab.floats.remove(at);
+            if to_front {
+                tab.floats.push(float);
+            } else {
+                tab.floats.insert(0, float);
+            }
+        }
+    }
+
+    // PseudoTerminal.m -toggleFloatingPanesHidden: and §6.3: hiding an active float hands the
+    // focus to the last active tiled session.
+    pub fn toggle_floats_hidden(&mut self) {
+        if let Some(tab) = self.active_tab_mut() {
+            tab.floats_hidden = !tab.floats_hidden;
+            if tab.floats_hidden && tab.is_float(tab.active) {
+                tab.active = tab.tiled_target();
+            }
+        }
+    }
+
+    // PseudoTerminal.m -dockFloatingSession:: to the right of the tiled pane used last.
+    pub fn dock_active_float(&mut self) {
+        if let Some(tab) = self.active_tab_mut()
+            && let Some(at) = tab.floats.iter().position(|float| float.id == tab.active)
+        {
+            let id = tab.floats.remove(at).id;
+            let target = tab.tiled_target();
+            tab.root.split(target, id, Axis::Row);
+            tab.zoomed = false;
         }
     }
 
@@ -446,7 +602,9 @@ impl Workspace {
     }
 
     pub fn toggle_zoom(&mut self) {
-        if let Some(tab) = self.active_tab_mut() {
+        if let Some(tab) = self.active_tab_mut()
+            && !tab.is_float(tab.active)
+        {
             tab.zoomed = !tab.zoomed && tab.root.is_split();
         }
     }
@@ -512,6 +670,21 @@ mod tests {
         }
         assert_eq!(workspace.close_tab(0), vec![1]);
         assert_eq!(workspace.active_session(), Some(3));
+    }
+
+    #[test]
+    fn floats_come_after_the_tiled_panes_and_the_last_tiled_pane_is_never_left_empty() {
+        let mut workspace = Workspace::default();
+        workspace.open_tab(1);
+        workspace.open_float(2, PaneFrame::default());
+        assert_eq!(workspace.tabs[0].sessions(), vec![1, 2]);
+        workspace.cycle_pane(1);
+        assert_eq!(workspace.active_session(), Some(1));
+        workspace.focus(2);
+        assert!(!workspace.split(4, Axis::Row));
+        assert_eq!(workspace.close(1), Some(Closed::Pane));
+        assert_eq!(workspace.tabs[0].root.leaves(), vec![2]);
+        assert!(workspace.tabs[0].floats.is_empty());
     }
 
     #[test]

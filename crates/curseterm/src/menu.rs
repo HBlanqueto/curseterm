@@ -254,7 +254,13 @@ pub const PROFILE_PREFIX: &str = "profile:";
 
 // docs/notes-3.7.0beta4.txt: Lock Layout stops splitting, adding, closing and reordering tabs, and
 // closing or moving panes; resizing panes, new windows and closing the window still work.
-pub const LAYOUT_CHANGES: [&str; 15] = [
+pub const LAYOUT_CHANGES: [&str; 21] = [
+    NEW_FLOATING_PANE.id,
+    DOCK_FLOATING_PANE.id,
+    MOVE_FLOATING_PANE_UP,
+    MOVE_FLOATING_PANE_DOWN,
+    MOVE_FLOATING_PANE_LEFT,
+    MOVE_FLOATING_PANE_RIGHT,
     NEW_TAB.id,
     NEW_TAB_PROFILE.id,
     DUPLICATE_TAB.id,
@@ -280,6 +286,19 @@ pub fn changes_layout(id: &str) -> bool {
             .any(|prefix| id.starts_with(prefix))
 }
 pub const SPLIT_PANE: &str = "split-pane";
+pub const NEW_FLOATING_PANE: Action = Action::new("new-floating-pane", || tr!("new-floating-pane"))
+    .shortcut(super_with(Modifiers::ALT, 'n'));
+pub const FLOATING_PANES_MENU: &str = "floating-panes-menu";
+pub const BRING_TO_FRONT: Action = Action::new("bring-to-front", || tr!("bring-to-front"));
+pub const SEND_TO_BACK: Action = Action::new("send-to-back", || tr!("send-to-back"));
+pub const DOCK_FLOATING_PANE: Action =
+    Action::new("dock-floating-pane", || tr!("dock-floating-pane"));
+pub const HIDE_FLOATING_PANES: Action =
+    Action::new("hide-floating-panes", || tr!("hide-floating-panes"));
+pub const MOVE_FLOATING_PANE_UP: &str = "move-floating-pane-up";
+pub const MOVE_FLOATING_PANE_DOWN: &str = "move-floating-pane-down";
+pub const MOVE_FLOATING_PANE_LEFT: &str = "move-floating-pane-left";
+pub const MOVE_FLOATING_PANE_RIGHT: &str = "move-floating-pane-right";
 pub const NEXT_PANE: Action =
     Action::new("next-pane", || tr!("next-pane")).shortcut(super_key(']'));
 pub const PREVIOUS_PANE: Action =
@@ -386,6 +405,7 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
                 DUPLICATE_WINDOW.item(true),
                 MenuItem::Separator,
                 SPLIT_HORIZONTALLY.item(true),
+                NEW_FLOATING_PANE.item(true),
                 SPLIT_VERTICALLY.item(true),
                 MenuItem::Separator,
                 SAVE_CONTENTS.item(true),
@@ -613,6 +633,26 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
                     ],
                 ),
                 submenu(SPLIT_PANE, tr!("split-pane"), split_pane_items()),
+                submenu(
+                    FLOATING_PANES_MENU,
+                    tr!("floating-panes-menu"),
+                    vec![
+                        BRING_TO_FRONT.item(false),
+                        SEND_TO_BACK.item(false),
+                        MenuItem::Separator,
+                        DOCK_FLOATING_PANE.item(false),
+                        HIDE_FLOATING_PANES.item_with(false, CheckState::Checkbox(false)),
+                        MenuItem::Separator,
+                        MenuItem::action(MOVE_FLOATING_PANE_UP, tr!("move-floating-pane-up"))
+                            .with_enabled(false),
+                        MenuItem::action(MOVE_FLOATING_PANE_DOWN, tr!("move-floating-pane-down"))
+                            .with_enabled(false),
+                        MenuItem::action(MOVE_FLOATING_PANE_LEFT, tr!("move-floating-pane-left"))
+                            .with_enabled(false),
+                        MenuItem::action(MOVE_FLOATING_PANE_RIGHT, tr!("move-floating-pane-right"))
+                            .with_enabled(false),
+                    ],
+                ),
                 MenuItem::Separator,
                 submenu(
                     ARRANGEMENTS_MENU,

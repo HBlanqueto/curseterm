@@ -20,6 +20,20 @@ pub struct TabLayout {
     pub root: Layout,
     #[serde(default)]
     pub group: Option<TabGroup>,
+    #[serde(default)]
+    pub floats: Vec<SavedFloat>,
+    #[serde(default)]
+    pub floats_hidden: bool,
+}
+
+// floating-panes-design.md §10.1: a float's session and its frame in the tab.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SavedFloat {
+    pub session: Layout,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -117,6 +131,8 @@ mod tests {
             title: None,
             root: layout,
             group: None,
+            floats: Vec::new(),
+            floats_hidden: false,
         })
         .expect("serialize");
         let back: TabLayout = toml::from_str(&text).expect("deserialize");
