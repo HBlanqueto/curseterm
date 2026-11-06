@@ -636,3 +636,25 @@ pub const TRIGGER_EDITOR: TriggerEditorMetrics = TriggerEditorMetrics {
     action_width: 200.0,
     parameter_width: 220.0,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ArrangementPreviewMetrics {
+    pub height: f32,
+    pub padding: f32,
+    pub tab_height: f32,
+    pub backdrop: Rgba,
+    pub screen: Rgba,
+    pub window: Rgba,
+    pub frame: Rgba,
+}
+
+// ArrangementPreviewView.m: light gray behind, the screen in (0.270, 0.545, 0.811), black frames.
+pub const ARRANGEMENT_PREVIEW: ArrangementPreviewMetrics = ArrangementPreviewMetrics {
+    height: 220.0,
+    padding: 16.0,
+    tab_height: 18.0,
+    backdrop: Rgba::rgb8(170, 170, 170),
+    screen: Rgba::rgb8(69, 139, 207),
+    window: Rgba::rgb8(255, 255, 255),
+    frame: Rgba::rgb8(0, 0, 0),
+};

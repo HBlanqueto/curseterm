@@ -27,6 +27,8 @@ pub struct Defaults {
     pub copy_on_select: bool,
     pub focus_follows_mouse: bool,
     pub arrangements: Vec<Arrangement>,
+    pub default_arrangement: Option<String>,
+    pub open_arrangement_at_startup: bool,
     pub mark_alert: MarkAlert,
     pub alert_on_offscreen_marks: bool,
     pub theme: Theme,
@@ -50,6 +52,8 @@ impl Default for Defaults {
             copy_on_select: true,
             focus_follows_mouse: false,
             arrangements: Vec::new(),
+            default_arrangement: None,
+            open_arrangement_at_startup: false,
             mark_alert: MarkAlert::default(),
             alert_on_offscreen_marks: false,
             theme: Theme::default(),
@@ -64,6 +68,59 @@ impl Default for Defaults {
             // iTermPreferences.m: ShowFullScreenTabBar YES.
             show_tabs_in_fullscreen: true,
         }
+    }
+}
+
+impl Defaults {
+    // WindowArrangements.m +allNames: sorted by name.
+    pub fn arrangement_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .arrangements
+            .iter()
+            .map(|saved| saved.name.clone())
+            .collect();
+        names.sort();
+        names
+    }
+
+    // WindowArrangements.m +setArrangement:withName:: the first one saved becomes the default.
+    pub fn save_arrangement(&mut self, arrangement: Arrangement) {
+        self.arrangements
+            .retain(|saved| saved.name != arrangement.name);
+        if self.arrangements.is_empty() {
+            self.default_arrangement = Some(arrangement.name.clone());
+        }
+        self.arrangements.push(arrangement);
+    }
+
+    // WindowArrangements.m -deleteSelectedArrangement: and -setDefaultIfNeededAtRow:.
+    pub fn delete_arrangement(&mut self, name: &str) {
+        let row = self
+            .arrangement_names()
+            .iter()
+            .position(|saved| saved == name);
+        self.arrangements.retain(|saved| saved.name != name);
+        if self.default_arrangement.as_deref() == Some(name) {
+            let names = self.arrangement_names();
+            self.default_arrangement = row
+                .and_then(|row| names.get(row.min(names.len().saturating_sub(1))))
+                .cloned();
+        }
+    }
+
+    // WindowArrangements.m -controlTextDidEndEditing:; a name already taken is refused.
+    pub fn rename_arrangement(&mut self, old: &str, new: &str) -> bool {
+        if new.is_empty() || self.arrangements.iter().any(|saved| saved.name == new) {
+            return false;
+        }
+        let Some(saved) = self.arrangements.iter_mut().find(|saved| saved.name == old) else {
+            return false;
+        };
+        saved.name = new.to_string();
+        if self.default_arrangement.as_deref() == Some(old) {
+            self.default_arrangement = Some(new.to_string());
+        }
+        true
     }
 }
 

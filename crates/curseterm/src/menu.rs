@@ -659,6 +659,21 @@ pub fn indexed_items(prefix: &str, names: &[String]) -> Vec<MenuItem> {
         .collect()
 }
 
+// iTermApplicationDelegate.m kRestoreDefaultWindowArrangementShortcut: ⇧⌘R on the default.
+pub fn arrangement_items(names: &[String], default: Option<&str>) -> Vec<MenuItem> {
+    indexed_items(ARRANGEMENT_PREFIX, names)
+        .into_iter()
+        .zip(names)
+        .map(|(item, name)| {
+            if Some(name.as_str()) == default {
+                item.with_shortcut("Shift+Super+R")
+            } else {
+                item
+            }
+        })
+        .collect()
+}
+
 pub fn profile_items(profiles: &[String]) -> Vec<MenuItem> {
     let open = [OPEN_PROFILES.item(true), MenuItem::Separator];
     let listed = profiles.iter().enumerate().map(|(index, name)| {

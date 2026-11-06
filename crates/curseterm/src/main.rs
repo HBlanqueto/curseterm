@@ -1,6 +1,7 @@
 mod activity;
 mod advanced_paste;
 mod arrangement;
+mod arrangements_pane;
 mod auxiliary;
 mod clock;
 mod command_history;
@@ -88,8 +89,15 @@ fn main() -> ExitCode {
         },
         _ => None,
     };
+    let startup = arguments
+        .is_empty()
+        .then(windows::default_arrangement_at_startup)
+        .flatten();
     let _registration = windows::register();
-    let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
+    let arguments: Vec<&str> = match &startup {
+        Some(name) => vec!["--arrangement", name],
+        None => arguments.iter().map(String::as_str).collect(),
+    };
     let (app, options) = windows::describe(&arguments);
     let result = run_window(app, options);
     match result {

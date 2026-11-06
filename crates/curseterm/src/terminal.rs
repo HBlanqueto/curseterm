@@ -1323,16 +1323,16 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::JUMP_TO_MARK.id, marks);
     use_menu_enabled(menu::NEXT_MARK, marks);
     use_menu_enabled(menu::PREVIOUS_MARK, marks);
-    let arrangements: Vec<String> = handles
-        .defaults
-        .read()
-        .arrangements
-        .iter()
-        .map(|saved| saved.name.clone())
-        .collect();
+    let (arrangements, default_arrangement) = {
+        let defaults = handles.defaults.read();
+        (
+            defaults.arrangement_names(),
+            defaults.default_arrangement.clone(),
+        )
+    };
     use_submenu_items(
         menu::RESTORE_ARRANGEMENT,
-        menu::indexed_items(menu::ARRANGEMENT_PREFIX, &arrangements),
+        menu::arrangement_items(&arrangements, default_arrangement.as_deref()),
     );
     use_submenu_items(
         menu::RESTORE_ARRANGEMENT_TABS,
@@ -3031,11 +3031,10 @@ fn save_arrangement(handles: &Handles, name: &str) {
         .filter_map(|tab| tab_layout(handles, tab))
         .collect();
     change_defaults(|defaults| {
-        defaults.arrangements.retain(|saved| saved.name != name);
-        defaults.arrangements.push(Arrangement {
+        defaults.save_arrangement(Arrangement {
             name: name.to_string(),
             tabs,
-        });
+        })
     });
 }
 
@@ -3456,8 +3455,7 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
     let arrangement = |prefix| {
         id.strip_prefix(prefix)
             .and_then(|index| index.parse::<usize>().ok())
-            .and_then(|index| defaults.arrangements.get(index))
-            .map(|arrangement| arrangement.name.clone())
+            .and_then(|index| defaults.arrangement_names().get(index).cloned())
     };
     let (window, tabs) = (
         arrangement(menu::ARRANGEMENT_PREFIX),

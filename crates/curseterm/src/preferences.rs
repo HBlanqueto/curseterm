@@ -26,6 +26,7 @@ use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Size};
 use vow_design::{CAPTION, HEADLINE, SIDEBAR, SPACE_1, SPACE_3, WINDOW_MIN_SIZE};
 
+use crate::arrangements_pane::ArrangementsPane;
 use crate::auxiliary::on_action;
 use crate::config::{
     APP_ID, AltKey, ClosePrompt, CursorType, Defaults, Profile, SCROLLBACK_LIMIT, SessionEnd,
@@ -91,12 +92,7 @@ impl App for Settings {
                         .tab(
                             Symbol::SlidersVertical,
                             tr!("pane-general"),
-                            switch_pane(
-                                tr!("section-selection"),
-                                tr!("copy-on-select"),
-                                defaults.copy_on_select,
-                                |defaults, on| defaults.copy_on_select = on,
-                            ),
+                            general_pane(&defaults),
                         )
                         .tab(
                             Symbol::CircleHalf,
@@ -127,6 +123,13 @@ impl App for Settings {
                                 .child(bindings_editor(&defaults, Owner::Global)),
                         )
                         .tab(
+                            Symbol::Tv,
+                            tr!("pane-arrangements"),
+                            ArrangementsPane {
+                                defaults: defaults.clone(),
+                            },
+                        )
+                        .tab(
                             Symbol::SquareGrid,
                             tr!("pane-pointer"),
                             switch_pane(
@@ -148,6 +151,30 @@ impl App for Settings {
                 ),
             )
     }
+}
+
+// GeneralPreferencesViewController.m: Startup › Open default window arrangement, and Selection.
+fn general_pane(defaults: &Defaults) -> Rect {
+    let switch = |label, on, apply: fn(&mut Defaults, bool)| {
+        Row::new(label).control(
+            Switch::new(label)
+                .on(on)
+                .on_toggle(move |on: bool| change_defaults(|defaults| apply(defaults, on))),
+        )
+    };
+    rect().padding(Gaps::new_all(SPACE_3)).child(
+        Form::new()
+            .section(Section::titled(tr!("section-startup")).row(switch(
+                tr!("open-arrangement-at-startup"),
+                defaults.open_arrangement_at_startup,
+                |defaults, on| defaults.open_arrangement_at_startup = on,
+            )))
+            .section(Section::titled(tr!("section-selection")).row(switch(
+                tr!("copy-on-select"),
+                defaults.copy_on_select,
+                |defaults, on| defaults.copy_on_select = on,
+            ))),
+    )
 }
 
 fn switch_pane(

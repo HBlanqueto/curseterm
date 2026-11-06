@@ -2824,3 +2824,50 @@ Run Silent Coprocess; sin nombres de trigger, sin el filtro por trabajo ni
 «Use interpolated strings»; Set Mark sin «Stop scrolling»; los colores de
 resaltado son los catorce con nombre de AppKit, no un selector libre; si llega
 un aviso con otro abierto, se descarta en vez de esperar.
+
+## Fase 62 — Ajustes › Arrangements y la disposición por omisión
+
+### Plan
+
+El panel Arrangements de iTerm2 (`WindowArrangements.m`,
+`ArrangementPreviewView.m`) y Startup › Open default window arrangement
+(`GeneralPreferencesViewController.m`, `iTermApplicationDelegate.m`):
+
+1. **Lista** de las disposiciones guardadas, por nombre, con ★ en la que va
+   por omisión; la primera que se guarda pasa a serlo.
+2. **Set Default**, **−** para borrar (si era la de por omisión, pasa a la
+   siguiente) y el **nombre** editable, que no admite uno ya usado.
+3. **Vista previa:** la pantalla en azul sobre gris, y en ella la ventana con
+   sus pestañas y los paneles de la primera.
+4. **Window › Restore Window Arrangement** ordena por nombre y pone ⇧⌘R en la
+   de por omisión.
+5. **Ajustes › General › Startup:** con la casilla, la primera ventana que
+   abre CurseTerm restaura la disposición por omisión.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado y dos disposiciones
+escritas en el `.domain`. `./dev.sh check` limpio en los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| La lista ordena «Aaa simple» antes que «Trabajo»; la vista previa de «Trabajo» muestra las pestañas «editor» y «Tab 2» y los tres paneles al 60/40 | ✓ | `fase62-disposiciones.png` |
+| Set Default: ★ y `default_arrangement` en el `.domain`; el botón se apaga | ✓ | — |
+| Escribir « y mas cosas» al final del nombre: se guarda entero y la ★ lo sigue | ✓ | — |
+| − sobre «Aaa simple»: queda una disposición | ✓ | — |
+| General › Startup activado y CurseTerm abierto sin argumentos: dos pestañas, la primera con sus tres paneles | ✓ | `fase62-arranque.png` |
+| ⇧⌘R: otra ventana con la disposición por omisión | ✓ | — |
+
+**Fallos encontrados y corregidos en la prueba:** al escribir rápido en el
+nombre se perdían o revolvían letras: cada pulsación renombraba y la
+selección seguía al nombre, que el `.domain` aún no tenía. Ahora la
+selección sigue a la posición en la lista guardada y el campo solo se
+reinicia al elegir otra disposición.
+
+**No probado:** con el kit tal cual; borrar la disposición por omisión.
+
+**Difiere de iTerm2:** el nombre se cambia en un campo, no en la propia
+tabla, y un nombre ya usado se rechaza en vez de preguntar si se reemplaza;
+sin deshacer; la vista previa no conoce las pantallas reales ni la posición de
+la ventana (Wayland no las da); al restaurar queda activa la última pestaña,
+no la que lo estaba al guardar.

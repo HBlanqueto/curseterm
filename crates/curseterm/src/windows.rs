@@ -35,6 +35,27 @@ fn is_curseterm(pid: u32) -> bool {
     fs::read_link(format!("/proc/{pid}/exe")).is_ok_and(|path| exe.is_ok_and(|exe| path == exe))
 }
 
+// iTermApplicationDelegate.m kPreferenceKeyOpenArrangementAtStartup: the first window CurseTerm
+// opens restores the default arrangement.
+pub fn default_arrangement_at_startup() -> Option<String> {
+    let defaults: Defaults = barrier_kit::app::load_defaults(APP_ID);
+    let name = defaults
+        .default_arrangement
+        .filter(|_| defaults.open_arrangement_at_startup)?;
+    let running = registry()
+        .and_then(|dir| fs::read_dir(dir).ok())
+        .is_some_and(|entries| {
+            entries.flatten().any(|entry| {
+                entry
+                    .file_name()
+                    .to_str()
+                    .and_then(|pid| pid.parse().ok())
+                    .is_some_and(is_curseterm)
+            })
+        });
+    (!running).then_some(name)
+}
+
 // BK-025: without the GlobalShortcuts portal a desktop shortcut runs `curseterm --hotkey`.
 pub fn toggle_hotkey() -> Option<Registration> {
     let Some(file) = runtime_dir().map(|dir| dir.join("hotkey")) else {

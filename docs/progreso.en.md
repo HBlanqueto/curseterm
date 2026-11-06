@@ -2800,3 +2800,50 @@ Coprocess; no trigger names, job filter or «Use interpolated strings»; Set
 Mark without «Stop scrolling»; the highlight colours are AppKit's fourteen
 named ones, not a free picker; an alert arriving while another is open is
 dropped instead of waiting.
+
+## Phase 62 — Settings › Arrangements and the default arrangement
+
+### Plan
+
+iTerm2's Arrangements pane (`WindowArrangements.m`,
+`ArrangementPreviewView.m`) and Startup › Open default window arrangement
+(`GeneralPreferencesViewController.m`, `iTermApplicationDelegate.m`):
+
+1. **List** of the saved arrangements, by name, with ★ on the default one;
+   the first one saved becomes it.
+2. **Set Default**, **−** to delete (if it was the default, the next one
+   takes over) and the editable **name**, which refuses one already used.
+3. **Preview:** the screen in blue on grey, and on it the window with its
+   tabs and the first tab's panes.
+4. **Window › Restore Window Arrangement** sorts by name and puts ⇧⌘R on the
+   default one.
+5. **Settings › General › Startup:** with the checkbox, the first window
+   CurseTerm opens restores the default arrangement.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit and two arrangements written in
+the `.domain`. `./dev.sh check` clean in both modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| The list sorts «Aaa simple» before «Trabajo»; the preview of «Trabajo» shows the tabs «editor» and «Tab 2» and the three panes at 60/40 | ✓ | `fase62-disposiciones.png` |
+| Set Default: ★ and `default_arrangement` in the `.domain`; the button greys out | ✓ | — |
+| Typing « y mas cosas» at the end of the name: it is saved whole and the ★ follows it | ✓ | — |
+| − on «Aaa simple»: one arrangement is left | ✓ | — |
+| General › Startup on and CurseTerm opened without arguments: two tabs, the first with its three panes | ✓ | `fase62-arranque.png` |
+| ⇧⌘R: another window with the default arrangement | ✓ | — |
+
+**Bug found and fixed while testing:** typing fast in the name lost or
+shuffled letters: each keystroke renamed and the selection followed the
+name, which the `.domain` did not have yet. Now the selection follows the
+position in the saved list and the field only starts over when another
+arrangement is chosen.
+
+**Not tested:** the kit as is; deleting the default arrangement.
+
+**Differs from iTerm2:** the name is changed in a field, not in the table
+itself, and a name already used is refused instead of asking whether to
+replace it; no undo; the preview does not know the real screens or the
+window's position (Wayland gives neither); after restoring, the last tab is
+active, not the one that was when saving.
