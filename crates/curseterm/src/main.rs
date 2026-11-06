@@ -23,6 +23,7 @@ mod osc;
 mod pane_view;
 mod panes;
 mod paste_history;
+mod paste_warning;
 mod pick;
 mod preferences;
 mod session;

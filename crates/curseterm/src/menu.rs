@@ -77,6 +77,9 @@ pub const TRIGGERS_ENABLED: Action = Action::new("triggers-enabled", || tr!("tri
 pub const EDIT_TRIGGERS: Action = Action::new("edit-triggers", || tr!("edit-triggers"));
 pub const RESET: Action = Action::new("reset", || tr!("reset")).shortcut(super_key('r'));
 pub const PASTE_SPECIAL_MENU: &str = "paste-special-menu";
+pub const WARN_MULTI_LINE_PASTE: &str = "warn-multi-line-paste";
+pub const LIMIT_PASTE_WARNING: &str = "limit-paste-warning";
+pub const WARN_ONE_LINE_PASTE: &str = "warn-one-line-paste";
 pub const PASTE_SLOWLY: Action = Action::new("paste-slowly", || tr!("paste-slowly"));
 pub const PASTE_ESCAPED: Action = Action::new("paste-escaped", || tr!("paste-escaped"));
 pub const PASTE_SELECTION: Action = Action::new("paste-selection", || tr!("paste-selection"));
@@ -274,6 +277,13 @@ pub fn terminal_menu(profiles: &[String]) -> AppMenu {
                         PASTE_SLOWLY.item(true),
                         PASTE_ESCAPED.item(true),
                         PASTE_SELECTION.item(false),
+                        MenuItem::Separator,
+                        MenuItem::action(WARN_MULTI_LINE_PASTE, tr!("warn-multi-line-paste"))
+                            .with_check(CheckState::Checkbox(true)),
+                        MenuItem::action(LIMIT_PASTE_WARNING, tr!("limit-paste-warning"))
+                            .with_check(CheckState::Checkbox(true)),
+                        MenuItem::action(WARN_ONE_LINE_PASTE, tr!("warn-one-line-paste"))
+                            .with_check(CheckState::Checkbox(true)),
                     ],
                 ),
                 MenuItem::Separator,

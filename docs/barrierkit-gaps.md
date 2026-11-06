@@ -66,6 +66,7 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-034 | portapapeles | Sin selección primaria | media | Parche 0010 probado |
 | BK-035 | portapapeles | El portapapeles solo ofrece texto plano | baja | Parche 0011 probado |
 | BK-036 | controles | Sin vista de texto de varias líneas | media | Bloque probado `views::text_view` |
+| BK-037 | controles / avisos | `Alert` solo tiene dos botones y no se puede silenciar | baja | Workaround: Paste y Cancel |
 
 ## Gaps
 
@@ -815,6 +816,24 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 - **Gravedad**: media
 - **Cómo reproducirlo**: buscar en `crates/barrier-kit/src/controls.rs` un
   control que acepte Enter como salto de línea.
+
+### BK-037 — `Alert` solo tiene dos botones y no se puede silenciar
+- **Área**: controles / avisos
+- **Qué necesitaba CurseTerm**: el aviso de pegar varias líneas de iTerm2
+  (`iTermPasteHelper.m`), con Paste, Paste Without Newline, Cancel y
+  Advanced…, y la casilla de no volver a preguntar de `iTermWarning`.
+- **Qué ofrece hoy BarrierKit**: `views::feedback::Alert` con un botón de
+  confirmar y otro de cancelar (`feedback.rs:60`).
+- **Qué falta**: más acciones en un `Alert` y una casilla para silenciarlo.
+- **Cómo lo resolví en CurseTerm**: el aviso tiene Paste y Cancel; para no
+  verlo se desmarca Edit › Paste Special › Warn Before Multi-Line Paste.
+- **Coste del workaround**: sin Paste Without Newline ni Advanced…, ni «no
+  volver a preguntar» desde el propio aviso.
+- **API propuesta para el kit**: `Alert::action(label, callback)` para
+  añadir botones y `Alert::suppression(label, State<bool>)`.
+- **Gravedad**: baja
+- **Cómo reproducirlo**: leer `pub struct Alert` en
+  `crates/barrier-kit/src/views/feedback.rs`.
 
 ## Cosas que funcionaron bien
 

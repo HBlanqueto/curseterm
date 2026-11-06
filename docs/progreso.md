@@ -2086,3 +2086,42 @@ filtro recorre todo en cada repintado).
 ni seleccionar dentro del resultado; sin modo de expresión regular ni barra
 de progreso; el filtro sigue al panel activo, no a la sesión donde se abrió; la barra va debajo de
 la búsqueda en vez de dentro del mismo desplegable.
+
+## Fase 46 — Aviso antes de pegar varias líneas
+
+### Plan
+
+Edit › Paste Special de iTerm2 (`iTermPasteHelper.m
+-maybeWarnAboutMultiLinePaste:`, `iTermApplicationDelegate.m
+-toggleMultiLinePasteWarning:`):
+
+1. **Tres casillas**, con los valores de iTerm2: Warn Before Multi-Line Paste
+   (sí), Limit Multi-Line Paste Warning to Shell Prompt (sí; inactiva si la
+   primera está apagada) y Warn Before Pasting One Line Ending in a Newline
+   at Shell Prompt (sí).
+2. **El aviso** «Confirm Multi-Line Paste» con «OK to paste N lines at shell
+   prompt?», «OK to paste N lines?» o los de una línea con salto final, según
+   lo pegado y si la sesión está en el prompt (entre `133;B` y `133;C`).
+3. **Pegar** solo tras Paste; Cancel no pega nada.
+4. **Prueba** y documentación; un test para la decisión.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos; un test nuevo para cuándo avisar.
+
+**Funciona** (capturas en [`capturas/`](capturas/)):
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| `echo uno` y `echo dos` en el portapapeles y ⌘V sin prompt marcado: se pega sin preguntar (aviso limitado al prompt) | ✓ | — |
+| Con `PS1` que emite `133;B`, ⌘V: «Confirm Multi-Line Paste», «OK to paste 2 lines at shell prompt?», Cancel y Paste | ✓ | `fase46-aviso-pegar.png` |
+| Paste ejecuta las dos órdenes | ✓ | — |
+
+**No probado:** con el kit tal cual; Cancel; las casillas desde el menú; los
+casos de una línea con salto final (están en el test).
+
+**Difiere de iTerm2:** sin Paste Without Newline, Advanced… ni «no volver a
+preguntar» (BK-037); Paste Slowly y Paste Escaped no avisan; con una shell
+que solo emite `133;B` la sesión se queda «en el prompt» también mientras
+corre un comando.

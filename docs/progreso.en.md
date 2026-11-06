@@ -2074,3 +2074,43 @@ of it on every repaint).
 scrolled, searched or selected; no regular-expression mode nor progress bar;
 the filter follows the active pane, not the session where it opened; the bar sits under the find bar
 instead of inside the same drop-down.
+
+## Phase 46 — Warning before a multi-line paste
+
+### Plan
+
+iTerm2's Edit › Paste Special (`iTermPasteHelper.m
+-maybeWarnAboutMultiLinePaste:`, `iTermApplicationDelegate.m
+-toggleMultiLinePasteWarning:`):
+
+1. **Three checkboxes**, with iTerm2's values: Warn Before Multi-Line Paste
+   (on), Limit Multi-Line Paste Warning to Shell Prompt (on; disabled when
+   the first is off) and Warn Before Pasting One Line Ending in a Newline at
+   Shell Prompt (on).
+2. **The warning** «Confirm Multi-Line Paste» with «OK to paste N lines at
+   shell prompt?», «OK to paste N lines?» or the one-line-with-newline ones,
+   by what is pasted and whether the session is at the prompt (between
+   `133;B` and `133;C`).
+3. **Paste** only after Paste; Cancel pastes nothing.
+4. **Test** and documentation; a test for the decision.
+
+### Result (2026-11-06)
+
+Tested on headless sway with the patched kit. `./dev.sh check` clean in both
+modes; a new test for when to warn.
+
+**Works** (screenshots in [`capturas/`](capturas/)):
+
+| Test | Result | Screenshot |
+|---|---|---|
+| `echo uno` and `echo dos` on the clipboard and ⌘V with no marked prompt: pasted without asking (warning limited to the prompt) | ✓ | — |
+| With a `PS1` that emits `133;B`, ⌘V: «Confirm Multi-Line Paste», «OK to paste 2 lines at shell prompt?», Cancel and Paste | ✓ | `fase46-aviso-pegar.png` |
+| Paste runs both commands | ✓ | — |
+
+**Not tested:** the kit as is; Cancel; the checkboxes from the menu; the
+one-line-with-newline cases (they are in the test).
+
+**Differs from iTerm2:** no Paste Without Newline, Advanced… nor «don't ask
+again» (BK-037); Paste Slowly and Paste Escaped do not warn; with a shell
+that only emits `133;B` the session stays «at the prompt» while a command
+runs too.

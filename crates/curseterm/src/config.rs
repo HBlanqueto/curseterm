@@ -6,6 +6,7 @@ use barrier_kit_next::tokens::{MONO, TERMINAL};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::arrangement::Arrangement;
+use crate::paste_warning::PasteWarnings;
 
 pub const APP_ID: &str = "org.curseterm.CurseTerm";
 pub const APP_NAME: &str = "CurseTerm";
@@ -26,6 +27,7 @@ pub struct Defaults {
     pub mark_alert: MarkAlert,
     pub alert_on_offscreen_marks: bool,
     pub theme: Theme,
+    pub paste_warnings: PasteWarnings,
 }
 
 impl Default for Defaults {
@@ -41,6 +43,7 @@ impl Default for Defaults {
             mark_alert: MarkAlert::default(),
             alert_on_offscreen_marks: false,
             theme: Theme::default(),
+            paste_warnings: PasteWarnings::default(),
         }
     }
 }

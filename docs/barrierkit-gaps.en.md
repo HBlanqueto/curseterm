@@ -66,6 +66,7 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-034 | clipboard | No primary selection | medium | Patch 0010 tested |
 | BK-035 | clipboard | The clipboard only offers plain text | low | Patch 0011 tested |
 | BK-036 | controls | No multi-line text view | medium | Tested block `views::text_view` |
+| BK-037 | controls / alerts | `Alert` has only two buttons and cannot be silenced | low | Workaround: Paste and Cancel |
 
 ## Gaps
 
@@ -812,6 +813,25 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 - **Severity**: medium
 - **How to reproduce**: look in `crates/barrier-kit/src/controls.rs` for a
   control that takes Enter as a line break.
+
+### BK-037 — `Alert` has only two buttons and cannot be silenced
+- **Area**: controls / alerts
+- **What CurseTerm needed**: iTerm2's multi-line paste warning
+  (`iTermPasteHelper.m`), with Paste, Paste Without Newline, Cancel and
+  Advanced…, and `iTermWarning`'s do-not-ask-again checkbox.
+- **What BarrierKit offers today**: `views::feedback::Alert` with a confirm
+  button and a cancel button (`feedback.rs:60`).
+- **What is missing**: more actions in an `Alert` and a checkbox to silence
+  it.
+- **How CurseTerm solves it**: the warning has Paste and Cancel; to stop it,
+  uncheck Edit › Paste Special › Warn Before Multi-Line Paste.
+- **Cost of the workaround**: no Paste Without Newline nor Advanced…, and no
+  «don't ask again» from the warning itself.
+- **Proposed kit API**: `Alert::action(label, callback)` to add buttons and
+  `Alert::suppression(label, State<bool>)`.
+- **Severity**: low
+- **How to reproduce**: read `pub struct Alert` in
+  `crates/barrier-kit/src/views/feedback.rs`.
 
 ## Things that worked well
 

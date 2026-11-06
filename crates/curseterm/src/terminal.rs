@@ -56,6 +56,7 @@ use crate::note_view::NoteEvent;
 use crate::pane_view::{self, TerminalPane};
 use crate::panes::{Axis, Pane, Toward};
 use crate::paste_history;
+use crate::paste_warning::{self, Warning};
 use crate::pick;
 use crate::session::{
     self, GridSize, Launch, Listener, MarkJump, Session, SessionId, TerminalState,
@@ -108,6 +109,7 @@ struct Handles {
     reveals: Rc<OnceCell<Reveals>>,
     buried: State<Option<Buried>>,
     pastes: State<Vec<String>>,
+    pending_paste: State<Option<String>>,
     picker: PickerState,
     sheet: State<Option<Sheet>>,
     draft: State<String>,
@@ -170,6 +172,7 @@ enum Confirm {
     Close(Closing),
     RemoveAnnotation(SessionId, AnnotationId),
     MarkSet(SessionId),
+    Paste(Warning),
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -299,6 +302,7 @@ impl App for Terminal {
         let confirm = use_state(|| None::<Confirm>);
         let buried = use_state(|| None::<Buried>);
         let pastes = paste_history::shared();
+        let pending_paste = use_state(|| None::<String>);
         let sheet = use_state(|| None::<Sheet>);
         let mut held = use_state(Modifiers::empty);
         let transparency = use_state(|| true);
@@ -356,6 +360,7 @@ impl App for Terminal {
             reveals: Rc::default(),
             buried,
             pastes,
+            pending_paste,
             picker,
             sheet,
             draft,
@@ -1067,6 +1072,11 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::CLEAR_SCROLLBACK.id, scrollback);
     use_menu_enabled(menu::CLOSE_PANES.id, split);
     use_menu_enabled(menu::ARRANGE_EVENLY, split);
+    let warnings = handles.defaults.read().paste_warnings;
+    use_menu_checked(menu::WARN_MULTI_LINE_PASTE, warnings.multi_line);
+    use_menu_checked(menu::LIMIT_PASTE_WARNING, warnings.only_at_prompt);
+    use_menu_enabled(menu::LIMIT_PASTE_WARNING, warnings.multi_line);
+    use_menu_checked(menu::WARN_ONE_LINE_PASTE, warnings.one_line_at_prompt);
     use_menu_enabled(menu::UNDO_CLOSE.id, handles.buried.read().is_some());
     use_menu_enabled(menu::PASTE_HISTORY.id, !handles.pastes.read().is_empty());
     let current = handles.active();
@@ -1181,6 +1191,20 @@ fn paste(handles: &Handles) {
 }
 
 fn paste_text(handles: &Handles, text: String) {
+    let at_prompt = handles.active().is_some_and(|session| session.at_prompt());
+    let warnings = handles.defaults.peek().paste_warnings;
+    if let Some(warning) = paste_warning::warning(&text, at_prompt, warnings) {
+        let (mut pending, mut confirm) = (handles.pending_paste, handles.confirm);
+        if confirm.peek().is_none() {
+            pending.set(Some(text));
+            confirm.set(Some(Confirm::Paste(warning)));
+        }
+        return;
+    }
+    paste_now(handles, text);
+}
+
+fn paste_now(handles: &Handles, text: String) {
     for session in handles.receivers() {
         session.paste(&text);
     }
@@ -2506,6 +2530,15 @@ fn confirm_alert(handles: &Handles, pending: Confirm) -> Alert {
             tr!("remove-annotation-title"),
             tr!("remove-annotation-message"),
         ),
+        Confirm::Paste(warning) => {
+            let message = match warning {
+                Warning::Lines(count) => tr!("paste-lines", count = count),
+                Warning::LinesAtPrompt(count) => tr!("paste-lines-at-prompt", count = count),
+                Warning::OneLine => tr!("paste-one-line").to_string(),
+                Warning::OneLineAtPrompt => tr!("paste-one-line-at-prompt").to_string(),
+            };
+            Alert::new(tr!("paste-warning-title"), message)
+        }
         Confirm::MarkSet(id) => {
             let name = handles.workspace.peek().title(id).to_string();
             Alert::new(
@@ -2515,6 +2548,7 @@ fn confirm_alert(handles: &Handles, pending: Confirm) -> Alert {
         }
     };
     let (label, dismiss) = match pending {
+        Confirm::Paste(_) => (tr!("paste-confirm"), tr!("close-cancel")),
         Confirm::Close(_) => (tr!("close-confirm"), tr!("close-cancel")),
         Confirm::RemoveAnnotation(..) => (tr!("remove-annotation-confirm"), tr!("close-cancel")),
         Confirm::MarkSet(_) => (tr!("reveal"), tr!("mark-alert-ok")),
@@ -2530,6 +2564,12 @@ fn confirm_alert(handles: &Handles, pending: Confirm) -> Alert {
                     }
                 }
                 Confirm::MarkSet(id) => reveal(&handles, id, None),
+                Confirm::Paste(_) => {
+                    let mut pending = handles.pending_paste;
+                    if let Some(text) = pending.write().take() {
+                        paste_now(&handles, text);
+                    }
+                }
             });
         })
         .cancel(dismiss, move |_| dismiss_later(&cancel, || {}))
@@ -2648,6 +2688,15 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             }
         }
         menu::ARRANGE_EVENLY => workspace.write().arrange_evenly(),
+        menu::WARN_MULTI_LINE_PASTE => change_defaults(|defaults| {
+            defaults.paste_warnings.multi_line = !defaults.paste_warnings.multi_line
+        }),
+        menu::LIMIT_PASTE_WARNING => change_defaults(|defaults| {
+            defaults.paste_warnings.only_at_prompt = !defaults.paste_warnings.only_at_prompt
+        }),
+        menu::WARN_ONE_LINE_PASTE => change_defaults(|defaults| {
+            defaults.paste_warnings.one_line_at_prompt = !defaults.paste_warnings.one_line_at_prompt
+        }),
         _ if id == menu::SPLIT_VERTICALLY.id => split(handles, events, Axis::Row),
         _ if id == menu::SPLIT_HORIZONTALLY.id => split(handles, events, Axis::Column),
         _ if id == menu::CLOSE.id => {

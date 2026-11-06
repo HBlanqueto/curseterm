@@ -704,6 +704,11 @@ impl Session {
         .filter(|(start, end)| end > start)
     }
 
+    // PTYSession.m -isAtShellPrompt: between OSC 133;B and 133;C.
+    pub fn at_prompt(&self) -> bool {
+        self.extras().command_start.is_some()
+    }
+
     pub fn has_current_command(&self) -> bool {
         self.current_command().is_some()
     }
