@@ -25,6 +25,7 @@ pub struct Defaults {
     pub arrangements: Vec<Arrangement>,
     pub mark_alert: MarkAlert,
     pub alert_on_offscreen_marks: bool,
+    pub theme: Theme,
 }
 
 impl Default for Defaults {
@@ -39,6 +40,7 @@ impl Default for Defaults {
             arrangements: Vec::new(),
             mark_alert: MarkAlert::default(),
             alert_on_offscreen_marks: false,
+            theme: Theme::default(),
         }
     }
 }
@@ -75,6 +77,33 @@ pub struct Profile {
     pub cursor: CursorType,
     pub blinking_cursor: bool,
     pub cursor_guide: bool,
+}
+
+// iTermPreferences.h iTermPreferencesTabStyle, in the order of PreferencePanel.xib's Theme
+// popup; +computedTabStyle makes Regular the default.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Theme {
+    #[default]
+    Regular,
+    Minimal,
+    Compact,
+    Light,
+    Dark,
+    LightHighContrast,
+    DarkHighContrast,
+}
+
+impl Theme {
+    pub const ALL: [Self; 7] = [
+        Self::Regular,
+        Self::Minimal,
+        Self::Compact,
+        Self::Light,
+        Self::Dark,
+        Self::LightHighContrast,
+        Self::DarkHighContrast,
+    ];
 }
 
 // iTermApplicationDelegate.m -markAlertAction: posting a notification is the default.

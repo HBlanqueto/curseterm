@@ -26,7 +26,7 @@ use vow_design::{CAPTION, SIDEBAR, SPACE_1, SPACE_3, WINDOW_MIN_SIZE};
 use crate::auxiliary::on_action;
 use crate::config::{
     APP_ID, AltKey, ClosePrompt, CursorType, Defaults, Profile, SCROLLBACK_LIMIT, SessionEnd,
-    Trigger, TriggerAction, WorkingDirectory, change_defaults,
+    Theme, Trigger, TriggerAction, WorkingDirectory, change_defaults,
 };
 use crate::itermcolors;
 use crate::localize::tr;
@@ -95,12 +95,7 @@ impl App for Settings {
                         .tab(
                             Symbol::CircleHalf,
                             tr!("pane-appearance"),
-                            switch_pane(
-                                tr!("section-tabs"),
-                                tr!("show-tab-bar-always"),
-                                defaults.show_tab_bar,
-                                |defaults, on| defaults.show_tab_bar = on,
-                            ),
+                            appearance_pane(&defaults),
                         )
                         .tab(
                             Symbol::ListBullet,
@@ -143,6 +138,50 @@ fn switch_pane(
                 ),
             ),
         ),
+    )
+}
+
+// PreferencePanel.xib Appearance › General › Theme and Tabs.
+fn appearance_pane(defaults: &Defaults) -> Rect {
+    let names = [
+        tr!("theme-regular"),
+        tr!("theme-minimal"),
+        tr!("theme-compact"),
+        tr!("theme-light"),
+        tr!("theme-dark"),
+        tr!("theme-light-high-contrast"),
+        tr!("theme-dark-high-contrast"),
+    ];
+    let selected = Theme::ALL
+        .iter()
+        .position(|theme| *theme == defaults.theme)
+        .unwrap_or_default();
+    let theme = names
+        .iter()
+        .fold(PopUpButton::new(tr!("theme")), |button, name| {
+            button.item(name)
+        })
+        .selected(selected)
+        .on_change(|position: usize| {
+            change_defaults(|defaults| defaults.theme = Theme::ALL[position])
+        });
+    let show_tab_bar = defaults.show_tab_bar;
+    rect().padding(Gaps::new_all(SPACE_3)).child(
+        Form::new()
+            .section(
+                Section::titled(tr!("section-general")).row(Row::new(tr!("theme")).control(theme)),
+            )
+            .section(
+                Section::titled(tr!("section-tabs")).row(
+                    Row::new(tr!("show-tab-bar-always")).control(
+                        Switch::new(tr!("show-tab-bar-always"))
+                            .on(show_tab_bar)
+                            .on_toggle(|on: bool| {
+                                change_defaults(|defaults| defaults.show_tab_bar = on)
+                            }),
+                    ),
+                ),
+            ),
     )
 }
 
