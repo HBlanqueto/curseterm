@@ -2560,8 +2560,8 @@ shown.
 Coprocess actions from a binding.
 
 **Differs from iTerm2:** no Bypass Terminal, modifier remapping, recent
-tabs, next and previous window, changing colors, selection moves, scripts nor
-Sequence (phase 74 adds the rest); no presets; a Super binding that is already a
+tabs, next and previous window, changing colors, selection moves nor scripts
+(phases 74 and 76 add the rest); no presets; a Super binding that is already a
 menu shortcut does both; the Keys icon repeats General's because the kit has
 no keyboard symbol (BK-024).
 
@@ -3292,3 +3292,32 @@ CurseTerm's sheets and alerts are born inside the window, like macOS sheets,
 so they carry their own rounded border (the kit's `sheet` and `Alert`, radius
 `DIALOG.corner_radius`). The Malaysia compositor only rounds dialogs that are
 surfaces of their own; if a dialog becomes one, the app stops rounding it.
+
+## Phase 76 — Sequence
+
+### Plan
+
+`PTYSession.m` `KEY_ACTION_SEQUENCE` runs a list of actions, and
+`KeyActionSequenceTableViewController.swift` edits it:
+
+1. The Sequence… action (Composition group) keeps its steps in `steps`.
+2. Each step runs on the session focused after the previous one: split, then
+   send text, types into the new pane.
+3. The editor shows the steps in a table with + and −; a new step is Next Tab
+   and goes after the selected one. Below, the chosen step's action and
+   parameter are edited; a step cannot be another sequence.
+4. The bindings table describes the sequence as “A, then B”.
+5. OK fills untouched pop-up parameters with the first choice, also in the
+   steps.
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+| Test | Result |
+|---|---|
+| F8 = split and send `echo NUEVO\n`: the text appears in the new pane | ✓ |
+| Editing a step's text and adding one saves the three steps in the `.domain` | ✓ |
+
+**Not tested:** the kit as is; removing steps; a sequence from Edit › Actions.

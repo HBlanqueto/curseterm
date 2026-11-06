@@ -66,6 +66,7 @@ pub enum BindingAction {
     Paste,
     CopyOrSend,
     PasteOrSend,
+    Sequence,
 }
 
 // What the edit sheet asks for under the action.
@@ -80,7 +81,7 @@ pub enum Parameter {
 
 impl BindingAction {
     // The pop-up's groups; a long kit pop-up does not scroll (BK-040).
-    pub const GROUPS: [&'static [Self]; 16] = [
+    pub const GROUPS: [&'static [Self]; 17] = [
         &[Self::Ignore, Self::SelectMenuItem],
         &[
             Self::NewWindowWithProfile,
@@ -146,6 +147,7 @@ impl BindingAction {
             Self::MoveSessionToSplitPane,
         ],
         &[Self::Paste, Self::CopyOrSend, Self::PasteOrSend],
+        &[Self::Sequence],
     ];
 
     pub fn group(self) -> usize {
@@ -193,6 +195,7 @@ impl BindingAction {
             tr!("binding-group-resize-pane"),
             tr!("binding-group-split-panes"),
             tr!("binding-group-pasteboard"),
+            tr!("binding-group-composition"),
         ][group]
     }
 
@@ -255,6 +258,7 @@ impl BindingAction {
             Self::Paste => tr!("binding-paste"),
             Self::CopyOrSend => tr!("binding-copy-or-send"),
             Self::PasteOrSend => tr!("binding-paste-or-send"),
+            Self::Sequence => tr!("binding-sequence"),
         }
     }
 }
@@ -265,6 +269,8 @@ pub struct Binding {
     pub combo: String,
     pub action: BindingAction,
     pub parameter: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub steps: Vec<Binding>,
 }
 
 // iTermActionsModel.m iTermAction: a key action under a title, run from Edit › Actions.
@@ -274,6 +280,8 @@ pub struct NamedAction {
     pub title: String,
     pub action: BindingAction,
     pub parameter: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub steps: Vec<Binding>,
 }
 
 impl NamedAction {
@@ -282,6 +290,7 @@ impl NamedAction {
             combo: self.title.clone(),
             action: self.action,
             parameter: self.parameter.clone(),
+            steps: self.steps.clone(),
         }
     }
 
@@ -290,6 +299,7 @@ impl NamedAction {
             title: binding.combo,
             action: binding.action,
             parameter: binding.parameter,
+            steps: binding.steps,
         }
     }
 }
@@ -507,7 +517,7 @@ mod tests {
         let global = [Binding {
             combo: "Ctrl+Alt+K".into(),
             action: BindingAction::NextTab,
-            parameter: String::new(),
+            ..Binding::default()
         }];
         let profile = [Binding {
             action: BindingAction::Ignore,

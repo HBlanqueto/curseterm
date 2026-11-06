@@ -2621,6 +2621,14 @@ fn perform_binding(
             Some(text) => paste_text(handles, text),
             None => send(vec![0x16]),
         },
+        // PTYSession.m KEY_ACTION_SEQUENCE: each step runs on the session focused after the last.
+        BindingAction::Sequence => {
+            let mut focused = session.clone();
+            for step in &binding.steps {
+                perform_binding(handles, events, revision, &focused, step);
+                focused = handles.active().unwrap_or(focused);
+            }
+        }
     }
 }
 

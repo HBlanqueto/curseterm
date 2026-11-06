@@ -624,3 +624,7 @@ binding-find-regex = Find Regular Expression
 binding-paste = Paste…
 binding-copy-or-send = Copy Selection or Send ^C
 binding-paste-or-send = Paste or Send ^V
+binding-group-composition = Composition
+binding-sequence = Sequence…
+binding-sequence-separator = {", then "}
+binding-sequence-steps = Steps

@@ -2580,7 +2580,7 @@ desplazamiento, paneles y Run Coprocess desde una combinación.
 
 **Difiere de iTerm2:** sin Bypass Terminal, remapeo de modificadores,
 pestañas recientes, ventanas siguiente y anterior, cambiar de colores, la
-selección, scripts ni Sequence (la fase 74 añade el resto); sin presets; una combinación con Super que ya es un atajo del menú hace las dos
+selección ni scripts (las fases 74 y 76 añaden el resto); sin presets; una combinación con Super que ya es un atajo del menú hace las dos
 cosas; el icono de Keys repite el de General porque el kit no tiene teclado
 (BK-024).
 
@@ -3314,3 +3314,33 @@ de macOS, así que llevan su propio borde redondeado (`sheet` y `Alert` del
 kit, radio `DIALOG.corner_radius`). El compositor Malaysia solo redondea
 diálogos que sean superficies propias; si un diálogo pasa a serlo, deja de
 redondearse en la app.
+
+## Fase 76 — Sequence
+
+### Plan
+
+`PTYSession.m` `KEY_ACTION_SEQUENCE` ejecuta una lista de acciones, y
+`KeyActionSequenceTableViewController.swift` la edita:
+
+1. La acción Sequence… (grupo Composition) guarda sus pasos en `steps`.
+2. Cada paso corre en la sesión con el foco tras el anterior: dividir y luego
+   enviar texto escribe en el panel nuevo.
+3. El editor muestra los pasos en una tabla con + y −; un paso nuevo es Next
+   Tab y va tras el seleccionado. Debajo se edita la acción y el parámetro del
+   paso elegido; un paso no puede ser otra secuencia.
+4. La tabla de combinaciones describe la secuencia como «A, luego B».
+5. OK rellena con la primera opción los parámetros de pop-up sin tocar,
+   también en los pasos.
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado |
+|---|---|
+| F8 = dividir y enviar `echo NUEVO\n`: el texto sale en el panel nuevo | ✓ |
+| Editar el texto de un paso y añadir uno guarda los tres pasos en el `.domain` | ✓ |
+
+**No probado:** con el kit tal cual; quitar pasos; una secuencia desde Edit ›
+Actions.

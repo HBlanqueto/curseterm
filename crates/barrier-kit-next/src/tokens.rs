@@ -570,6 +570,7 @@ pub struct MovePaneMetrics {
 pub const KEY_BINDING_EDITOR: KeyBindingEditorMetrics = KeyBindingEditorMetrics {
     width: 442.0,
     table_height: 240.0,
+    steps_height: 120.0,
     menu_matches: 12,
 };
 
@@ -577,6 +578,7 @@ pub const KEY_BINDING_EDITOR: KeyBindingEditorMetrics = KeyBindingEditorMetrics 
 pub struct KeyBindingEditorMetrics {
     pub width: f32,
     pub table_height: f32,
+    pub steps_height: f32,
     pub menu_matches: usize,
 }
 

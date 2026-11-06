@@ -54,7 +54,7 @@ impl Owner {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct KeyBindingsEditor {
     pub owner: Owner,
     pub bindings: Vec<Binding>,
@@ -151,6 +151,12 @@ impl Component for KeyBindingsEditor {
 fn describe(binding: &Binding, menu_items: &[(String, String)]) -> String {
     let name = binding.action.name();
     match binding.action.parameter() {
+        Parameter::None if binding.action == BindingAction::Sequence => binding
+            .steps
+            .iter()
+            .map(|step| describe(step, menu_items))
+            .collect::<Vec<_>>()
+            .join(tr!("binding-sequence-separator")),
         Parameter::None => name.to_string(),
         Parameter::MenuItem => {
             let label = menu_items
@@ -159,24 +165,54 @@ fn describe(binding: &Binding, menu_items: &[(String, String)]) -> String {
                 .map_or(binding.parameter.as_str(), |(_, label)| label.as_str());
             format!("{name} {label}")
         }
+        _ if binding.parameter.is_empty() => name.to_string(),
         _ => format!("{name} {}", binding.parameter),
     }
 }
 
-// iTermEditKeyActionWindowController.xib: Keyboard Shortcut, Action and its parameter.
-fn edit_sheet(
+fn options(editor: &KeyBindingsEditor, action: BindingAction) -> Vec<(String, String)> {
+    let same = |names: &[String]| -> Vec<(String, String)> {
+        names
+            .iter()
+            .map(|name| (name.clone(), name.clone()))
+            .collect()
+    };
+    match action.parameter() {
+        Parameter::Profile => same(&editor.profiles),
+        Parameter::Snippet => same(&editor.snippets),
+        Parameter::MenuItem => editor.menu_items.clone(),
+        Parameter::None | Parameter::Text => Vec::new(),
+    }
+}
+
+// OK saves the first choice of a pop-up nobody touched.
+fn with_default_parameter(editor: &KeyBindingsEditor, mut binding: Binding) -> Binding {
+    if binding.parameter.is_empty()
+        && let Some((first, _)) = options(editor, binding.action).first()
+    {
+        binding.parameter = first.clone();
+    }
+    binding.steps = binding
+        .steps
+        .into_iter()
+        .map(|step| with_default_parameter(editor, step))
+        .collect();
+    binding
+}
+
+// iTermEditKeyActionWindowController.m -groups:: Composition (Sequence…) only for the binding
+// itself, not for one of its steps.
+fn action_controls(
     editor: &KeyBindingsEditor,
     draft: State<Binding>,
-    index: Option<usize>,
-    close: impl Fn() + Clone + 'static,
-) -> Element {
-    let owner = editor.owner;
-    let palette = Palette::current();
+    primary: bool,
+) -> (Element, Option<Element>) {
     let binding = draft.read().clone();
     let mut actions = draft;
     let group = binding.action.group();
     let mut grouped = draft;
-    let group_popup = (0..BindingAction::GROUPS.len())
+    let groups = BindingAction::GROUPS.len() - usize::from(!primary);
+    let group_popup = (0..groups)
         .fold(
             PopUpButton::new(tr!("key-binding-group")),
             |button, group| button.item(BindingAction::group_name(group)),
@@ -210,20 +246,9 @@ fn edit_sheet(
         .cross_align(Alignment::Center)
         .spacing(SPACE_1)
         .child(group_popup)
-        .child(action_popup);
-    let same = |names: &[String]| -> Vec<(String, String)> {
-        names
-            .iter()
-            .map(|name| (name.clone(), name.clone()))
-            .collect()
-    };
-    let options = match binding.action.parameter() {
-        Parameter::Profile => same(&editor.profiles),
-        Parameter::Snippet => same(&editor.snippets),
-        Parameter::MenuItem => editor.menu_items.clone(),
-        Parameter::None | Parameter::Text => Vec::new(),
-    };
-    let first = options.first().map(|(id, _)| id.clone());
+        .child(action_popup)
+        .into_element();
+    let options = options(editor, binding.action);
     let choices = |names: Vec<(String, String)>| {
         let mut choice = draft;
         let ids: Vec<String> = names.iter().map(|(id, _)| id.clone()).collect();
@@ -257,8 +282,30 @@ fn edit_sheet(
         ),
         Parameter::Profile | Parameter::Snippet => Some(choices(options)),
     };
+    (action_popups, parameter)
+}
+
+// iTermEditKeyActionWindowController.xib: Keyboard Shortcut, Action and its parameter.
+fn edit_sheet(
+    editor: &KeyBindingsEditor,
+    draft: State<Binding>,
+    index: Option<usize>,
+    close: impl Fn() + Clone + 'static,
+) -> Element {
+    let owner = editor.owner;
+    let palette = Palette::current();
+    let binding = draft.read().clone();
+    let (action_popups, parameter) = action_controls(editor, draft, true);
+    let steps = (binding.action == BindingAction::Sequence).then(|| {
+        Steps {
+            draft,
+            editor: editor.clone(),
+        }
+        .into_element()
+    });
     let cancel = close.clone();
     let ready = !binding.combo.is_empty();
+    let saving = editor.clone();
     sheet(
         rect()
             .width(Size::px(KEY_BINDING_EDITOR.width))
@@ -287,6 +334,7 @@ fn edit_sheet(
                     None => section,
                 }
             }))
+            .maybe_child(steps)
             .child(
                 rect()
                     .width(Size::fill())
@@ -300,11 +348,10 @@ fn edit_sheet(
                             .disabled(!ready)
                             .on_press(move |_| {
                                 let mut binding = draft.peek().clone();
-                                if binding.parameter.is_empty()
-                                    && let Some(first) = &first
-                                {
-                                    binding.parameter = first.clone();
+                                if binding.action != BindingAction::Sequence {
+                                    binding.steps.clear();
                                 }
+                                let binding = with_default_parameter(&saving, binding);
                                 owner.change(|bindings| match index {
                                     Some(index) if index < bindings.len() => {
                                         bindings[index] = binding;
@@ -317,6 +364,103 @@ fn edit_sheet(
             ),
     )
     .into_element()
+}
+
+// KeyActionSequenceTableViewController.swift: the steps with + and −; the selected one is edited
+// below, and a new one is Next Tab, after the selection.
+#[derive(PartialEq)]
+struct Steps {
+    draft: State<Binding>,
+    editor: KeyBindingsEditor,
+}
+
+impl Component for Steps {
+    fn render(&self) -> impl IntoElement {
+        let selected = use_state(|| None::<usize>);
+        let step = use_state(Binding::default);
+        let mut draft = self.draft;
+        use_side_effect(move || {
+            let edited = step.read().clone();
+            if let Some(index) = *selected.peek()
+                && draft
+                    .peek()
+                    .steps
+                    .get(index)
+                    .is_some_and(|kept| *kept != edited)
+            {
+                draft.write().steps[index] = edited;
+            }
+        });
+        let steps = draft.read().steps.clone();
+        let chosen = selected.read().filter(|index| *index < steps.len());
+        let rows = steps
+            .iter()
+            .map(|step| vec![describe(step, &self.editor.menu_items)])
+            .collect();
+        let pick = move |index: Option<usize>| {
+            let (mut selected, mut step) = (selected, step);
+            if let Some(found) = index.and_then(|index| draft.peek().steps.get(index).cloned()) {
+                step.set(found);
+            }
+            selected.set(index);
+        };
+        let controls = chosen.map(|index| {
+            let (action_popups, parameter) = action_controls(&self.editor, step, false);
+            rect()
+                .key(index)
+                .width(Size::fill())
+                .direction(Direction::Vertical)
+                .spacing(SPACE_1)
+                .child(action_popups)
+                .maybe_child(parameter)
+        });
+        rect()
+            .width(Size::fill())
+            .direction(Direction::Vertical)
+            .spacing(SPACE_1)
+            .child(
+                rect()
+                    .height(Size::px(KEY_BINDING_EDITOR.steps_height))
+                    .child(
+                        Table::new(
+                            tr!("binding-sequence-steps"),
+                            vec![tr!("key-binding-action")],
+                        )
+                        .rows(rows)
+                        .selected(chosen)
+                        .on_select(move |row| pick(Some(row))),
+                    ),
+            )
+            .child(
+                rect()
+                    .direction(Direction::Horizontal)
+                    .spacing(SPACE_1)
+                    .child(
+                        IconButton::new(Symbol::Plus, tr!("key-binding-add")).on_press(move |_| {
+                            let at = chosen.map_or(draft.peek().steps.len(), |index| index + 1);
+                            draft.write().steps.insert(
+                                at,
+                                Binding {
+                                    action: BindingAction::NextTab,
+                                    ..Binding::default()
+                                },
+                            );
+                            pick(Some(at));
+                        }),
+                    )
+                    .child(
+                        IconButton::new(Symbol::Minus, tr!("key-binding-remove"))
+                            .disabled(chosen.is_none())
+                            .on_press(move |_| {
+                                if let Some(index) = chosen {
+                                    draft.write().steps.remove(index);
+                                    pick(None);
+                                }
+                            }),
+                    ),
+            )
+            .maybe_child(controls)
+    }
 }
 
 // iTermSearchableComboView: the menu items narrowed by what is typed, since a long kit pop-up
