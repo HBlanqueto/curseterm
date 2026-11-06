@@ -141,6 +141,8 @@ pub const SNIPPETS_MENU: &str = "snippets-menu";
 pub const ACTIONS_MENU: &str = "actions-menu";
 pub const ACTION_PREFIX: &str = "action:";
 pub const MOVE_SESSION_MENU: &str = "move-session-menu";
+pub const MOVE_SESSION_TO_WINDOW: Action =
+    Action::new("move-session-to-window", || tr!("move-session-to-window"));
 pub const MOVE_SESSION_TO_TAB: Action =
     Action::new("move-session-to-tab", || tr!("move-session-to-tab"));
 pub const MOVE_SESSION_TO_PANE: Action =
@@ -268,7 +270,7 @@ pub const PROFILE_PREFIX: &str = "profile:";
 
 // docs/notes-3.7.0beta4.txt: Lock Layout stops splitting, adding, closing and reordering tabs, and
 // closing or moving panes; resizing panes, new windows and closing the window still work.
-pub const LAYOUT_CHANGES: [&str; 21] = [
+pub const LAYOUT_CHANGES: [&str; 22] = [
     NEW_FLOATING_PANE.id,
     DOCK_FLOATING_PANE.id,
     MOVE_FLOATING_PANE_UP,
@@ -286,6 +288,7 @@ pub const LAYOUT_CHANGES: [&str; 21] = [
     UNDO_CLOSE.id,
     MOVE_TAB_LEFT.id,
     MOVE_TAB_RIGHT.id,
+    MOVE_SESSION_TO_WINDOW.id,
     MOVE_SESSION_TO_TAB.id,
     MOVE_SESSION_TO_PANE.id,
     BURY_SESSION.id,
@@ -592,6 +595,7 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
                     MOVE_SESSION_MENU,
                     tr!("move-session-menu"),
                     vec![
+                        MOVE_SESSION_TO_WINDOW.item(false),
                         MOVE_SESSION_TO_TAB.item(false),
                         MOVE_SESSION_TO_PANE.item(false),
                     ],

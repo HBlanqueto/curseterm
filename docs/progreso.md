@@ -3731,3 +3731,53 @@ trigger; un llavero bloqueado.
 **Difiere de iTerm2:** sin 1Password, LastPass ni las otras integraciones,
 ni autenticación al abrir, ni OTP, ni exportar o importar; el mensaje
 «Password sent.» no aparece.
+
+## Fase 86 — Mover sesiones entre ventanas
+
+### Plan
+
+`MovePaneController.m` y `PseudoTerminal.m`, con el parche 0008 (BK-001):
+
+1. **Window › Move Session › Move Session to Window** (`-moveSessionToWindow:`)
+   saca la sesión activa a una ventana nueva. Se habilita con más de una
+   sesión en la ventana y sin Lock Layout.
+2. El clic secundario en una pestaña abre su menú
+   (`-tabView:menuForTabViewItem:`): Select ▸, Rename Tab…, Edit Session…,
+   New Tab to the Right, Duplicate Tab, Close Tab, Close Other Tabs, Close
+   Tabs to the Right, Move to New Window, Add Tab to Group ▸, Rename Group…,
+   Remove Tab from Group y Save Tab as Window Arrangement.
+3. **Move to New Window** (`-it_moveTabToNewWindow:ungroup:`) lleva la pestaña
+   entera, sin su grupo, a una ventana nueva.
+4. La sesión sigue viva: el oyente del terminal pasa a la ventana de destino y
+   los identificadores de sesión son únicos en el proceso.
+5. Close Other Tabs y Close Tabs to the Right preguntan «Close all other
+   tabs? (N tabs)» si alguna sesión lo pide por su perfil
+   (`-confirmCloseTabs:question:alwaysConfirm:`).
+
+### Resultado (2026-11-06)
+
+Probado en sway sin pantalla con el kit parcheado. `./dev.sh check` limpio en
+los dos modos.
+
+| Prueba | Resultado | Captura |
+|---|---|---|
+| El clic secundario en una pestaña muestra su menú | ✓ | `fase86-mover-sesiones.png` |
+| Move to New Window: la shell sigue (mismo pid) y el pty toma el ancho nuevo | ✓ | — |
+| Move Session to Window se deshabilita con una sola sesión | ✓ | — |
+| Move Session to Window saca un panel dividido a otra ventana | ✓ | `fase86-mover-sesiones.png` |
+| New Tab to the Right la pone a la derecha y la selecciona | ✓ | — |
+| Close Tabs to the Right cierra las de la derecha | ✓ | — |
+
+Además: el `match` sobre una lectura del workspace la mantenía prestada al
+escribir y hacía saltar el pánico de freya; ahora se calcula antes.
+
+**No probado:** la pregunta de Close Other Tabs; Select ▸, Rename Group… y
+Save Tab as Window Arrangement; con el kit tal cual el menú de pestaña sin
+Move to New Window.
+
+**Difiere de iTerm2:** no se puede arrastrar una pestaña ni un panel a otra
+ventana (Wayland no da la posición global del puntero), ni elegir con Move
+Session to Split Pane un panel de otra ventana; el menú no tiene Pin Tab ni
+Tab Color, que CurseTerm no tiene; la pregunta no lista los trabajos ni mira
+«Confirm closing multiple sessions»; la ventana nueva toma el tamaño del
+perfil en lugar de ajustarse a la pestaña.

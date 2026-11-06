@@ -460,6 +460,46 @@ impl Workspace {
         self.reorder(&tab_groups::contiguous_order(&ids));
     }
 
+    // PseudoTerminal.m -addTabToGroup: and -tabsDidReorder.
+    pub fn add_active_to_group(&mut self, id: u64) {
+        let Some(group) = self.groups().into_iter().find(|group| group.id == id) else {
+            return;
+        };
+        if let Some(tab) = self.tabs.get_mut(self.active) {
+            tab.group = Some(group);
+        }
+        self.reorder(&tab_groups::contiguous_order(&self.group_ids()));
+    }
+
+    pub fn groups(&self) -> Vec<TabGroup> {
+        let mut groups: Vec<TabGroup> = Vec::new();
+        for group in self.tabs.iter().filter_map(|tab| tab.group.as_ref()) {
+            if groups.iter().all(|known| known.id != group.id) {
+                groups.push(group.clone());
+            }
+        }
+        groups
+    }
+
+    pub fn rename_group(&mut self, id: u64, name: &str) {
+        for group in self.tabs.iter_mut().filter_map(|tab| tab.group.as_mut()) {
+            if group.id == id {
+                group.name = name.to_string();
+            }
+        }
+    }
+
+    // PseudoTerminal.m -newTabToTheRight:: a tab made beside a grouped one joins that group.
+    pub fn place_active(&mut self, at: usize, group: Option<TabGroup>) {
+        if let Some(tab) = self.tabs.get_mut(self.active) {
+            tab.group = group;
+        }
+        let mut order: Vec<usize> = (0..self.tabs.len()).collect();
+        let moved = order.remove(self.active);
+        order.insert(at.min(order.len()), moved);
+        self.reorder(&order);
+    }
+
     pub fn active_group(&self) -> Option<&TabGroup> {
         self.tabs
             .get(self.active)

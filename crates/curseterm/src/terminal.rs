@@ -1,7 +1,9 @@
+use barrier_kit::menu::MenuItem;
 use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -34,7 +36,7 @@ use barrier_kit_next::tokens::{
 };
 use barrier_kit_next::views::floating_pane::{FloatingPane, PaneFrame};
 use barrier_kit_next::views::split_panes::SplitPanes;
-use barrier_kit_next::views::tab_bar::{Badge, TabBar, TabGroupMark};
+use barrier_kit_next::views::tab_bar::{Badge, TabBar, TabGroupMark, TabMenu};
 use freya_clipboard::copypasta::ClipboardProvider;
 use freya_core::prelude::*;
 use rustix::process::{Pid, Signal, kill_process};
@@ -110,7 +112,6 @@ type FontCache = Rc<RefCell<HashMap<(String, i32), Rc<Fonts>>>>;
 struct Handles {
     workspace: State<Workspace>,
     sessions: State<Sessions>,
-    next_id: State<SessionId>,
     defaults: Memo<Defaults>,
     text_zoom: State<i32>,
     fonts: FontCache,
@@ -156,6 +157,7 @@ enum Question {
     TriggerAlert(TriggerAlert),
     StuckKeys(SessionId),
     PasswordEchoes(Zeroizing<String>),
+    CloseTabs(Vec<SessionId>, String),
 }
 
 #[derive(Clone, PartialEq)]
@@ -175,8 +177,9 @@ enum Sheet {
     Log(SessionId),
     Coprocess(SessionId),
     AddTrigger(SessionId),
-    SaveArrangement,
+    SaveArrangement(Option<SessionId>),
     NewTabGroup,
+    RenameTabGroup(u64),
     SaveArchive(SessionId),
     RestoreArchive,
     PasswordManager,
@@ -187,10 +190,22 @@ enum Sheet {
     PasteTabs,
 }
 
-struct Buried {
+// A tab out of its window with its running sessions, for Undo Close or another window.
+struct Detached {
     tab: Tab,
     sessions: Vec<Rc<Session>>,
     titles: Vec<(SessionId, String)>,
+}
+
+thread_local! {
+    static ADOPTION: RefCell<Option<Detached>> = const { RefCell::new(None) };
+}
+
+// Ids are unique in the process, since sessions move between its windows.
+static NEXT_SESSION_ID: AtomicU64 = AtomicU64::new(0);
+
+struct Buried {
+    detached: Detached,
     at: Instant,
 }
 
@@ -343,6 +358,7 @@ pub struct Terminal {
     pub profile: Option<String>,
     pub arrangement: Option<String>,
     pub layout: Option<Arrangement>,
+    pub adopts: bool,
 }
 
 impl App for Terminal {
@@ -360,7 +376,6 @@ impl App for Terminal {
         let dark = barrier_kit::theme::resolved().scheme.is_dark();
         let workspace = use_state(Workspace::default);
         let sessions = use_state(Sessions::new);
-        let next_id = use_state(|| 0);
         let text_zoom = use_state(|| 0i32);
         let mut revision = use_state(|| 0u64);
         let broadcast = use_state(Broadcast::default);
@@ -427,7 +442,6 @@ impl App for Terminal {
         let handles = use_hook(move || Handles {
             workspace,
             sessions,
-            next_id,
             defaults,
             text_zoom,
             fonts: FontCache::default(),
@@ -521,7 +535,15 @@ impl App for Terminal {
             let first = self.profile.clone();
             let arrangement = self.arrangement.clone();
             let layout = self.layout.clone();
+            let adopts = self.adopts;
             move || {
+                if adopts && let Some(detached) = ADOPTION.with(RefCell::take) {
+                    for session in &detached.sessions {
+                        session.report_to(events.0.clone(), events.1.clone());
+                    }
+                    reinstate(&handles, detached);
+                    return;
+                }
                 if let Some(name) = arrangement
                     && restore_arrangement(&handles, &events, &name)
                 {
@@ -545,6 +567,7 @@ impl App for Terminal {
             }
         });
         let add_events = events.clone();
+        let menu_events = events.clone();
         let key_events = events.clone();
         use_menu_action({
             let handles = handles.clone();
@@ -670,6 +693,18 @@ impl App for Terminal {
                 .on_add(tr!("new-tab-button"), move |_| {
                     let profile = on_add.defaults.peek().default_profile_name();
                     new_tab(&on_add, &add_events, &profile, None)
+                })
+                .menu(TabMenu {
+                    items: Callback::new({
+                        let handles = handles.clone();
+                        move |index| tab_menu(&handles, index)
+                    }),
+                    on_activate: Callback::new({
+                        let handles = handles.clone();
+                        move |(index, id): (usize, String)| {
+                            on_tab_menu(&handles, &menu_events, index, &id, revision)
+                        }
+                    }),
                 })
         });
         let transparent = transparency_supported() && *transparency.read();
@@ -1607,6 +1642,10 @@ fn use_live_menu(handles: &Handles) {
     }
     use_menu_enabled(menu::BURY_SESSION.id, several && unlocked);
     use_menu_enabled(menu::MOVE_SESSION_TO_TAB.id, several && unlocked);
+    use_menu_enabled(
+        menu::MOVE_SESSION_TO_WINDOW.id,
+        several && unlocked && windows::SHARE_SESSIONS,
+    );
     use_menu_enabled(menu::MOVE_SESSION_TO_PANE.id, several && unlocked);
     let buried: Vec<(SessionId, String)> = handles
         .interred
@@ -2189,7 +2228,7 @@ fn field_sheet(handles: &Handles, target: Sheet) -> Element {
         Sheet::SaveSelection(_) => (tr!("save-selection"), tr!("save-path"), tr!("save-confirm")),
         Sheet::SaveContents(_) => (tr!("save-contents"), tr!("save-path"), tr!("save-confirm")),
         Sheet::Log(_) => (tr!("log-start"), tr!("save-path"), tr!("log-confirm")),
-        Sheet::SaveArrangement => (
+        Sheet::SaveArrangement(_) => (
             tr!("save-arrangement"),
             tr!("save-arrangement-name"),
             tr!("save-confirm"),
@@ -2203,6 +2242,11 @@ fn field_sheet(handles: &Handles, target: Sheet) -> Element {
         // PseudoTerminal.m -promptForTabGroupName:title:.
         Sheet::NewTabGroup => (
             tr!("new-tab-group"),
+            tr!("tab-group-name"),
+            tr!("mark-alert-ok"),
+        ),
+        Sheet::RenameTabGroup(_) => (
+            tr!("rename-group"),
             tr!("tab-group-name"),
             tr!("mark-alert-ok"),
         ),
@@ -2276,7 +2320,8 @@ fn confirm_later(handles: &Handles, target: Sheet) {
             Sheet::SaveContents(of) => save(&later, of, &typed, |session| Some(session.contents())),
             Sheet::Log(of) => start_log(&later, of, &typed),
             Sheet::Coprocess(of) => start_coprocess(&later, of, &typed),
-            Sheet::SaveArrangement => save_arrangement(&later, &typed),
+            Sheet::SaveArrangement(tab) => save_arrangement(&later, &typed, tab),
+            Sheet::RenameTabGroup(id) => workspace.write().rename_group(id, typed.trim()),
             Sheet::NewTabGroup => workspace
                 .write()
                 .add_active_to_new_group(typed.trim().to_string()),
@@ -3433,9 +3478,7 @@ fn spawn(handles: &Handles, events: &Events, launch: Launch) -> Option<SessionId
         },
         |session| session.size(),
     );
-    let mut next_id = handles.next_id;
-    let id = *next_id.peek();
-    *next_id.write() += 1;
+    let id = NEXT_SESSION_ID.fetch_add(1, Ordering::Relaxed);
     let listener = Listener::new(id, events.0.clone(), events.1.clone());
     let profile = handles.defaults.peek().profile(&launch.profile);
     match Session::spawn(id, size, launch, listener) {
@@ -3456,7 +3499,8 @@ fn spawn(handles: &Handles, events: &Events, launch: Launch) -> Option<SessionId
     }
 }
 
-fn save_arrangement(handles: &Handles, name: &str) {
+// PseudoTerminal.m -saveTabAsWindowArrangement: keeps only the tab holding `of`.
+fn save_arrangement(handles: &Handles, name: &str, of: Option<SessionId>) {
     let name = name.trim();
     if name.is_empty() {
         return;
@@ -3466,6 +3510,7 @@ fn save_arrangement(handles: &Handles, name: &str) {
         .peek()
         .tabs
         .iter()
+        .filter(|tab| of.is_none_or(|id| tab.sessions().contains(&id)))
         .filter_map(|tab| tab_layout(handles, tab))
         .collect();
     change_defaults(|defaults| {
@@ -3629,9 +3674,17 @@ fn request_close(handles: &Handles, closing: Closing) {
         Closing::Window => workspace.receivers(Broadcast::AllTabs),
     };
     drop(workspace);
+    if asks_before_closing(handles, &ids) {
+        let mut pending = handles.confirm;
+        pending.set(Some(Confirm::Close(closing)));
+    } else {
+        close_now(handles, closing);
+    }
+}
+
+fn asks_before_closing(handles: &Handles, ids: &[SessionId]) -> bool {
     let defaults = handles.defaults.peek();
-    let ask = ids
-        .iter()
+    ids.iter()
         .filter_map(|id| handles.sessions.peek().get(id).cloned())
         .any(
             |session| match defaults.profile(&session.profile()).prompt_before_closing {
@@ -3639,13 +3692,34 @@ fn request_close(handles: &Handles, closing: Closing) {
                 ClosePrompt::Never => false,
                 ClosePrompt::IfJobs => session.has_jobs(),
             },
-        );
-    drop(defaults);
-    if ask {
-        let mut pending = handles.confirm;
-        pending.set(Some(Confirm::Close(closing)));
+        )
+}
+
+// PseudoTerminal.m -closeTabs:confirmWith:skippingPinned:alwaysConfirm:; each tab is named by
+// one of its sessions.
+fn request_close_tabs(handles: &Handles, tabs: Vec<SessionId>, question: &str) {
+    if *handles.layout_locked.peek() || tabs.is_empty() {
+        return;
+    }
+    let workspace = handles.workspace.peek();
+    let ids: Vec<SessionId> = tabs
+        .iter()
+        .filter_map(|id| workspace.tab_of(*id))
+        .flat_map(|index| workspace.tabs[index].sessions())
+        .collect();
+    drop(workspace);
+    if asks_before_closing(handles, &ids) {
+        let message = format!("{question} ({})", tr!("tab-count", count = tabs.len()));
+        let mut shown = handles.question;
+        shown.set(Some(Question::CloseTabs(tabs, message)));
     } else {
-        close_now(handles, closing);
+        close_tabs_now(handles, &tabs);
+    }
+}
+
+fn close_tabs_now(handles: &Handles, tabs: &[SessionId]) {
+    for id in tabs {
+        close_now(handles, Closing::TabOf(*id));
     }
 }
 
@@ -3684,7 +3758,7 @@ fn close_now(handles: &Handles, closing: Closing) {
     }
 }
 
-fn bury(handles: &Handles, tab: Tab) {
+fn detached(handles: &Handles, tab: Tab) -> Detached {
     let ids = tab.sessions();
     let sessions = ids
         .iter()
@@ -3695,15 +3769,31 @@ fn bury(handles: &Handles, tab: Tab) {
         .iter()
         .map(|id| (*id, workspace.title(*id).to_string()))
         .collect();
-    drop(workspace);
-    let at = Instant::now();
-    let mut buried = handles.buried;
-    buried.set(Some(Buried {
+    Detached {
         tab,
         sessions,
         titles,
-        at,
-    }));
+    }
+}
+
+fn reinstate(handles: &Handles, detached: Detached) {
+    let mut sessions = handles.sessions;
+    for session in detached.sessions {
+        sessions.write().insert(session.id, session);
+    }
+    let mut workspace = handles.workspace;
+    let mut workspace = workspace.write();
+    for (id, title) in detached.titles {
+        workspace.set_title(id, Some(title));
+    }
+    workspace.restore(detached.tab);
+}
+
+fn bury(handles: &Handles, tab: Tab) {
+    let detached = detached(handles, tab);
+    let at = Instant::now();
+    let mut buried = handles.buried;
+    buried.set(Some(Buried { detached, at }));
     handles.after(UNDO_CLOSE, move || {
         if buried.peek().as_ref().is_some_and(|buried| buried.at == at) {
             let mut buried = buried;
@@ -3717,16 +3807,190 @@ fn undo_close(handles: &Handles) {
     let Some(buried) = buried.write().take() else {
         return;
     };
-    let mut sessions = handles.sessions;
-    for session in buried.sessions {
-        sessions.write().insert(session.id, session);
+    reinstate(handles, buried.detached);
+}
+
+// MovePaneController.m -moveSessionToNewWindow:atPoint: and PseudoTerminal.m
+// -it_moveTabToNewWindow:ungroup:: the sessions keep running in a new window, which only a window
+// of this process can be (BK-001).
+fn move_to_new_window(handles: &Handles, mut tab: Tab) {
+    if !windows::SHARE_SESSIONS {
+        return;
     }
+    tab.group = None;
+    let moving = detached(handles, tab);
+    let ids = moving.tab.sessions();
     let mut workspace = handles.workspace;
-    let mut workspace = workspace.write();
-    for (id, title) in buried.titles {
-        workspace.set_title(id, Some(title));
+    let whole_tab = {
+        let workspace = workspace.peek();
+        workspace
+            .tab_of(ids[0])
+            .filter(|index| workspace.tabs[*index].sessions() == ids)
+    };
+    match whole_tab {
+        Some(index) => {
+            workspace.write().close_tab(index);
+        }
+        None => {
+            workspace.write().close(ids[0]);
+        }
     }
-    workspace.restore(buried.tab);
+    let mut sessions = handles.sessions;
+    for id in &ids {
+        sessions.write().remove(id);
+    }
+    ADOPTION.with(|adoption| adoption.replace(Some(moving)));
+    windows::open(&["--adopt"]);
+}
+
+const TAB_MENU_NEW_TAB_RIGHT: &str = "tab-menu-new-tab-right";
+const TAB_MENU_CLOSE_TAB: &str = "tab-menu-close-tab";
+const TAB_MENU_CLOSE_OTHERS: &str = "tab-menu-close-others";
+const TAB_MENU_CLOSE_RIGHT: &str = "tab-menu-close-right";
+const TAB_MENU_NEW_WINDOW: &str = "tab-menu-new-window";
+const TAB_MENU_GROUP_PREFIX: &str = "tab-menu-group-";
+const TAB_MENU_RENAME_GROUP: &str = "tab-menu-rename-group";
+const TAB_MENU_SAVE_ARRANGEMENT: &str = "tab-menu-save-arrangement";
+
+// PseudoTerminal.m -tabView:menuForTabViewItem:, without Pin Tab and Tab Color, which
+// CurseTerm does not have.
+fn tab_menu(handles: &Handles, index: usize) -> Vec<MenuItem> {
+    let workspace = handles.workspace.peek();
+    let count = workspace.tabs.len();
+    let mut items = Vec::new();
+    if count > 1 {
+        let tabs = workspace
+            .tab_titles()
+            .into_iter()
+            .enumerate()
+            .map(|(other, title)| {
+                MenuItem::action(
+                    format!("{}{other}", menu::SELECT_TAB_PREFIX),
+                    format!("{title} #{}", other + 1),
+                )
+            })
+            .collect();
+        items.push(MenuItem::submenu(tr!("tab-menu-select"), tabs));
+        items.push(MenuItem::Separator);
+    }
+    let unlocked = !*handles.layout_locked.peek();
+    items.extend([
+        MenuItem::action(menu::EDIT_TAB_TITLE.id, tr!("rename-tab")),
+        MenuItem::action(menu::EDIT_SESSION.id, tr!("edit-session")),
+        MenuItem::Separator,
+        MenuItem::action(TAB_MENU_NEW_TAB_RIGHT, tr!("new-tab-to-the-right"))
+            .with_enabled(unlocked),
+        MenuItem::action(menu::DUPLICATE_TAB.id, tr!("duplicate-tab")).with_enabled(unlocked),
+        MenuItem::Separator,
+        MenuItem::action(TAB_MENU_CLOSE_TAB, tr!("close-tab")).with_enabled(unlocked),
+    ]);
+    if count > 1 {
+        items.push(
+            MenuItem::action(TAB_MENU_CLOSE_OTHERS, tr!("close-other-tabs")).with_enabled(unlocked),
+        );
+    }
+    if index + 1 < count {
+        items.push(
+            MenuItem::action(TAB_MENU_CLOSE_RIGHT, tr!("close-tabs-to-the-right"))
+                .with_enabled(unlocked),
+        );
+    }
+    items.push(MenuItem::Separator);
+    if count > 1 && windows::SHARE_SESSIONS {
+        items.push(
+            MenuItem::action(TAB_MENU_NEW_WINDOW, tr!("move-to-new-window")).with_enabled(unlocked),
+        );
+        items.push(MenuItem::Separator);
+    }
+    let mut groups = vec![MenuItem::action(
+        menu::ADD_TAB_TO_NEW_GROUP.id,
+        tr!("new-group"),
+    )];
+    let known = workspace.groups();
+    if !known.is_empty() {
+        groups.push(MenuItem::Separator);
+        groups.extend(known.into_iter().map(|group| {
+            let name = if group.name.is_empty() {
+                tr!("untitled-group").to_string()
+            } else {
+                group.name
+            };
+            MenuItem::action(format!("{TAB_MENU_GROUP_PREFIX}{}", group.id), name)
+        }));
+    }
+    items.push(MenuItem::submenu(tr!("add-tab-to-group"), groups));
+    if workspace
+        .tabs
+        .get(index)
+        .is_some_and(|tab| tab.group.is_some())
+    {
+        items.push(MenuItem::action(TAB_MENU_RENAME_GROUP, tr!("rename-group")));
+        items.push(MenuItem::action(
+            menu::REMOVE_TAB_FROM_GROUP.id,
+            tr!("remove-tab-from-group"),
+        ));
+    }
+    items.push(MenuItem::Separator);
+    items.push(MenuItem::action(
+        TAB_MENU_SAVE_ARRANGEMENT,
+        tr!("save-tab-as-arrangement"),
+    ));
+    items
+}
+
+fn on_tab_menu(handles: &Handles, events: &Events, index: usize, id: &str, revision: State<u64>) {
+    let mut workspace = handles.workspace;
+    let Some(tab) = workspace.peek().tabs.get(index).cloned() else {
+        return;
+    };
+    let tab_ids = |range: &mut dyn Iterator<Item = usize>| -> Vec<SessionId> {
+        let workspace = workspace.peek();
+        range.map(|other| workspace.tabs[other].active).collect()
+    };
+    let count = workspace.peek().tabs.len();
+    match id {
+        TAB_MENU_CLOSE_TAB => request_close(handles, Closing::TabOf(tab.active)),
+        TAB_MENU_CLOSE_OTHERS => request_close_tabs(
+            handles,
+            tab_ids(&mut (0..count).filter(|other| *other != index)),
+            tr!("close-other-tabs-question"),
+        ),
+        TAB_MENU_CLOSE_RIGHT => request_close_tabs(
+            handles,
+            tab_ids(&mut (index + 1..count)),
+            tr!("close-tabs-to-the-right-question"),
+        ),
+        TAB_MENU_NEW_WINDOW if count > 1 && !*handles.layout_locked.peek() => {
+            move_to_new_window(handles, tab)
+        }
+        TAB_MENU_NEW_TAB_RIGHT if !*handles.layout_locked.peek() => {
+            let profile = handles.defaults.peek().default_profile_name();
+            new_tab(handles, events, &profile, None);
+            workspace.write().place_active(index + 1, tab.group);
+        }
+        TAB_MENU_RENAME_GROUP => {
+            if let Some(group) = tab.group {
+                handles.draft.clone().set(group.name);
+                open_sheet(handles, Sheet::RenameTabGroup(group.id));
+            }
+        }
+        TAB_MENU_SAVE_ARRANGEMENT => {
+            handles.draft.clone().set(String::new());
+            open_sheet(handles, Sheet::SaveArrangement(Some(tab.active)));
+        }
+        _ => {
+            workspace.write().select_tab(index);
+            match id
+                .strip_prefix(TAB_MENU_GROUP_PREFIX)
+                .and_then(|group| group.parse().ok())
+            {
+                Some(group) => workspace.write().add_active_to_group(group),
+                None => on_action(id, handles, events, revision),
+            }
+        }
+    }
+    let mut revision = revision;
+    *revision.write() += 1;
 }
 
 // BK-027: the Alert's key also reaches the global handler, so the alert goes one loop later.
@@ -3849,6 +4113,14 @@ fn question_sheet(handles: &Handles, question: Question) -> Element {
                 (tr!("enter-password"), Answer::EnterPassword),
             ],
         ),
+        // PseudoTerminal.m -confirmCloseTabs:question:alwaysConfirm:.
+        Question::CloseTabs(_, message) => (
+            message.clone(),
+            vec![
+                (tr!("close-confirm"), Answer::CloseTabs),
+                (tr!("close-cancel"), Answer::Dismiss),
+            ],
+        ),
         Question::StuckKeys(_) => (
             tr!("key-reporting-stuck").to_string(),
             vec![
@@ -3921,6 +4193,7 @@ fn answer_question(handles: &Handles, question: &Question, answer: Answer) {
         (Question::PasswordEchoes(password), Answer::EnterPassword) => {
             send_password(handles, password)
         }
+        (Question::CloseTabs(tabs, _), Answer::CloseTabs) => close_tabs_now(handles, tabs),
         (Question::StuckKeys(_), Answer::NeverResetKeys) => {
             change_defaults(|defaults| defaults.reset_key_reporting = Some(false))
         }
@@ -3937,6 +4210,7 @@ enum Answer {
     AlwaysResetKeys,
     NeverResetKeys,
     EnterPassword,
+    CloseTabs,
 }
 
 // MovePaneController.m -dropInSession:half:atPoint:; a click on the moving pane cancels.
@@ -4377,7 +4651,7 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         }
         _ if id == menu::SAVE_ARRANGEMENT.id => {
             handles.draft.clone().set(String::new());
-            open_sheet(handles, Sheet::SaveArrangement);
+            open_sheet(handles, Sheet::SaveArrangement(None));
         }
         _ if id == menu::SAVE_CONTENTS.id => {
             if let Some(session) = active {
@@ -4528,6 +4802,11 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         _ if id == menu::MOVE_SESSION_TO_TAB.id => {
             if let Some(session) = &active {
                 workspace.write().move_to_tab(session.id);
+            }
+        }
+        _ if id == menu::MOVE_SESSION_TO_WINDOW.id => {
+            if let Some(session) = &active {
+                move_to_new_window(handles, Tab::single(session.id));
             }
         }
         _ if id == menu::MOVE_SESSION_TO_PANE.id => {

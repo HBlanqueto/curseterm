@@ -98,6 +98,9 @@ impl Drop for Registration {
     }
 }
 
+// BK-001: a session can only move to a window of its own process.
+pub const SHARE_SESSIONS: bool = cfg!(feature = "kit-parcheado");
+
 pub fn describe(arguments: &[&str]) -> (AppComponent, WindowOptions) {
     forget_saved_size();
     match arguments {
@@ -105,11 +108,14 @@ pub fn describe(arguments: &[&str]) -> (AppComponent, WindowOptions) {
         ["--settings", profile @ ..] => {
             preferences::window(profile.first().map(|name| name.to_string()))
         }
-        ["--profile", name, ..] => terminal_window(Some(name.to_string()), None, None),
-        ["--arrangement", name, ..] => terminal_window(None, Some(name.to_string()), None),
-        ["--layout", layout, ..] => terminal_window(None, None, toml::from_str(layout).ok()),
-        ["--archive", path, ..] => terminal_window(None, None, archive::load(Path::new(path))),
-        _ => terminal_window(None, None, None),
+        ["--profile", name, ..] => terminal_window(Some(name.to_string()), None, None, false),
+        ["--arrangement", name, ..] => terminal_window(None, Some(name.to_string()), None, false),
+        ["--layout", layout, ..] => terminal_window(None, None, toml::from_str(layout).ok(), false),
+        ["--archive", path, ..] => {
+            terminal_window(None, None, archive::load(Path::new(path)), false)
+        }
+        ["--adopt", ..] => terminal_window(None, None, None, true),
+        _ => terminal_window(None, None, None, false),
     }
 }
 
@@ -117,6 +123,7 @@ fn terminal_window(
     profile: Option<String>,
     arrangement: Option<String>,
     layout: Option<Arrangement>,
+    adopts: bool,
 ) -> (AppComponent, WindowOptions) {
     let size = terminal_size(profile.as_deref());
     let options = WindowOptions::new(APP_NAME, "curseterm")
@@ -129,6 +136,7 @@ fn terminal_window(
             profile,
             arrangement,
             layout,
+            adopts,
         }),
         options,
     )

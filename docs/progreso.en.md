@@ -3703,3 +3703,53 @@ a locked keyring.
 **Differs from iTerm2:** no 1Password, LastPass nor the other integrations,
 no authentication on open, no OTP, no export or import; the “Password sent.”
 message does not appear.
+
+## Phase 86 — Moving sessions between windows
+
+### Plan
+
+`MovePaneController.m` and `PseudoTerminal.m`, with patch 0008 (BK-001):
+
+1. **Window › Move Session › Move Session to Window** (`-moveSessionToWindow:`)
+   takes the active session out to a new window. It is enabled with more than
+   one session in the window and without Lock Layout.
+2. A secondary click on a tab opens its menu (`-tabView:menuForTabViewItem:`):
+   Select ▸, Rename Tab…, Edit Session…, New Tab to the Right, Duplicate Tab,
+   Close Tab, Close Other Tabs, Close Tabs to the Right, Move to New Window,
+   Add Tab to Group ▸, Rename Group…, Remove Tab from Group and Save Tab as
+   Window Arrangement.
+3. **Move to New Window** (`-it_moveTabToNewWindow:ungroup:`) takes the whole
+   tab, without its group, to a new window.
+4. The session stays alive: the terminal's listener moves to the target window
+   and session ids are unique in the process.
+5. Close Other Tabs and Close Tabs to the Right ask “Close all other tabs? (N
+   tabs)” if a session's profile asks for it
+   (`-confirmCloseTabs:question:alwaysConfirm:`).
+
+### Result (2026-11-06)
+
+Tested in headless sway with the patched kit. `./dev.sh check` clean in both
+modes.
+
+| Test | Result | Screenshot |
+|---|---|---|
+| A secondary click on a tab shows its menu | ✓ | `fase86-mover-sesiones.png` |
+| Move to New Window: the shell goes on (same pid) and the pty takes the new width | ✓ | — |
+| Move Session to Window is disabled with a single session | ✓ | — |
+| Move Session to Window takes a split pane to another window | ✓ | `fase86-mover-sesiones.png` |
+| New Tab to the Right puts it on the right and selects it | ✓ | — |
+| Close Tabs to the Right closes those on the right | ✓ | — |
+
+Also: a `match` on a workspace read kept it borrowed while writing and tripped
+freya's panic; it is now computed first.
+
+**Not tested:** the Close Other Tabs question; Select ▸, Rename Group… and
+Save Tab as Window Arrangement; with the kit as is, the tab menu without Move
+to New Window.
+
+**Differs from iTerm2:** a tab or pane cannot be dragged to another window
+(Wayland gives no global pointer position), nor can Move Session to Split Pane
+pick a pane in another window; the menu has no Pin Tab nor Tab Color, which
+CurseTerm lacks; the question does not list the jobs nor read “Confirm closing
+multiple sessions”; the new window takes the profile's size instead of fitting
+the tab.

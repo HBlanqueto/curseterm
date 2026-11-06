@@ -101,7 +101,9 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
   añade `WindowControls::open_window(app, opciones)`. Con él, `windows::open`
   abre la ventana en el mismo proceso y Quit las cierra todas; el historial de
   pegado es común. El parche también corrige un pánico de `close_window`, que
-  escribía el estado con la lectura aún prestada.
+  escribía el estado con la lectura aún prestada. Con el parche, una pestaña o
+  una sesión pasa viva a una ventana nueva (fase 86); sin él, esas órdenes no
+  aparecen, porque un pty no cambia de proceso.
 - **API propuesta para el kit**: `WindowControls::open(app: AppComponent, options: WindowOptions) -> WindowControls` y `Windows::get().list() -> State<Vec<WindowInfo>>`.
 - **Gravedad**: alta
 - **Cómo reproducirlo**: buscar en `barrier_kit::platform` una función pública

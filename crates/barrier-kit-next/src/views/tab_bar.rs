@@ -1,7 +1,9 @@
 //! Document tabs drawn like PSMTabBarControl: equal tabs that fill the bar, a close button on
 //! the left on hover and the colors of a `TabStyle`.
 
+use barrier_kit::context_menu::context_menu;
 use barrier_kit::interaction::use_interaction;
+use barrier_kit::menu::MenuItem;
 use barrier_kit::style::text;
 use barrier_kit::symbol::{Symbol, symbol};
 use barrier_kit::theme::color;
@@ -40,6 +42,14 @@ pub struct TabBar {
     on_close: Option<Callback<usize, ()>>,
     on_empty_mouse_down: Option<Callback<Event<MouseEventData>, ()>>,
     add: Option<(&'static str, Callback<(), ()>)>,
+    menu: Option<TabMenu>,
+}
+
+// PSMTabBarControl -menuForTabViewItem:: the menu a tab shows on a secondary click.
+#[derive(Clone, PartialEq)]
+pub struct TabMenu {
+    pub items: Callback<usize, Vec<MenuItem>>,
+    pub on_activate: Callback<(usize, String), ()>,
 }
 
 impl TabBar {
@@ -57,7 +67,13 @@ impl TabBar {
             on_close: None,
             on_empty_mouse_down: None,
             add: None,
+            menu: None,
         }
+    }
+
+    pub fn menu(mut self, menu: TabMenu) -> Self {
+        self.menu = Some(menu);
+        self
     }
 
     pub fn on_add(mut self, label: &'static str, callback: impl Into<Callback<(), ()>>) -> Self {
@@ -197,6 +213,10 @@ impl TabBar {
             index,
             on_select: self.on_select.clone(),
             on_close: self.on_close.clone(),
+            menu: self
+                .menu
+                .as_ref()
+                .map(|menu| (menu.items.call(index), menu.clone())),
         }
         .into_element()
     }
@@ -321,6 +341,7 @@ struct Tab {
     index: usize,
     on_select: Option<Callback<usize, ()>>,
     on_close: Option<Callback<usize, ()>>,
+    menu: Option<(Vec<MenuItem>, TabMenu)>,
 }
 
 impl Component for Tab {
@@ -465,6 +486,12 @@ impl Component for Tab {
                     .child(text(self.title.clone(), font, ink)),
             )
             .maybe_child(close);
+        let tab = match self.menu.clone() {
+            Some((items, menu)) => {
+                context_menu(tab, items, move |id| menu.on_activate.call((index, id)))
+            }
+            None => tab,
+        };
         interaction.focus_ring(tab, 0.0)
     }
 }

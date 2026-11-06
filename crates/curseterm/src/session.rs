@@ -49,23 +49,32 @@ use crate::status;
 
 pub type SessionId = u64;
 
+type Route = (Sender<(SessionId, Event)>, WakeHandle);
+
+// The route is shared so that a session moved to another window reports to that window.
 #[derive(Clone)]
 pub struct Listener {
     id: SessionId,
-    events: Sender<(SessionId, Event)>,
-    wake: WakeHandle,
+    route: Arc<Mutex<Route>>,
 }
 
 impl Listener {
     pub fn new(id: SessionId, events: Sender<(SessionId, Event)>, wake: WakeHandle) -> Self {
-        Self { id, events, wake }
+        Self {
+            id,
+            route: Arc::new(Mutex::new((events, wake))),
+        }
     }
 }
 
 impl EventListener for Listener {
     fn send_event(&self, event: Event) {
-        if self.events.send((self.id, event)).is_ok() {
-            self.wake.wake();
+        let route = self
+            .route
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if route.0.send((self.id, event)).is_ok() {
+            route.1.wake();
         }
     }
 }
@@ -118,6 +127,7 @@ pub struct Launch {
 
 pub struct Session {
     pub id: SessionId,
+    listener: Listener,
     profile: RefCell<String>,
     pub term: Arc<FairMutex<Term<Listener>>>,
     extras: Arc<Mutex<Extras>>,
@@ -161,6 +171,16 @@ fn with_search<R>(pattern: &str, search: impl FnOnce(&mut RegexSearch) -> R) -> 
 }
 
 impl Session {
+    // MovePaneController.m -moveSession:toNewTabIn:atIndex: the session keeps running in its new
+    // window.
+    pub fn report_to(&self, events: Sender<(SessionId, Event)>, wake: WakeHandle) {
+        *self
+            .listener
+            .route
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = (events, wake);
+    }
+
     pub fn spawn(
         id: SessionId,
         size: GridSize,
@@ -188,9 +208,10 @@ impl Session {
             listener.clone(),
         )));
         let extras = Arc::new(Mutex::new(Extras::new((size.cell_width, size.cell_height))));
-        let sender = pty_io::start(&mut pty, term.clone(), listener, extras.clone())?;
+        let sender = pty_io::start(&mut pty, term.clone(), listener.clone(), extras.clone())?;
         Ok(Self {
             id,
+            listener,
             profile: RefCell::new(launch.profile),
             term,
             extras,

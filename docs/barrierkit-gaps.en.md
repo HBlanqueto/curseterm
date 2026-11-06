@@ -101,7 +101,9 @@ Each gap says how it is solved (CurseTerm ADR 0001):
   adds `WindowControls::open_window(app, options)`. With it, `windows::open`
   opens the window in the same process and Quit closes them all; the paste
   history is shared. The patch also fixes a `close_window` panic, which wrote
-  the status while the read was still borrowed.
+  the status while the read was still borrowed. With the patch, a tab or a
+  session moves alive to a new window (phase 86); without it, those commands
+  do not appear, because a pty cannot change process.
 - **Proposed kit API**: `WindowControls::open(app: AppComponent, options: WindowOptions) -> WindowControls` and `Windows::get().list() -> State<Vec<WindowInfo>>`.
 - **Severity**: high
 - **How to reproduce**: search `barrier_kit::platform` for a public function
