@@ -409,6 +409,7 @@ impl Session {
         term.selection = Some(selection);
     }
 
+    #[cfg(feature = "kit-parcheado")]
     pub fn cursor_cell(&self) -> (usize, i32) {
         let term = self.term.lock();
         let cursor = term.grid().cursor.point;
