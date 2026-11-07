@@ -54,6 +54,10 @@
     "root": {
       "inputs": {
         "barrierkit": "barrierkit",
+        "crane": [
+          "barrierkit",
+          "crane"
+        ],
         "nixpkgs": [
           "barrierkit",
           "nixpkgs"

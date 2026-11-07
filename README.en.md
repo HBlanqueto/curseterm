@@ -29,6 +29,13 @@ nix develop
 What BarrierKit lacks is completed in barrierkit
 ([ADR 0006](docs/decisiones/0006-el-kit-se-completa-en-barrierkit.en.md)).
 
+## Install
+
+`nix build .#curseterm` leaves the binary and its `.desktop` in `result/`.
+Malaysia installs it with its NixOS module and opens it in `./dev.sh demo` and
+`./dev.sh lab`. The grid uses Geist Mono, which Malaysia's module installs with
+`geist-font`.
+
 ## Documentation
 
 - [`docs/estudio-previo.en.md`](docs/estudio-previo.en.md): what was learned before starting.

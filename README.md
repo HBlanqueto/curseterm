@@ -29,6 +29,12 @@ nix develop
 Lo que le falta a BarrierKit se completa en barrierkit
 ([ADR 0006](docs/decisiones/0006-el-kit-se-completa-en-barrierkit.md)).
 
+## Instalar
+
+`nix build .#curseterm` deja el binario y su `.desktop` en `result/`. Malaysia
+lo instala con su módulo de NixOS y lo abre en `./dev.sh demo` y `./dev.sh lab`.
+La rejilla usa Geist Mono, que el módulo de Malaysia instala con `geist-font`.
+
 ## Documentación
 
 - [`docs/estudio-previo.md`](docs/estudio-previo.md): lo aprendido antes de empezar.

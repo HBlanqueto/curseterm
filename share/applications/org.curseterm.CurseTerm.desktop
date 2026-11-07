@@ -1,0 +1,19 @@
+[Desktop Entry]
+Type=Application
+Name=CurseTerm
+GenericName=Terminal
+GenericName[es]=Terminal
+Comment=A terminal for Malaysia that follows iTerm2
+Comment[es]=Un terminal para Malaysia que sigue a iTerm2
+Exec=curseterm
+Icon=utilities-terminal
+Terminal=false
+Categories=System;TerminalEmulator;
+Keywords=shell;prompt;command;commandline;
+StartupWMClass=org.curseterm.CurseTerm
+Actions=new-window;
+
+[Desktop Action new-window]
+Name=New Window
+Name[es]=Ventana nueva
+Exec=curseterm
