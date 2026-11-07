@@ -3914,3 +3914,17 @@ de las apps de prueba (Marea, Ondina, Tengen App Show) y fallan 8 tests de
 `tests/kit` y 6 de `tests/sidebar` (imágenes de referencia y la barra
 lateral), igual en `015f637`, antes de estos cambios. Las vistas nuevas no
 tienen aún página en Tengen App Show ni test de render.
+
+## Fase 90 — Semáforos separados del borde
+
+### Plan
+
+1. Declarar la barra a Malaysia con `WindowControls::set_bar` (BK-048):
+   `titlebar` con la barra normal y `compact` con pestañas en la barra.
+2. Separar los semáforos del borde izquierdo tanto como del superior
+   (`vow_appearance::traffic::inset`), como el kit.
+
+### Resultado (2026-11-07)
+
+Hecho con barrierkit `36e5958`. **No probado:** no se compiló ni se ejecutó;
+la sesión no pudo bajar Skia para el dev shell.

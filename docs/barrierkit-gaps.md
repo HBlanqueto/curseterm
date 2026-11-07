@@ -1,6 +1,6 @@
 # Lo que le faltó a BarrierKit al construir CurseTerm
 
-Versión/commit de BarrierKit usado: `4e23c81353c68ec4da3333459b41d19eee7dd254` (`main`, 2026-11-07)
+Versión/commit de BarrierKit usado: `36e59583c1e699b0e44ae3021bb5eff75dbb06a3` (`main`, 2026-11-07)
 
 Resumen: documento vivo; estado del 2026-11-07. Los bloques y parches que
 CurseTerm probó (ventanas, título, atajos, IME, selección primaria, menú en
@@ -70,6 +70,7 @@ Cada gap dice cómo se resuelve (ADR 0006 de CurseTerm):
 | BK-045 | plataforma | Sin cliente del Secret Service de freedesktop | media | En barrierkit: `secrets` |
 | BK-046 | apariencia | `Resolved` no lleva la preferencia de contraste | baja | En barrierkit: `Resolved::contrast` |
 | BK-047 | plataforma / animación | Las animaciones de `freya-animation` no reciben fotogramas | media | Workaround probado: fundido con `Timers` |
+| BK-048 | ventana / chrome | Sin forma de declarar la barra al dibujarla sin `Titlebar` | media | En barrierkit: `WindowControls::set_bar` |
 
 ## Gaps
 
@@ -1044,6 +1045,22 @@ Cada gap dice cómo se resuelve (ADR 0006 de CurseTerm):
 - **Cómo reproducirlo**: un `rect` cuyo color sale de
   `use_animation_transition` sobre un `State<bool>`; cambiar el estado con el
   ratón quieto: el color no cambia hasta mover el ratón.
+
+### BK-048 — Sin forma de declarar la barra al dibujarla sin `Titlebar`
+- **Área**: ventana / chrome
+- **Qué necesitaba CurseTerm**: el radio de esquina de una ventana con barra de
+  título simple (28 px) o con pestañas en la barra (estilos Compacto y Mínimo).
+- **Qué ofrecía BarrierKit**: solo `Titlebar` enviaba
+  `infinity_window_style_v1.set_bar`; `WindowControls::set_bar` era
+  `pub(crate)`.
+- **Qué faltaba**: sin barra declarada, Malaysia trata la ventana CSD como
+  `unified` (26). Su curva tapaba los semáforos de una barra de 28 px.
+- **Cómo se resolvió**: barrierkit `36e5958` hace públicos `set_bar` y `Bar`.
+  CurseTerm declara `titlebar` o `compact` según su chrome, y separa los
+  semáforos del borde con `vow_appearance::traffic::inset`.
+- **Gravedad**: media
+- **Cómo reproducirlo**: abrir CurseTerm con el estilo Normal en Malaysia: el
+  botón rojo toca la esquina.
 
 ## Cosas que funcionaron bien
 

@@ -28,7 +28,7 @@ use barrier_kit::app_menu::{
 use barrier_kit::compact::Stepper;
 use barrier_kit::controls::{Button, ButtonStyle, SearchField, Slider, TextField};
 use barrier_kit::notifications::{self, Notice};
-use barrier_kit::platform::{DecorationResponse, Timers, WakeHandle, WindowControls};
+use barrier_kit::platform::{Bar, DecorationResponse, Timers, WakeHandle, WindowControls};
 use barrier_kit::popup_button::PopUpButton;
 use barrier_kit::style::{Palette, text};
 use barrier_kit::symbol::Symbol;
@@ -597,6 +597,13 @@ impl App for Terminal {
             DecorationResponse::Client if theme::compact(theme) => Chrome::Compact,
             DecorationResponse::Client => Chrome::Regular,
         };
+        let bar = if chrome == Chrome::Compact {
+            Bar::Compact
+        } else {
+            Bar::Titlebar
+        };
+        let controls = handles.controls.clone();
+        use_side_effect_with_deps(&bar, move |bar| controls.set_bar(*bar));
         let full_screen = handles.controls.status.read().fullscreen;
         let window_style = defaults
             .read()
@@ -1105,7 +1112,12 @@ fn traffic_lights(height: f32, active: bool) -> Rect {
         .layer(1)
         .width(Size::px(TAB_STRIP.compact_inset))
         .height(Size::px(height))
-        .padding(Gaps::new(0.0, 0.0, 0.0, TAB_STRIP.compact_lights_x))
+        .padding(Gaps::new(
+            0.0,
+            0.0,
+            0.0,
+            vow_appearance::traffic::inset(height as u32) as f32,
+        ))
         .main_align(Alignment::Center)
         .child(window_traffic_lights(active, WindowControls::get().fixed))
 }

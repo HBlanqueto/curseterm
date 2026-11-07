@@ -1,6 +1,6 @@
 # What BarrierKit lacked when building CurseTerm
 
-BarrierKit version/commit used: `4e23c81353c68ec4da3333459b41d19eee7dd254` (`main`, 2026-11-07)
+BarrierKit version/commit used: `36e59583c1e699b0e44ae3021bb5eff75dbb06a3` (`main`, 2026-11-07)
 
 Summary: living document; state on 2026-11-07. The blocks and patches
 CurseTerm tested (windows, title, shortcuts, IME, primary selection, live
@@ -70,6 +70,7 @@ Each gap says how it is solved (CurseTerm ADR 0006):
 | BK-045 | platform | No freedesktop Secret Service client | medium | In barrierkit: `secrets` |
 | BK-046 | appearance | `Resolved` does not carry the contrast preference | low | In barrierkit: `Resolved::contrast` |
 | BK-047 | platform / animation | `freya-animation` animations get no frames | medium | Workaround tested: a fade with `Timers` |
+| BK-048 | window / chrome | No way to declare the bar when drawing it without `Titlebar` | medium | In barrierkit: `WindowControls::set_bar` |
 
 ## Gaps
 
@@ -1041,6 +1042,22 @@ Each gap says how it is solved (CurseTerm ADR 0006):
 - **How to reproduce**: a `rect` whose colour comes from
   `use_animation_transition` over a `State<bool>`; change the state with the
   mouse still: the colour does not change until the mouse moves.
+
+### BK-048 — No way to declare the bar when drawing it without `Titlebar`
+- **Area**: window / chrome
+- **What CurseTerm needed**: the corner radius of a window with a plain title
+  bar (28 px) or with tabs in the bar (Compact and Minimal styles).
+- **What BarrierKit offered**: only `Titlebar` sent
+  `infinity_window_style_v1.set_bar`; `WindowControls::set_bar` was
+  `pub(crate)`.
+- **What was missing**: with no declared bar, Malaysia treats the CSD window as
+  `unified` (26). Its curve covered the traffic lights of a 28 px bar.
+- **How it was solved**: barrierkit `36e5958` makes `set_bar` and `Bar` public.
+  CurseTerm declares `titlebar` or `compact` from its chrome, and keeps the
+  traffic lights off the edge with `vow_appearance::traffic::inset`.
+- **Severity**: medium
+- **How to reproduce it**: open CurseTerm with the Normal style on Malaysia:
+  the red button touches the corner.
 
 ## Things that worked well
 

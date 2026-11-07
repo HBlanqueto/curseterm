@@ -3887,3 +3887,17 @@ the test apps (Marea, Ondina, Tengen App Show), and 8 tests in `tests/kit`
 and 6 in `tests/sidebar` fail (reference images and the sidebar), the same on
 `015f637`, before these changes. The new views have no Tengen App Show page
 or render test yet.
+
+## Phase 90 — Traffic lights away from the edge
+
+### Plan
+
+1. Declare the bar to Malaysia with `WindowControls::set_bar` (BK-048):
+   `titlebar` with the normal bar and `compact` with tabs in the bar.
+2. Keep the traffic lights as far from the left edge as from the top
+   (`vow_appearance::traffic::inset`), like the kit.
+
+### Result (2026-11-07)
+
+Done with barrierkit `36e5958`. **Not tested:** it was not compiled or run;
+the session could not download Skia for the dev shell.
