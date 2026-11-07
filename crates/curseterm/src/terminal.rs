@@ -9,15 +9,25 @@ use std::time::{Duration, Instant, SystemTime};
 
 use zeroize::Zeroizing;
 
+use crate::tab_bar::{Badge, TabBar, TabGroupMark, TabMenu};
+use crate::tokens::{
+    ANNOTATION, FLOATING_PANE_SIZE, PASTE_HISTORY_SIZE, PASTE_QUESTION_WIDTH, RENAME_WIDTH,
+    SHORTCUT_LABEL, TAB_GROUP, TAB_STRIP, TITLE_BAR, TOOLBELT_WIDTH, TabStyle, TitleBarColors,
+};
 use alacritty_terminal::event::{Event as TermEvent, WindowSize};
 use alacritty_terminal::grid::{Row, Scroll};
 use alacritty_terminal::index::Direction as SearchDirection;
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::term::cell::Cell as GridCell;
+use barrier_kit::animation::use_alive;
 use barrier_kit::app::use_menu_action;
 use barrier_kit::app_menu::MenuHandle;
+use barrier_kit::app_menu::{
+    use_menu_checked, use_menu_enabled, use_menu_label, use_submenu_items,
+};
 use barrier_kit::compact::Stepper;
 use barrier_kit::controls::{Button, ButtonStyle, SearchField, Slider, TextField};
+use barrier_kit::notifications::{self, Notice};
 use barrier_kit::platform::{DecorationResponse, Timers, WakeHandle, WindowControls};
 use barrier_kit::popup_button::PopUpButton;
 use barrier_kit::style::{Palette, text};
@@ -25,26 +35,17 @@ use barrier_kit::symbol::Symbol;
 use barrier_kit::theme::color;
 use barrier_kit::titlebar::{window_drag_handler, window_traffic_lights};
 use barrier_kit::views::feedback::{Alert, sheet};
+use barrier_kit::views::floating_pane::{FloatingPane, PaneFrame};
+use barrier_kit::views::split_panes::SplitPanes;
 use barrier_kit::views::table::Table;
-use barrier_kit_next::app_menu::{
-    use_menu_checked, use_menu_enabled, use_menu_label, use_submenu_items,
-};
-use barrier_kit_next::notifications::{self, Notice};
-use barrier_kit_next::tokens::{
-    ANNOTATION, FLOATING_PANE, PASTE_HISTORY_SIZE, PASTE_QUESTION_WIDTH, RENAME_WIDTH,
-    SHORTCUT_LABEL, TAB_GROUP, TAB_STRIP, TITLE_BAR, TOOLBELT_WIDTH, TabStyle, TitleBarColors,
-};
-use barrier_kit_next::views::floating_pane::{FloatingPane, PaneFrame};
-use barrier_kit_next::views::split_panes::SplitPanes;
-use barrier_kit_next::views::tab_bar::{Badge, TabBar, TabGroupMark, TabMenu};
 use freya_clipboard::copypasta::ClipboardProvider;
 use freya_core::prelude::*;
 use rustix::process::{Pid, Signal, kill_process};
 use torin::prelude::{Alignment, Content, Direction, Gaps, Position, Size};
 
 use vow_design::{
-    CAPTION, DURATION_FAST_MS, DURATION_SLOW_MS, HEADLINE, Rgba, SPACE_1, SPACE_2, SPACE_3,
-    TITLEBAR,
+    CAPTION, DURATION_FAST_MS, DURATION_SLOW_MS, FLOATING_PANE, HEADLINE, Rgba, SPACE_1, SPACE_2,
+    SPACE_3, TITLEBAR,
 };
 
 use base64::Engine;
@@ -439,6 +440,7 @@ impl App for Terminal {
             mode: |defaults| defaults.filter_mode,
             save_mode: |defaults, mode| defaults.filter_mode = mode,
         };
+        let alive = use_alive();
         let handles = use_hook(move || Handles {
             workspace,
             sessions,
@@ -447,7 +449,7 @@ impl App for Terminal {
             fonts: FontCache::default(),
             controls: WindowControls::get(),
             timers: Timers::get(),
-            alive: Rc::new(Cell::new(true)),
+            alive,
             dark: Rc::new(Cell::new(dark)),
             clock_armed: Rc::new(Cell::new(false)),
             blink_armed: Rc::new(Cell::new(false)),
@@ -482,10 +484,6 @@ impl App for Terminal {
             password_select,
         });
         handles.dark.set(dark);
-        use_drop({
-            let alive = handles.alive.clone();
-            move || alive.set(false)
-        });
         use_side_effect({
             let handles = handles.clone();
             move || {
@@ -621,7 +619,8 @@ impl App for Terminal {
             .unwrap_or_default();
         let tab_style = theme::tab_style(
             theme,
-            (dark, theme::use_system_contrast()),
+            // NSAppearance+iTerm.m -it_mojaveTabStyle: increased contrast picks the high-contrast style.
+            (dark, barrier_kit::theme::resolved().contrast),
             terminal_background,
             compact,
         );
@@ -712,7 +711,7 @@ impl App for Terminal {
                     }),
                 })
         });
-        let transparent = transparency_supported() && *transparency.read();
+        let transparent = *transparency.read();
         let body = state.active_tab().map(|tab| {
             let root = if tab.zoomed {
                 Pane::Leaf(tab.tiled_target())
@@ -771,11 +770,8 @@ impl App for Terminal {
                 .into_element()
         });
         drop(state);
-        #[cfg(feature = "kit-parcheado")]
         use_background_alpha(if transparent { 0.0 } else { 1.0 });
-        #[cfg(feature = "kit-parcheado")]
         place_ime_cursor(&handles);
-        #[cfg(feature = "kit-parcheado")]
         use_window_title(&title);
 
         let keyboard = handles.clone();
@@ -1279,8 +1275,8 @@ fn clamped(
     (cell_width, cell_height): (f32, f32),
 ) -> PaneFrame {
     let fit = |size: f32, room: f32, least: f32| size.min(room).max(least.min(room));
-    let least_width = FLOATING_PANE.min_cells * cell_width;
-    let least_height = FLOATING_PANE.title_height + FLOATING_PANE.min_cells * cell_height;
+    let least_width = FLOATING_PANE_SIZE.min_cells * cell_width;
+    let least_height = FLOATING_PANE.title_height + FLOATING_PANE_SIZE.min_cells * cell_height;
     let (frame_width, frame_height) = (
         fit(frame.width, width, least_width),
         fit(frame.height, height, least_height),
@@ -1298,7 +1294,7 @@ fn new_float_frame(handles: &Handles, profile: &str) -> PaneFrame {
     let (width, height) = *handles.body_size.peek();
     let fonts = handles.fonts_for(&handles.defaults.peek().profile(profile));
     let cells =
-        |room: f32, cell: f32| (room * FLOATING_PANE.initial_fraction / cell).floor() * cell;
+        |room: f32, cell: f32| (room * FLOATING_PANE_SIZE.initial_fraction / cell).floor() * cell;
     let frame_width = cells(width, fonts.cell_width);
     let frame_height =
         cells(height - FLOATING_PANE.title_height, fonts.cell_height) + FLOATING_PANE.title_height;
@@ -1586,7 +1582,6 @@ fn use_live_menu(handles: &Handles) {
         menu::TERMINAL_STATE_MENU,
         menu::terminal_state_items(states, key_mode, flags),
     );
-    use_menu_enabled(menu::USE_TRANSPARENCY.id, transparency_supported());
     use_menu_checked(menu::USE_TRANSPARENCY.id, *handles.transparency.read());
     let marks = handles.active().is_some_and(|session| session.has_marks());
     let triggers = handles
@@ -1647,10 +1642,7 @@ fn use_live_menu(handles: &Handles) {
     }
     use_menu_enabled(menu::BURY_SESSION.id, several && unlocked);
     use_menu_enabled(menu::MOVE_SESSION_TO_TAB.id, several && unlocked);
-    use_menu_enabled(
-        menu::MOVE_SESSION_TO_WINDOW.id,
-        several && unlocked && windows::SHARE_SESSIONS,
-    );
+    use_menu_enabled(menu::MOVE_SESSION_TO_WINDOW.id, several && unlocked);
     use_menu_enabled(menu::MOVE_SESSION_TO_PANE.id, several && unlocked);
     let buried: Vec<(SessionId, String)> = handles
         .interred
@@ -1767,17 +1759,7 @@ fn use_profiles_menu(names: Vec<(String, Vec<String>)>) {
     let Some(handle) = handle else {
         return;
     };
-    #[cfg(feature = "kit-parcheado")]
     handle.set_menu_items(tr!("menu-profiles"), menu::profile_items(&names));
-    // BK-010: without patch 0004 only the entries the window opened with can change.
-    #[cfg(not(feature = "kit-parcheado"))]
-    for (index, (name, _)) in names.iter().enumerate() {
-        handle.update(format!("{}{index}", menu::PROFILE_PREFIX), |item| {
-            if let barrier_kit::menu::MenuItem::Action { label, .. } = item {
-                *label = name.clone();
-            }
-        });
-    }
 }
 
 fn copy(handles: &Handles, session: &Session) {
@@ -1791,13 +1773,6 @@ fn copy_text(handles: &Handles, text: String) {
     set_clipboard(handles.clipboard, text);
 }
 
-// BK-035: without patch 0011 the clipboard only takes plain text.
-#[cfg(not(feature = "kit-parcheado"))]
-fn copy_styled(handles: &Handles, session: &Session) {
-    copy(handles, session);
-}
-
-#[cfg(feature = "kit-parcheado")]
 fn copy_styled(handles: &Handles, session: &Session) {
     let defaults = handles.defaults.peek();
     let profile = defaults.profile(&session.profile());
@@ -2150,8 +2125,16 @@ fn pick_sheet(handles: &Handles, picker: Picker, mut revision: State<u64>) -> El
                 rect().width(Size::fill()).height(Size::flex(1.0)).child(
                     Table::new(heading, vec![column])
                         .rows(rows)
-                        .selected((!entries.is_empty()).then_some(selected))
-                        .on_select(move |index: usize| {
+                        .selected(
+                            (!entries.is_empty())
+                                .then_some(selected)
+                                .into_iter()
+                                .collect(),
+                        )
+                        .on_select(move |rows: Vec<usize>| {
+                            let Some(&index) = rows.first() else {
+                                return;
+                            };
                             let mut selected = history.selected;
                             selected.set(index);
                         }),
@@ -2302,15 +2285,8 @@ fn field_sheet(handles: &Handles, target: Sheet) -> Element {
     .into_element()
 }
 
-#[cfg(feature = "kit-parcheado")]
 fn field(draft: State<String>, placeholder: &'static str) -> TextField {
     TextField::new(draft, placeholder).auto_focus(true)
-}
-
-// BK-029: without patch 0006 the field only takes the focus when clicked.
-#[cfg(not(feature = "kit-parcheado"))]
-fn field(draft: State<String>, placeholder: &'static str) -> TextField {
-    TextField::new(draft, placeholder)
 }
 
 // BK-027: Enter also reaches the global handler, so the sheet closes one loop later.
@@ -2519,8 +2495,11 @@ fn toolbelt_view(handles: &Handles, mut revision: State<u64>) -> Element {
                     vec![tr!("toolbelt-pid"), tr!("toolbelt-command")],
                 )
                 .rows(job_rows)
-                .selected(selected_job)
-                .on_select(move |index: usize| {
+                .selected(selected_job.into_iter().collect())
+                .on_select(move |rows: Vec<usize>| {
+                    let Some(&index) = rows.first() else {
+                        return;
+                    };
                     let mut job = toolbelt.job;
                     job.set(pids.get(index).copied());
                 }),
@@ -2541,7 +2520,10 @@ fn toolbelt_view(handles: &Handles, mut revision: State<u64>) -> Element {
             rect().width(Size::fill()).height(Size::flex(1.0)).child(
                 Table::new(tr!("paste-history"), vec![tr!("paste-history-text")])
                     .rows(paste_rows)
-                    .on_select(move |index: usize| {
+                    .on_select(move |rows: Vec<usize>| {
+                        let Some(&index) = rows.first() else {
+                            return;
+                        };
                         if let Some(text) = pastes.get(index) {
                             paste_text(&paster, text.clone());
                         }
@@ -2553,7 +2535,10 @@ fn toolbelt_view(handles: &Handles, mut revision: State<u64>) -> Element {
             rect().width(Size::fill()).height(Size::flex(1.0)).child(
                 Table::new(tr!("toolbelt-directories"), vec![tr!("toolbelt-path")])
                     .rows(directory_rows)
-                    .on_select(move |index: usize| {
+                    .on_select(move |rows: Vec<usize>| {
+                        let Some(&index) = rows.first() else {
+                            return;
+                        };
                         if let (Some(path), Some(session)) =
                             (directories.get(index), typer.active())
                         {
@@ -3874,12 +3859,8 @@ fn undo_close(handles: &Handles) {
 }
 
 // MovePaneController.m -moveSessionToNewWindow:atPoint: and PseudoTerminal.m
-// -it_moveTabToNewWindow:ungroup:: the sessions keep running in a new window, which only a window
-// of this process can be (BK-001).
+// -it_moveTabToNewWindow:ungroup:: the sessions keep running in a new window of this process.
 fn move_to_new_window(handles: &Handles, mut tab: Tab) {
-    if !windows::SHARE_SESSIONS {
-        return;
-    }
     tab.group = None;
     let moving = detached(handles, tab);
     let ids = moving.tab.sessions();
@@ -3959,7 +3940,7 @@ fn tab_menu(handles: &Handles, index: usize) -> Vec<MenuItem> {
         );
     }
     items.push(MenuItem::Separator);
-    if count > 1 && windows::SHARE_SESSIONS {
+    if count > 1 {
         items.push(
             MenuItem::action(TAB_MENU_NEW_WINDOW, tr!("move-to-new-window")).with_enabled(unlocked),
         );
@@ -5241,19 +5222,11 @@ fn use_focus_report(handles: &Handles, focused: bool) {
     }
 }
 
-// BK-033: without patch 0009 no input method reaches the window.
-#[cfg(feature = "kit-parcheado")]
 fn ime_preedit(handles: &Handles) -> Option<Rc<str>> {
     let text = handles.controls.ime_preedit.read();
     (!text.is_empty()).then(|| Rc::from(text.as_str()))
 }
 
-#[cfg(not(feature = "kit-parcheado"))]
-fn ime_preedit(_: &Handles) -> Option<Rc<str>> {
-    None
-}
-
-#[cfg(feature = "kit-parcheado")]
 fn place_ime_cursor(handles: &Handles) {
     let Some(session) = handles.active() else {
         return;
@@ -5269,12 +5242,6 @@ fn place_ime_cursor(handles: &Handles) {
     );
 }
 
-// BK-031: without patch 0007 the runner clears the window opaque, so transparency stays off.
-fn transparency_supported() -> bool {
-    cfg!(feature = "kit-parcheado")
-}
-
-#[cfg(feature = "kit-parcheado")]
 fn use_background_alpha(alpha: f32) {
     let mut published = use_state(|| 1.0f32);
     if *published.peek() != alpha {
@@ -5283,7 +5250,6 @@ fn use_background_alpha(alpha: f32) {
     }
 }
 
-#[cfg(feature = "kit-parcheado")]
 fn use_window_title(title: &str) {
     let mut published = use_state(String::new);
     if *published.peek() != title {

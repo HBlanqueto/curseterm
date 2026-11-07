@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
+use crate::tokens::TERMINAL;
 use alacritty_terminal::vte::ansi::Rgb;
-use barrier_kit_next::tokens::{MONO, TERMINAL};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use vow_design::MONO;
 
 use crate::advanced::Advanced;
 use crate::arrangement::Arrangement;

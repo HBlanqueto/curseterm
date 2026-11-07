@@ -1,6 +1,6 @@
 # 0001 — What the kit lacks is built as movable blocks and patches
 
-Status: **accepted** (2026-11-05).
+Status: **superseded** by [ADR 0006](0006-el-kit-se-completa-en-barrierkit.en.md) (2026-11-07).
 
 ## Context
 

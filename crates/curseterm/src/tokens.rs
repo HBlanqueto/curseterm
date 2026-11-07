@@ -1,13 +1,4 @@
-//! Tengen values that move to `tengen/components.json` under the same name.
-
 use vow_design::{Font, Rgba};
-
-pub const MONO: Font = Font {
-    family: "Geist Mono",
-    size: 13,
-    line_height: 16,
-    weight: 400,
-};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TabBarMetrics {
@@ -21,27 +12,13 @@ pub const TAB_BAR: TabBarMetrics = TabBarMetrics {
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct FloatingPaneMetrics {
-    pub title_height: f32,
-    pub outline: f32,
-    pub resize_band: f32,
-    pub shadow_opacity: f32,
-    pub shadow_blur: f32,
-    pub shadow_y: f32,
+pub struct FloatingPaneSize {
     pub initial_fraction: f32,
     pub min_cells: f32,
 }
 
-// iTermFloatingPaneView.swift outlineWidth, resizeBandWidth and its layer shadow;
-// SessionView.m iTermGetSessionViewTitleHeight (statusBarHeight 21 + 1); floating-panes-design.md
-// §5: a new float takes 80 % of the tab, and none is smaller than 2×2 cells.
-pub const FLOATING_PANE: FloatingPaneMetrics = FloatingPaneMetrics {
-    title_height: 22.0,
-    outline: 1.0,
-    resize_band: 6.0,
-    shadow_opacity: 0.4,
-    shadow_blur: 8.0,
-    shadow_y: 3.0,
+// floating-panes-design.md §5: a new float takes 80 % of the tab, and none is smaller than 2×2 cells.
+pub const FLOATING_PANE_SIZE: FloatingPaneSize = FloatingPaneSize {
     initial_fraction: 0.8,
     min_cells: 2.0,
 };
@@ -74,22 +51,18 @@ pub const TAB_GROUP: TabGroupMetrics = TabGroupMetrics {
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SplitPanesMetrics {
-    pub divider: f32,
-    pub pane_min: f32,
-    pub light_divider: Rgba,
-    pub dark_divider: Rgba,
+pub struct SplitDivider {
+    pub light: Rgba,
+    pub dark: Rgba,
     pub minimal_prominence: f32,
 }
 
 // PseudoTerminal.m -terminalWindowDecorationControlColor: AppKit's light and dark grey, and
 // iTermAdvancedSettingsModel minimalSplitPaneDividerProminence.
-pub const SPLIT_PANES: SplitPanesMetrics = SplitPanesMetrics {
-    light_divider: Rgba::rgb8(170, 170, 170),
-    dark_divider: Rgba::rgb8(85, 85, 85),
+pub const SPLIT_DIVIDER: SplitDivider = SplitDivider {
+    light: Rgba::rgb8(170, 170, 170),
+    dark: Rgba::rgb8(85, 85, 85),
     minimal_prominence: 0.15,
-    divider: 3.0,
-    pane_min: 60.0,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]

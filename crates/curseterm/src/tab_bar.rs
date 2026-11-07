@@ -1,10 +1,9 @@
 //! Document tabs drawn like PSMTabBarControl: equal tabs that fill the bar, a close button on
 //! the left on hover and the colors of a `TabStyle`.
 
-use std::cell::Cell;
-use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use barrier_kit::animation::use_alive;
 use barrier_kit::context_menu::context_menu;
 use barrier_kit::interaction::use_interaction;
 use barrier_kit::menu::MenuItem;
@@ -362,11 +361,7 @@ impl Component for Tab {
         }
         let frame = use_state(|| 0u64);
         frame.read();
-        let alive = use_hook(|| Rc::new(Cell::new(true)));
-        use_drop({
-            let alive = alive.clone();
-            move || alive.set(false)
-        });
+        let alive = use_alive();
         let duration = if barrier_kit::theme::resolved().reduced_motion {
             Duration::ZERO
         } else {

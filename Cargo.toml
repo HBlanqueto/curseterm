@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/curseterm", "crates/barrier-kit-next"]
+members = ["crates/curseterm"]
 exclude = ["target"]
 
 [workspace.package]
@@ -11,16 +11,13 @@ license = "MIT"
 repository = "https://github.com/HBlanqueto/curseterm"
 
 [workspace.dependencies]
-barrier-kit = { git = "https://github.com/HBlanqueto/barrierkit", rev = "ba58ce01ef1f8e07dd915f783290b6ef068c037a" }
-vow-design = { git = "https://github.com/HBlanqueto/barrierkit", rev = "ba58ce01ef1f8e07dd915f783290b6ef068c037a" }
-vow-appearance = { git = "https://github.com/HBlanqueto/barrierkit", rev = "ba58ce01ef1f8e07dd915f783290b6ef068c037a" }
-barrier-kit-next = { path = "crates/barrier-kit-next" }
+barrier-kit = { git = "https://github.com/HBlanqueto/barrierkit", rev = "4e23c81353c68ec4da3333459b41d19eee7dd254" }
+vow-design = { git = "https://github.com/HBlanqueto/barrierkit", rev = "4e23c81353c68ec4da3333459b41d19eee7dd254" }
+vow-appearance = { git = "https://github.com/HBlanqueto/barrierkit", rev = "4e23c81353c68ec4da3333459b41d19eee7dd254" }
 
 freya-core = "=0.4.3"
 freya-engine = "=0.4.3"
 freya-clipboard = "=0.4.3"
-freya-components = { version = "=0.4.3", default-features = false }
-freya-edit = "=0.4.3"
 torin = "=0.4.3"
 
 alacritty_terminal = "0.26"
@@ -38,7 +35,6 @@ tracing = "0.1"
 i18n-embed = { version = "0.16", features = ["fluent-system"] }
 i18n-embed-fl = "0.10"
 rust-embed = "8"
-zbus = "5"
 zeroize = "1"
 
 [profile.dev]

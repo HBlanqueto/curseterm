@@ -1,5 +1,6 @@
-//! About window and the menu of the auxiliary windows, one process each (BK-001).
+//! About window and the menu of the auxiliary windows.
 
+use crate::tokens::ABOUT_WINDOW_SIZE;
 use barrier_kit::adornments::avatar;
 use barrier_kit::app::use_menu_action;
 use barrier_kit::patterns::about::about_window;
@@ -7,7 +8,6 @@ use barrier_kit::platform::{WindowControls, WindowOptions};
 use barrier_kit::style::Palette;
 use barrier_kit::theme::color;
 use barrier_kit::titlebar::Titlebar;
-use barrier_kit_next::tokens::ABOUT_WINDOW_SIZE;
 use freya_core::integration::AppComponent;
 use freya_core::prelude::*;
 use torin::prelude::{Direction, Size};

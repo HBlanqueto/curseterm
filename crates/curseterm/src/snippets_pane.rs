@@ -1,3 +1,4 @@
+use crate::tokens::SNIPPET_EDITOR;
 use barrier_kit::compact::IconButton;
 use barrier_kit::controls::{Button, ButtonStyle, TextField};
 use barrier_kit::popup_button::PopUpButton;
@@ -7,10 +8,10 @@ use barrier_kit::theme::color;
 use barrier_kit::views::feedback::sheet;
 use barrier_kit::views::form::{Form, Row, Section};
 use barrier_kit::views::table::Table;
-use barrier_kit_next::tokens::{MONO, SNIPPET_EDITOR};
-use barrier_kit_next::views::text_view::TextView;
+use barrier_kit::views::text_view::TextView;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Size};
+use vow_design::MONO;
 use vow_design::{CAPTION, HEADLINE, SPACE_1, SPACE_2, SPACE_3};
 
 use crate::config::{Defaults, change_defaults};
@@ -64,8 +65,8 @@ impl Component for SnippetsPane {
                         vec![tr!("snippet-title"), tr!("snippet-text")],
                     )
                     .rows(rows)
-                    .selected(chosen)
-                    .on_select(move |row| selected.set(Some(row))),
+                    .selected(chosen.into_iter().collect())
+                    .on_select(move |rows: Vec<usize>| selected.set(rows.first().copied())),
                 ),
             )
             .child(

@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
+use crate::tokens::HIGHLIGHT_COLORS;
 use alacritty_terminal::vte::ansi::Rgb;
-use barrier_kit_next::tokens::HIGHLIGHT_COLORS;
 use regex::Regex;
 use vow_design::Rgba;
 

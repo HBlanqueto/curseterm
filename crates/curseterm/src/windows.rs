@@ -1,4 +1,4 @@
-//! One process per window (BK-001), registered by pid under `$XDG_RUNTIME_DIR/curseterm`.
+//! This process's windows, and CurseTerm processes registered under `$XDG_RUNTIME_DIR/curseterm`.
 
 use std::cell::{Cell, RefCell};
 use std::fs;
@@ -98,9 +98,6 @@ impl Drop for Registration {
     }
 }
 
-// BK-001: a session can only move to a window of its own process.
-pub const SHARE_SESSIONS: bool = cfg!(feature = "kit-parcheado");
-
 pub fn describe(arguments: &[&str]) -> (AppComponent, WindowOptions) {
     forget_saved_size();
     match arguments {
@@ -187,8 +184,6 @@ pub fn quit() {
 }
 
 pub fn open(arguments: &[&str]) {
-    // BK-001: without patch 0008 each window is its own process.
-    #[cfg(feature = "kit-parcheado")]
     if let Some(controls) =
         OPEN.with(|open| open.borrow().first().map(|(_, controls)| controls.clone()))
     {

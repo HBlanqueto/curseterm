@@ -17,8 +17,6 @@ pub struct Styled {
     pub underline: bool,
 }
 
-// BK-035: only patch 0011 can offer text/html.
-#[cfg(feature = "kit-parcheado")]
 pub fn html(lines: &[Vec<Styled>], background: Rgb, family: &str) -> String {
     let mut out = format!(
         "<pre style=\"font-family:'{family}',monospace;background:{};margin:0\">",
@@ -139,12 +137,11 @@ fn same_style(a: &Styled, b: &Styled) -> bool {
     (a.fg, a.bg, a.bold, a.italic, a.underline) == (b.fg, b.bg, b.bold, b.italic, b.underline)
 }
 
-#[cfg(feature = "kit-parcheado")]
 fn hex(rgb: Rgb) -> String {
     format!("#{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b)
 }
 
-#[cfg(all(test, feature = "kit-parcheado"))]
+#[cfg(test)]
 mod tests {
     use super::*;
 

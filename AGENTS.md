@@ -7,26 +7,22 @@ formato de commits. Aquí solo lo propio.
 
 ## Reglas del proyecto
 
-1. **No se modifican BarrierKit ni Malaysia.** Lo que le falta al kit se hace
-   como bloque en `crates/barrier-kit-next` o como parche en `kit-parches/`
-   (ADR 0001) y se anota en `docs/barrierkit-gaps.md` en el mismo commit.
-2. **`barrier-kit-next` no depende de `curseterm`** y usa la ruta de módulo que
-   tendría en `barrier-kit`. Sus tokens viven solo en `src/tokens.rs`.
-3. **Diseño con tokens.** La interfaz usa `Palette`, `vow_design` y, para lo
-   que Tengen aún no tiene, `barrier_kit_next::tokens`. Los colores
+1. **No se modifica Malaysia.** Lo que le falta a BarrierKit se completa en
+   barrierkit con sus reglas; CurseTerm sube el `rev` y lo anota en
+   `docs/barrierkit-gaps.md` en el mismo commit (ADR 0006).
+2. **Diseño con tokens.** La interfaz usa `Palette`, `vow_design` y, para las
+   medidas propias de CurseTerm, `crates/curseterm/src/tokens.rs`. Los colores
    del terminal son datos de esquema (`crates/curseterm/schemes/*.toml`).
-4. **Texto visible por Fluent:** `crates/curseterm/i18n/{en,es}/curseterm.ftl` y `tr!`.
-5. **Atajos con Super** (ADR 0003).
-6. **Docs en español (`nombre.md`) e inglés (`nombre.en.md`)**, que cambian
+3. **Texto visible por Fluent:** `crates/curseterm/i18n/{en,es}/curseterm.ftl` y `tr!`.
+4. **Atajos con Super** (ADR 0003).
+5. **Docs en español (`nombre.md`) e inglés (`nombre.en.md`)**, que cambian
    en el mismo commit; código, comentarios y rustdoc solo en inglés.
-7. **Nada se da por probado sin ejecutarlo**; lo no probado se dice en
+6. **Nada se da por probado sin ejecutarlo**; lo no probado se dice en
    `docs/progreso.md`.
 
 ## Compilar
 
-`nix develop`, luego `./dev.sh check` (fmt, clippy `-D warnings`, tests) en los
-dos modos: `./dev.sh kit-tal-cual` y `./dev.sh kit-parches`. `Cargo.lock` se
-sube generado sin el `[patch]`.
+`nix develop`, luego `./dev.sh check` (fmt, clippy `-D warnings`, tests).
 
 ## Ramas
 

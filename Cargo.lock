@@ -324,16 +324,18 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 [[package]]
 name = "barrier-kit"
 version = "0.1.0"
-source = "git+https://github.com/HBlanqueto/barrierkit?rev=ba58ce01ef1f8e07dd915f783290b6ef068c037a#ba58ce01ef1f8e07dd915f783290b6ef068c037a"
+source = "git+https://github.com/HBlanqueto/barrierkit?rev=4e23c81353c68ec4da3333459b41d19eee7dd254#4e23c81353c68ec4da3333459b41d19eee7dd254"
 dependencies = [
  "accesskit",
  "accesskit_unix",
  "ash",
  "async-io",
+ "flate2",
  "freya-animation",
  "freya-clipboard",
  "freya-components",
  "freya-core",
+ "freya-edit",
  "freya-engine",
  "freya-skia-safe",
  "futures-channel",
@@ -341,36 +343,23 @@ dependencies = [
  "i18n-embed",
  "i18n-embed-fl",
  "infinity-protocol",
+ "pdf-writer",
  "ragnarok",
  "rust-embed",
  "serde",
  "smithay-client-toolkit",
+ "spellbook",
+ "subsetter",
  "thiserror 2.0.21",
  "toml 0.8.23",
  "torin",
  "tracing",
  "tracing-subscriber",
+ "ttf-parser",
  "vow-appearance",
  "vow-design",
  "wayland-protocols",
  "wayland-protocols-plasma",
- "zbus",
- "zeroize",
-]
-
-[[package]]
-name = "barrier-kit-next"
-version = "0.1.0"
-dependencies = [
- "barrier-kit",
- "freya-components",
- "freya-core",
- "freya-edit",
- "freya-engine",
- "serde",
- "torin",
- "tracing",
- "vow-design",
  "zbus",
  "zeroize",
 ]
@@ -656,7 +645,6 @@ version = "0.1.0"
 dependencies = [
  "alacritty_terminal",
  "barrier-kit",
- "barrier-kit-next",
  "base64 0.22.1",
  "freya-clipboard",
  "freya-core",
@@ -929,6 +917,15 @@ name = "foldhash"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
+
+[[package]]
+name = "font-types"
+version = "0.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b38ad915f6dadd993ced50848a8291a543bd41ca62bc10740d5e64e2ab4cfd7"
+dependencies = [
+ "bytemuck",
+]
 
 [[package]]
 name = "freya-animation"
@@ -1327,7 +1324,7 @@ dependencies = [
 [[package]]
 name = "infinity-protocol"
 version = "0.1.0"
-source = "git+https://github.com/HBlanqueto/barrierkit?rev=ba58ce01ef1f8e07dd915f783290b6ef068c037a#ba58ce01ef1f8e07dd915f783290b6ef068c037a"
+source = "git+https://github.com/HBlanqueto/barrierkit?rev=4e23c81353c68ec4da3333459b41d19eee7dd254#4e23c81353c68ec4da3333459b41d19eee7dd254"
 dependencies = [
  "wayland-backend",
  "wayland-client",
@@ -1446,6 +1443,18 @@ checksum = "0fbe853b403ae61a04233030ae8a79d94975281ed9770a1f9e246732b534b28d"
 dependencies = [
  "bitflags",
  "serde",
+]
+
+[[package]]
+name = "kurbo"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b60dfc32f652b926df6192e55525b16d186c69d47876c3ead4da5cc9f8450e2"
+dependencies = [
+ "arrayvec",
+ "euclid",
+ "polycool",
+ "smallvec",
 ]
 
 [[package]]
@@ -1936,6 +1945,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d731d919bb1875f415d3450919687fba49037667b078e7012eee27649b9936f1"
 
 [[package]]
+name = "pdf-writer"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f5e456864a7a304047bff84977dc6fb162bd956475d40ba50b2dcecaada7f753"
+dependencies = [
+ "bitflags",
+ "itoa",
+ "memchr",
+ "ryu",
+]
+
+[[package]]
 name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2032,6 +2053,15 @@ dependencies = [
  "pin-project-lite",
  "rustix",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "polycool"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50596ddc09eb5ad5f75cacd40209568e66df71baf86e1499a0e99c4cff12a5a6"
+dependencies = [
+ "arrayvec",
 ]
 
 [[package]]
@@ -2134,6 +2164,16 @@ dependencies = [
  "itertools 0.14.0",
  "rustc-hash",
  "tracing",
+]
+
+[[package]]
+name = "read-fonts"
+version = "0.39.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4ed38b89c2c77ff968c524145ad65fb010f38af5c7a224b53b81d47ac2daa81"
+dependencies = [
+ "bytemuck",
+ "font-types",
 ]
 
 [[package]]
@@ -2263,6 +2303,12 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
+
+[[package]]
+name = "ryu"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "same-file"
@@ -2450,6 +2496,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
 
 [[package]]
+name = "skrifa"
+version = "0.42.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c34617370ae968efb7161bb2beb517d9084659aae19e24b89e3db25b46e4564"
+dependencies = [
+ "bytemuck",
+ "read-fonts",
+]
+
+[[package]]
 name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2503,6 +2559,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "spellbook"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0d204abcbdf8e88729306a8d0ca01a79d8a49969fe1f84696909d6dbc4321c1a"
+dependencies = [
+ "foldhash",
+ "hashbrown 0.16.1",
+]
+
+[[package]]
 name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2519,6 +2585,18 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
+
+[[package]]
+name = "subsetter"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38803281d1c23166c5ebcb455439a5d2afe711cc909cf88af72448c297756ad6"
+dependencies = [
+ "kurbo",
+ "rustc-hash",
+ "skrifa",
+ "write-fonts",
+]
 
 [[package]]
 name = "syn"
@@ -2837,6 +2915,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ttf-parser"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
+
+[[package]]
 name = "type-map"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2925,7 +3009,7 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 [[package]]
 name = "vow-appearance"
 version = "0.1.0"
-source = "git+https://github.com/HBlanqueto/barrierkit?rev=ba58ce01ef1f8e07dd915f783290b6ef068c037a#ba58ce01ef1f8e07dd915f783290b6ef068c037a"
+source = "git+https://github.com/HBlanqueto/barrierkit?rev=4e23c81353c68ec4da3333459b41d19eee7dd254#4e23c81353c68ec4da3333459b41d19eee7dd254"
 dependencies = [
  "nix",
  "serde",
@@ -2938,7 +3022,7 @@ dependencies = [
 [[package]]
 name = "vow-design"
 version = "0.1.0"
-source = "git+https://github.com/HBlanqueto/barrierkit?rev=ba58ce01ef1f8e07dd915f783290b6ef068c037a#ba58ce01ef1f8e07dd915f783290b6ef068c037a"
+source = "git+https://github.com/HBlanqueto/barrierkit?rev=4e23c81353c68ec4da3333459b41d19eee7dd254#4e23c81353c68ec4da3333459b41d19eee7dd254"
 dependencies = [
  "serde_json",
 ]
@@ -3393,6 +3477,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8c3b93199df0ab874cdf0c6a94f0a0dc3423fe41f1cafb62b8bd7b1deb277aef"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "write-fonts"
+version = "0.48.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb731d4c4d93eacc69a1ad2f270f905788a98e4a3438267bcafbe08d3431c8d8"
+dependencies = [
+ "font-types",
+ "indexmap",
+ "kurbo",
+ "log",
+ "read-fonts",
 ]
 
 [[package]]

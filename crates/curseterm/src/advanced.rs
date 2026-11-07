@@ -1,7 +1,7 @@
 use std::sync::{LazyLock, RwLock};
 use std::time::Duration;
 
-use barrier_kit_next::tokens::TERMINAL;
+use crate::tokens::TERMINAL;
 use serde::{Deserialize, Serialize};
 
 use crate::hints::URL_PATTERN;

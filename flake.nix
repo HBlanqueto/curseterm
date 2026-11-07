@@ -2,7 +2,7 @@
   description = "CurseTerm: a terminal for Malaysia built on BarrierKit.";
 
   inputs = {
-    barrierkit.url = "git+https://github.com/HBlanqueto/barrierkit?rev=ba58ce01ef1f8e07dd915f783290b6ef068c037a";
+    barrierkit.url = "git+https://github.com/HBlanqueto/barrierkit?rev=4e23c81353c68ec4da3333459b41d19eee7dd254";
     nixpkgs.follows = "barrierkit/nixpkgs";
   };
 

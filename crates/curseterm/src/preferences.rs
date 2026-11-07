@@ -1,9 +1,10 @@
-//! Settings window laid out like iTerm2's, in its own process (BK-001).
+//! Settings window laid out like iTerm2's.
 
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use crate::tokens::{HIGHLIGHT_COLORS, SETTINGS_WINDOW_SIZE, TERMINAL, TRIGGER_EDITOR};
 use alacritty_terminal::vte::ansi::Rgb;
 use barrier_kit::app::{use_defaults, use_menu_action};
 use barrier_kit::choices::RadioGroup;
@@ -20,7 +21,6 @@ use barrier_kit::titlebar::Titlebar;
 use barrier_kit::views::form::{Form, Row, Section};
 use barrier_kit::views::table::Table;
 use barrier_kit::views::tabs::TabView;
-use barrier_kit_next::tokens::{HIGHLIGHT_COLORS, SETTINGS_WINDOW_SIZE, TERMINAL, TRIGGER_EDITOR};
 use freya_core::integration::AppComponent;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Size};
@@ -321,8 +321,12 @@ impl Component for ProfilesPane {
                         rect().height(Size::flex(1.0)).child(
                             Table::new(tr!("pane-profiles"), vec![tr!("profile-name")])
                                 .rows(rows)
-                                .selected(Some(index))
-                                .on_select(move |row| selected.set(row)),
+                                .selected(vec![index])
+                                .on_select(move |rows: Vec<usize>| {
+                                    if let Some(&row) = rows.first() {
+                                        selected.set(row);
+                                    }
+                                }),
                         ),
                     )
                     .child(
@@ -1549,7 +1553,6 @@ struct ImportColors {
 
 impl Component for ImportColors {
     fn render(&self) -> impl IntoElement {
-        let path = use_state(String::new);
         let mut outcome = use_state(String::new);
         let index = self.index;
         let palette = Palette::current();
@@ -1557,20 +1560,18 @@ impl Component for ImportColors {
             .width(Size::fill())
             .direction(Direction::Vertical)
             .spacing(SPACE_1)
-            .child(
-                rect()
-                    .width(Size::fill())
-                    .direction(Direction::Horizontal)
-                    .content(Content::flex())
-                    .spacing(SPACE_1)
-                    .child(
-                        TextField::new(path, tr!("import-colors-placeholder"))
-                            .width(Size::flex(1.0)),
-                    )
-                    .child(Button::new(tr!("import")).on_press(move |_| {
-                        outcome.set(import_into(index, Path::new(path.peek().trim())));
-                    })),
-            )
+            .child(Button::new(tr!("import-colors-choose")).on_press(move |_| {
+                // iTermColorPresets.m -importColorPresetFromFile:: an open panel, one file.
+                spawn(async move {
+                    if let Some(path) =
+                        barrier_kit::portal::open_files(tr!("import-colors"), false, false)
+                            .await
+                            .and_then(|paths| paths.into_iter().next())
+                    {
+                        outcome.set(import_into(index, &path));
+                    }
+                });
+            }))
             .maybe_child(
                 (!outcome.read().is_empty())
                     .then(|| text(outcome.read().clone(), CAPTION, palette.secondary_label)),

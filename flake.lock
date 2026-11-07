@@ -6,16 +6,16 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1793888255,
-        "narHash": "sha256-fJipy3Sgwif3UGhjQdvd/oEL5LqQKRufOm1F9tb1BTY=",
+        "lastModified": 1794009791,
+        "narHash": "sha256-kfig2MZhlL+DYDo8ulBp4LzxCX7em9agKPqLNxnQkyQ=",
         "ref": "refs/heads/main",
-        "rev": "ba58ce01ef1f8e07dd915f783290b6ef068c037a",
-        "revCount": 474,
+        "rev": "4e23c81353c68ec4da3333459b41d19eee7dd254",
+        "revCount": 573,
         "type": "git",
         "url": "https://github.com/HBlanqueto/barrierkit"
       },
       "original": {
-        "rev": "ba58ce01ef1f8e07dd915f783290b6ef068c037a",
+        "rev": "4e23c81353c68ec4da3333459b41d19eee7dd254",
         "type": "git",
         "url": "https://github.com/HBlanqueto/barrierkit"
       }

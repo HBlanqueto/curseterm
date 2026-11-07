@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 use std::io::Read;
 
+use crate::tokens::PASSWORD_MANAGER;
 use barrier_kit::compact::IconButton;
 use barrier_kit::controls::{Button, ButtonStyle, Checkbox, SecureField, TextField};
 use barrier_kit::password::PasswordField;
+use barrier_kit::secrets::{Error, Item, Secrets};
 use barrier_kit::style::{Palette, text};
 use barrier_kit::symbol::Symbol;
 use barrier_kit::views::feedback::sheet;
 use barrier_kit::views::form::{Form, Row, Section};
 use barrier_kit::views::table::Table;
-use barrier_kit_next::secrets::{Error, Item, Secrets};
-use barrier_kit_next::tokens::PASSWORD_MANAGER;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Direction, Size};
 use vow_design::{CAPTION, HEADLINE, SPACE_1, SPACE_2};
@@ -192,12 +192,19 @@ impl Component for PasswordManager {
                                 .rows(rows)
                                 .selected(
                                     chosen
-                                        .and_then(|at| shown.iter().position(|index| *index == at)),
+                                        .and_then(|at| shown.iter().position(|index| *index == at))
+                                        .into_iter()
+                                        .collect(),
                                 )
-                                .on_select(move |row: usize| {
-                                    revealed.set(None);
-                                    selected.set(positions.get(row).copied());
-                                }),
+                                .on_select(
+                                    move |rows: Vec<usize>| {
+                                        let Some(&row) = rows.first() else {
+                                            return;
+                                        };
+                                        revealed.set(None);
+                                        selected.set(positions.get(row).copied());
+                                    },
+                                ),
                             ),
                     )
                     .child(

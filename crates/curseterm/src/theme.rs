@@ -1,11 +1,9 @@
-use alacritty_terminal::vte::ansi::Rgb;
-use barrier_kit_next::tokens::{
-    MINIMAL_TABS, SPLIT_PANES, TAB_STRIP, TAB_STYLE_DARK, TAB_STYLE_DARK_HIGH_CONTRAST,
+use crate::tab_bar::brightness;
+use crate::tokens::{
+    MINIMAL_TABS, SPLIT_DIVIDER, TAB_STRIP, TAB_STYLE_DARK, TAB_STYLE_DARK_HIGH_CONTRAST,
     TAB_STYLE_LIGHT, TAB_STYLE_LIGHT_HIGH_CONTRAST, TITLE_BAR, TabStyle,
 };
-use barrier_kit_next::views::tab_bar::brightness;
-use freya_core::prelude::{State, try_consume_root_context, use_memo};
-use vow_appearance::Resolved;
+use alacritty_terminal::vte::ansi::Rgb;
 use vow_design::Rgba;
 
 use crate::config::Theme;
@@ -45,20 +43,6 @@ pub fn tab_style(
         };
     }
     style
-}
-
-// NSAppearance+iTerm.m -it_mojaveTabStyle: the system's increased contrast picks the
-// high-contrast style. BK-046: the kit keeps `contrast` out of `Resolved`, so it is read again
-// whenever the appearance changes.
-pub fn use_system_contrast() -> bool {
-    let root = try_consume_root_context::<State<Resolved>>();
-    let contrast = use_memo(move || {
-        if let Some(root) = root {
-            root.read();
-        }
-        vow_appearance::load_appearance().contrast
-    });
-    *contrast.read()
 }
 
 // PSMMinimalTabStyle.m, for an opaque terminal: the selected tab is the terminal background and
@@ -151,16 +135,16 @@ pub fn divider_color(theme: Theme, system_dark: bool, background: Rgb) -> Rgba {
             } else {
                 Rgba::rgb8(0, 0, 0)
             };
-            return bar.mix(toward, SPLIT_PANES.minimal_prominence);
+            return bar.mix(toward, SPLIT_DIVIDER.minimal_prominence);
         }
         Theme::Regular | Theme::Compact => system_dark,
         Theme::Light | Theme::LightHighContrast => false,
         Theme::Dark | Theme::DarkHighContrast => true,
     };
     if dark {
-        SPLIT_PANES.dark_divider
+        SPLIT_DIVIDER.dark
     } else {
-        SPLIT_PANES.light_divider
+        SPLIT_DIVIDER.light
     }
 }
 

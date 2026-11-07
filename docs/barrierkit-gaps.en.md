@@ -1,45 +1,38 @@
 # What BarrierKit lacked when building CurseTerm
 
-BarrierKit version/commit used: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
+BarrierKit version/commit used: `4e23c81353c68ec4da3333459b41d19eee7dd254` (`main`, 2026-11-07)
 
-Summary: living document; state at the close of phase 26 (2026-11-06), tested on
-headless sway with lavapipe (`progreso.en.md`). The most serious: the
-`use_menu_action` handlers run outside Freya's context and abort the app if
-they touch the clipboard or `WindowControls::get()` (BK-017); the menu is only
-published on D-Bus with `org_kde_kwin_appmenu_manager`, contrary to what the
-documentation says (BK-018); one window per process and no live title
-(BK-001, BK-002); no activation token for apps (BK-019); no IME nor
-primary selection; no global shortcuts for the hotkey window (BK-025) nor
-bell or notifications (BK-026). The canvas, the tabs, the split panes, the
-`MONO` token and the live menu state are solved as blocks; the title,
-the shortcuts, the menu on D-Bus, the live top-level menus and the repaint
-without focus, as tested patches.
+Summary: living document; state on 2026-11-07. The blocks and patches
+CurseTerm tested (windows, title, shortcuts, IME, primary selection, live
+menu, canvas, views, notifications and Secret Service) are now in barrierkit
+(ADR 0006). Still open, with a workaround: the `use_menu_action` handlers
+outside Freya's context (BK-017), no activation token (BK-019), no global
+shortcuts (BK-025), no close interception (BK-013) and `freya-animation`
+animations without frames (BK-047).
 
 States: **detected** (read in the code), **confirmed** (reproduced by
 running CurseTerm), **solved in CurseTerm** (with a workaround).
 
-Each gap says how it is solved (CurseTerm ADR 0001):
+Each gap says how it is solved (CurseTerm ADR 0006):
 
-- **block**: component in `crates/barrier-kit-next`, with the module path
-  it would have in `barrier-kit`; it moves over by moving the file;
-- **patch**: runner change in `kit-parches/NNNN-*.patch` against the pinned
-  `rev`, tested with `./dev.sh kit-parches`;
+- **in barrierkit**: the kit has it since commits `ba76e23`–`4e23c81`, which
+  took there the blocks and patches CurseTerm tested before;
 - **workaround**: what CurseTerm does with the kit as is.
 
 ## Summary table
 
-| ID | Area | Gap | Severity | Workaround in CurseTerm |
+| ID | Area | Gap | Severity | How it is solved |
 |---|---|---|---|---|
-| BK-001 | window | One window per process | high | Patch 0008 tested; without it, one process per window |
-| BK-002 | window | Fixed window title | medium | Patch 0001 tested; as is, only the `Titlebar` |
-| BK-003 | input / global menu | Shortcuts not consumed and `ShortcutKey` limited | high | Patch 0002 (kit tests); as is, the encoder ignores Super |
-| BK-004 | IME | No `zwp_text_input_v3` | medium | None |
-| BK-005 | clipboard | No primary selection | medium | None |
-| BK-006 | containers | No document tabs | medium | Tested block `views::tab_bar` |
-| BK-007 | containers | No generic nestable splitter | medium | Tested block `views::split_panes` |
-| BK-008 | tokens / text | No monospace face or terminal metrics in Tengen | low | Blocks `tokens::MONO` and `tokens::TERMINAL` |
-| BK-009 | text / performance | No public canvas and paragraph cache turned off | medium | Block `canvas` |
-| BK-010 | global menu | Static `Action` titles and no live menu replacement | medium | Tested block `app_menu`; patch 0004 tested for top-level menus |
+| BK-001 | window | One window per process | high | In barrierkit: `WindowControls::open_window` |
+| BK-002 | window | Fixed window title | medium | In barrierkit: `WindowControls::set_title` |
+| BK-003 | input / global menu | Shortcuts not consumed and `ShortcutKey` limited | high | In barrierkit: shortcuts with `NamedKey` that are consumed |
+| BK-004 | IME | No `zwp_text_input_v3` | medium | In barrierkit: `zwp_text_input_v3` (`ime_preedit`) |
+| BK-005 | clipboard | No primary selection | medium | In barrierkit: `primary_selection()` |
+| BK-006 | containers | No document tabs | medium | Own view `tab_bar.rs`, with iTerm2's styles; the kit has `WindowTabs` |
+| BK-007 | containers | No generic nestable splitter | medium | In barrierkit: `views::split_panes` |
+| BK-008 | tokens / text | No monospace face or terminal metrics in Tengen | low | In barrierkit: `vow_design::MONO`; `TERMINAL` in `tokens.rs` |
+| BK-009 | text / performance | No public canvas and paragraph cache turned off | medium | In barrierkit: `canvas` |
+| BK-010 | global menu | Static `Action` titles and no live menu replacement | medium | In barrierkit: `app_menu` hooks and `set_menu_items` |
 | BK-011 | docs | Documentation that does not match the code | low | — |
 | BK-012 | window / persistence | The saved size is one per `app_id` and another cannot be asked for | medium | Tested workaround: `forget_saved_size` |
 | BK-013 | window | A close requested by the compositor cannot be intercepted | medium | None |
@@ -47,35 +40,35 @@ Each gap says how it is solved (CurseTerm ADR 0001):
 | BK-015 | persistence | Preferences always go to `~/.config/malaysia/` | low | Accepted |
 | BK-016 | input / global menu | Shortcuts with Shift compare the produced character | medium | Workaround: text shortcut with `}` and `{` |
 | BK-017 | global menu / platform | Menu handlers run outside Freya's context | **blocking** | Tested workaround: handles taken in `render` |
-| BK-018 | global menu / docs | Without `org_kde_kwin_appmenu_manager` the menu is not published on D-Bus | high | Patch 0003 tested |
+| BK-018 | global menu / docs | Without `org_kde_kwin_appmenu_manager` the menu is not published on D-Bus | high | In barrierkit: menu on D-Bus without appmenu |
 | BK-019 | window / platform | An app cannot request an xdg-activation token | medium | None; no window list in «Window» |
 | BK-020 | controls | Pane, row and pop-up labels are `&'static str` | medium | Workaround: `intern` in `preferences.rs` |
 | BK-021 | controls | `RadioGroup` is always horizontal | low | Workaround: one single-option group per row |
-| BK-022 | platform / persistence | A `.domain` change does not repaint unfocused windows | high | Patch 0005 tested |
-| BK-023 | app | No file chooser | medium | Workaround: path in a field and `--import-colors` |
+| BK-022 | platform / persistence | A `.domain` change does not repaint unfocused windows | high | In barrierkit: repaint without focus |
+| BK-023 | app | No file chooser | medium | In barrierkit: `portal::open_files` |
 | BK-024 | symbols | Missing symbols for a settings bar, the bell and the trash | low | `SlidersVertical`, `CircleHalf`, `ListBullet`, `SquareGrid` and `SpeakerWave` are used; the trash is drawn on the canvas |
 | BK-025 | platform / input | No global shortcuts nor a way to hide and show the window | medium | Tested workaround: `curseterm --hotkey` |
-| BK-026 | app / platform | No bell, attention request or notifications | medium | Tested workaround: visual bell; tested block `notifications` |
+| BK-026 | app / platform | No bell, attention request or notifications | medium | Tested workaround: visual bell; `barrier_kit::notifications` |
 | BK-027 | controls / input | A view with global keyboard does not know whether a text field or an `Alert` keeps the key | low | Tested workaround: tracked focus and deferred `Alert` dismissal |
 | BK-028 | controls | `SegmentedControl` labels wrap onto two lines | low | Workaround: Settings at 980 px |
-| BK-029 | controls | `TextField` cannot take the focus when it opens | medium | Patch 0006 tested |
+| BK-029 | controls | `TextField` cannot take the focus when it opens | medium | In barrierkit: `TextField::auto_focus` |
 | BK-030 | input | Mouse events carry no modifiers | medium | Workaround: modifiers tracked through the keyboard |
-| BK-031 | window / appearance | A window cannot ask for a translucent background | medium | Patch 0007 tested |
-| BK-032 | platform | `Timers` callbacks outlive their window | high | Tested workaround: `alive` in `terminal.rs` |
-| BK-033 | input | No input method (`zwp_text_input_v3`) | high | Patch 0009 tested |
-| BK-034 | clipboard | No primary selection | medium | Patch 0010 tested |
-| BK-035 | clipboard | The clipboard only offers plain text | low | Patch 0011 tested |
-| BK-036 | controls | No multi-line text view | medium | Tested block `views::text_view` |
+| BK-031 | window / appearance | A window cannot ask for a translucent background | medium | In barrierkit: `set_background_alpha` |
+| BK-032 | platform | `Timers` callbacks outlive their window | high | In barrierkit: the kit's `use_alive` |
+| BK-033 | input | No input method (`zwp_text_input_v3`) | high | In barrierkit: `zwp_text_input_v3` (`ime_preedit`) |
+| BK-034 | clipboard | No primary selection | medium | In barrierkit: `primary_selection()` |
+| BK-035 | clipboard | The clipboard only offers plain text | low | In barrierkit: `copy_rich` (`text/html`) |
+| BK-036 | controls | No multi-line text view | medium | In barrierkit: `views::text_view` |
 | BK-037 | controls / alerts | `Alert` has only two buttons and cannot be silenced | low | Tested workaround: own sheet with `sheet` |
 | BK-038 | controls | `SearchField` has no options menu | low | Tested workaround: a `PopUpButton` beside it |
 | BK-039 | controls / windows | No outline view nor floating panel | medium | Tested workaround: a panel inside the window |
 | BK-040 | controls | `PopUpButton` neither scrolls nor searches | medium | Tested workaround: groups and a filter |
-| BK-041 | windows | An acked configure goes out with the old geometry | high | Patch 0012 tested |
-| BK-042 | controls | `PopUpButton` has no pull-down mode | low | Workaround tested: remount with `key` |
+| BK-041 | windows | An acked configure goes out with the old geometry | high | In barrierkit: configure before the commit |
+| BK-042 | controls | `PopUpButton` has no pull-down mode | low | In barrierkit: `buttons::MenuButton` |
 | BK-043 | controls | `TextField` cannot open with its text selected | low | No workaround: ⌃A selects it |
-| BK-044 | views | No floating view that moves and resizes inside the window | medium | Block tested: `views::floating_pane` |
-| BK-045 | platform | No freedesktop Secret Service client | medium | Block tested: `secrets` |
-| BK-046 | appearance | `Resolved` does not carry the contrast preference | low | Workaround tested: `theme::use_system_contrast` |
+| BK-044 | views | No floating view that moves and resizes inside the window | medium | In barrierkit: `views::floating_pane` |
+| BK-045 | platform | No freedesktop Secret Service client | medium | In barrierkit: `secrets` |
+| BK-046 | appearance | `Resolved` does not carry the contrast preference | low | In barrierkit: `Resolved::contrast` |
 | BK-047 | platform / animation | `freya-animation` animations get no frames | medium | Workaround tested: a fade with `Timers` |
 
 ## Gaps

@@ -1,5 +1,8 @@
+use crate::tokens::KEY_BINDING_EDITOR;
+use barrier_kit::buttons::MenuButton;
 use barrier_kit::compact::IconButton;
 use barrier_kit::controls::{Button, ButtonStyle, TextField};
+use barrier_kit::menu::MenuItem;
 use barrier_kit::popup_button::PopUpButton;
 use barrier_kit::style::{Palette, text};
 use barrier_kit::symbol::Symbol;
@@ -7,7 +10,6 @@ use barrier_kit::theme::color;
 use barrier_kit::views::feedback::sheet;
 use barrier_kit::views::form::{Form, Row, Section};
 use barrier_kit::views::table::Table;
-use barrier_kit_next::tokens::KEY_BINDING_EDITOR;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Direction, Gaps, Size};
 use vow_design::{CAPTION, HEADLINE, SPACE_1, SPACE_2, TEXT};
@@ -74,7 +76,6 @@ impl Component for KeyBindingsEditor {
         let editing = use_state(|| None::<Option<usize>>);
         let draft = use_state(Binding::default);
         let pending = use_state(|| None::<Preset>);
-        let presets_shown = use_state(|| 0_u32);
         let owner = self.owner;
         let chosen = selected.read().filter(|index| *index < self.bindings.len());
         let rows = self
@@ -107,8 +108,8 @@ impl Component for KeyBindingsEditor {
                             vec![owner.first_column(), tr!("key-binding-action")],
                         )
                         .rows(rows)
-                        .selected(chosen)
-                        .on_select(move |row| selected.set(Some(row))),
+                        .selected(chosen.into_iter().collect())
+                        .on_select(move |rows: Vec<usize>| selected.set(rows.first().copied())),
                     ),
             )
             .child(
@@ -143,7 +144,7 @@ impl Component for KeyBindingsEditor {
                                 }
                             }),
                     )
-                    .maybe_child(presets_popup(owner, &self.bindings, pending, presets_shown)),
+                    .maybe_child(presets_popup(owner, &self.bindings, pending)),
             )
             .maybe_child((*pending.read()).map(|preset| preset_question(owner, preset, pending)))
             .maybe_child((*editing.read()).map(|index| {
@@ -434,8 +435,8 @@ impl Component for Steps {
                             vec![tr!("key-binding-action")],
                         )
                         .rows(rows)
-                        .selected(chosen)
-                        .on_select(move |row| pick(Some(row))),
+                        .selected(chosen.into_iter().collect())
+                        .on_select(move |rows: Vec<usize>| pick(rows.first().copied())),
                     ),
             )
             .child(
@@ -475,7 +476,6 @@ fn presets_popup(
     owner: Owner,
     bindings: &[Binding],
     pending: State<Option<Preset>>,
-    mut shown: State<u32>,
 ) -> Option<Element> {
     let presets: &'static [Preset] = match owner {
         Owner::Global => &Preset::GLOBAL,
@@ -483,16 +483,18 @@ fn presets_popup(
         Owner::Actions => return None,
     };
     let kept = bindings.to_vec();
-    let popup = presets
+    let items = presets
         .iter()
-        .fold(
-            PopUpButton::new(tr!("key-binding-presets")).item(tr!("key-binding-presets")),
-            |button, preset| button.item(preset.name()),
-        )
-        .selected(0)
-        .on_change(move |position: usize| {
-            *shown.write() += 1;
-            let Some(preset) = position.checked_sub(1).and_then(|index| presets.get(index)) else {
+        .enumerate()
+        .map(|(index, preset)| MenuItem::action(index.to_string(), preset.name()))
+        .collect();
+    let button =
+        MenuButton::new(tr!("key-binding-presets"), items).on_activate(move |id: String| {
+            let Some(preset) = id
+                .parse::<usize>()
+                .ok()
+                .and_then(|index| presets.get(index))
+            else {
                 return;
             };
             if preset_needs_question(&kept, *preset) {
@@ -502,8 +504,7 @@ fn presets_popup(
                 owner.change(|bindings| load_preset(bindings, *preset, true));
             }
         });
-    // BK-042: the kit pop-up keeps its last choice, so a new key brings back «Presets…».
-    Some(rect().key(*shown.read()).child(popup).into_element())
+    Some(button.into_element())
 }
 
 // iTermKeyMappingViewController.m -removeBeforeLoadingWithTitle:: Keep, Remove or Cancel.

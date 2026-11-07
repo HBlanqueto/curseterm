@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::ops::RangeInclusive;
 use std::time::Duration;
 
+use crate::tokens::{ANNOTATION, TERMINAL};
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::Point;
 use alacritty_terminal::term::cell::{Cell, Flags};
@@ -10,8 +11,7 @@ use alacritty_terminal::term::color::Colors;
 use alacritty_terminal::term::search::Match;
 use alacritty_terminal::term::{RenderableContent, RenderableCursor, Term};
 use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Rgb};
-use barrier_kit_next::canvas::CanvasContext;
-use barrier_kit_next::tokens::{ANNOTATION, TERMINAL};
+use barrier_kit::canvas::CanvasContext;
 use freya_engine::prelude::{
     ClipOp, Color4f, Font, FontEdging, FontMgr, FontStyle, Paint, PaintStyle, PathBuilder, RRect,
     Rect as SkRect, Typeface,

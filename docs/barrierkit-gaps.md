@@ -1,45 +1,38 @@
 # Lo que le faltó a BarrierKit al construir CurseTerm
 
-Versión/commit de BarrierKit usado: `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`, 2026-11-05)
+Versión/commit de BarrierKit usado: `4e23c81353c68ec4da3333459b41d19eee7dd254` (`main`, 2026-11-07)
 
-Resumen: documento vivo; estado al cerrar la fase 26 (2026-11-06), probado en
-sway sin pantalla con lavapipe (`progreso.md`). Lo más serio: los handlers de
-`use_menu_action` corren fuera del contexto de Freya y hacen abortar la app si
-tocan el portapapeles o `WindowControls::get()` (BK-017); el menú solo se
-publica en D-Bus con `org_kde_kwin_appmenu_manager`, al contrario de lo que
-dice la documentación (BK-018); una ventana por proceso y sin título en vivo
-(BK-001, BK-002); sin token de activación para apps (BK-019); sin IME ni
-selección primaria; sin atajos globales para la ventana hotkey (BK-025) ni
-campana o notificaciones (BK-026). El lienzo, las pestañas, los paneles divididos, el
-token `MONO` y el estado vivo del menú se resolvieron como bloques; el título,
-los atajos, el menú en D-Bus, los menús de primer nivel en vivo y el repintado
-sin foco, como parches probados.
+Resumen: documento vivo; estado del 2026-11-07. Los bloques y parches que
+CurseTerm probó (ventanas, título, atajos, IME, selección primaria, menú en
+vivo, lienzo, vistas, notificaciones y Secret Service) ya están en barrierkit
+(ADR 0006). Siguen abiertos, con workaround: los handlers de
+`use_menu_action` fuera del contexto de Freya (BK-017), sin token de
+activación (BK-019), sin atajos globales (BK-025), sin interceptar el cierre
+(BK-013) y las animaciones de `freya-animation` sin fotogramas (BK-047).
 
 Estados: **detectado** (leído en el código), **confirmado** (reproducido al
 ejecutar CurseTerm), **resuelto en CurseTerm** (con workaround).
 
-Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
+Cada gap dice cómo se resuelve (ADR 0006 de CurseTerm):
 
-- **bloque**: componente en `crates/barrier-kit-next`, con la ruta de módulo
-  que tendría en `barrier-kit`; se traslada moviendo el archivo;
-- **parche**: cambio del runner en `kit-parches/NNNN-*.patch` contra el `rev`
-  fijado, probado con `./dev.sh kit-parches`;
+- **en barrierkit**: el kit lo trae desde los commits `ba76e23`–`4e23c81`, que
+  llevaron allí los bloques y parches que CurseTerm probó antes;
 - **workaround**: lo que hace CurseTerm con el kit tal cual.
 
 ## Tabla resumen
 
-| ID | Área | Gap | Gravedad | Workaround en CurseTerm |
+| ID | Área | Gap | Gravedad | Cómo se resuelve |
 |---|---|---|---|---|
-| BK-001 | ventana | Una ventana por proceso | alta | Parche 0008 probado; sin él, un proceso por ventana |
-| BK-002 | ventana | Título de ventana fijo | media | Parche 0001 probado; tal cual, solo la `Titlebar` |
-| BK-003 | input / menú global | Atajos no consumidos y `ShortcutKey` limitado | alta | Parche 0002 (tests del kit); tal cual, el codificador ignora Super |
-| BK-004 | IME | Sin `zwp_text_input_v3` | media | Ninguno |
-| BK-005 | portapapeles | Sin selección primaria | media | Ninguno |
-| BK-006 | contenedores | Sin pestañas de documento | media | Bloque probado `views::tab_bar` |
-| BK-007 | contenedores | Sin divisor genérico anidable | media | Bloque probado `views::split_panes` |
-| BK-008 | tokens / texto | Sin cara monoespaciada ni métricas de terminal en Tengen | baja | Bloques `tokens::MONO` y `tokens::TERMINAL` |
-| BK-009 | texto / rendimiento | Sin lienzo público y caché de párrafos apagada | media | Bloque `canvas` |
-| BK-010 | menú global | Títulos de `Action` estáticos y menú sin reemplazo en vivo | media | Bloque probado `app_menu`; parche 0004 probado para menús de primer nivel |
+| BK-001 | ventana | Una ventana por proceso | alta | En barrierkit: `WindowControls::open_window` |
+| BK-002 | ventana | Título de ventana fijo | media | En barrierkit: `WindowControls::set_title` |
+| BK-003 | input / menú global | Atajos no consumidos y `ShortcutKey` limitado | alta | En barrierkit: atajos con `NamedKey` que se consumen |
+| BK-004 | IME | Sin `zwp_text_input_v3` | media | En barrierkit: `zwp_text_input_v3` (`ime_preedit`) |
+| BK-005 | portapapeles | Sin selección primaria | media | En barrierkit: `primary_selection()` |
+| BK-006 | contenedores | Sin pestañas de documento | media | Vista propia `tab_bar.rs`, con los estilos de iTerm2; el kit tiene `WindowTabs` |
+| BK-007 | contenedores | Sin divisor genérico anidable | media | En barrierkit: `views::split_panes` |
+| BK-008 | tokens / texto | Sin cara monoespaciada ni métricas de terminal en Tengen | baja | En barrierkit: `vow_design::MONO`; `TERMINAL` en `tokens.rs` |
+| BK-009 | texto / rendimiento | Sin lienzo público y caché de párrafos apagada | media | En barrierkit: `canvas` |
+| BK-010 | menú global | Títulos de `Action` estáticos y menú sin reemplazo en vivo | media | En barrierkit: hooks de `app_menu` y `set_menu_items` |
 | BK-011 | docs | Documentación que no coincide con el código | baja | — |
 | BK-012 | ventana / persistencia | El tamaño guardado es uno por `app_id` y no se puede pedir otro | media | Workaround probado: `forget_saved_size` |
 | BK-013 | ventana | El cierre pedido por el compositor no se puede interceptar | media | Ninguno |
@@ -47,35 +40,35 @@ Cada gap dice cómo se resuelve (ADR 0001 de CurseTerm):
 | BK-015 | persistencia | Las preferencias van siempre a `~/.config/malaysia/` | baja | Se acepta |
 | BK-016 | input / menú global | Los atajos con Mayús comparan el carácter producido | media | Workaround: atajo por texto con `}` y `{` |
 | BK-017 | menú global / plataforma | Los handlers del menú corren fuera del contexto de Freya | **bloqueante** | Workaround probado: handles tomados en `render` |
-| BK-018 | menú global / docs | Sin `org_kde_kwin_appmenu_manager` el menú no se publica en D-Bus | alta | Parche 0003 probado |
+| BK-018 | menú global / docs | Sin `org_kde_kwin_appmenu_manager` el menú no se publica en D-Bus | alta | En barrierkit: menú en D-Bus sin appmenu |
 | BK-019 | ventana / plataforma | Una app no puede pedir un token de xdg-activation | media | Ninguno; sin lista de ventanas en «Window» |
 | BK-020 | controles | Las etiquetas de paneles, filas y desplegables son `&'static str` | media | Workaround: `intern` en `preferences.rs` |
 | BK-021 | controles | `RadioGroup` es siempre horizontal | baja | Workaround: un grupo de una opción por fila |
-| BK-022 | plataforma / persistencia | Un cambio de `.domain` no repinta las ventanas sin foco | alta | Parche 0005 probado |
-| BK-023 | app | Sin selector de archivos | media | Workaround: ruta en un campo y `--import-colors` |
+| BK-022 | plataforma / persistencia | Un cambio de `.domain` no repinta las ventanas sin foco | alta | En barrierkit: repintado sin foco |
+| BK-023 | app | Sin selector de archivos | media | En barrierkit: `portal::open_files` |
 | BK-024 | símbolos | Faltan símbolos para una barra de ajustes, la campana y la papelera | baja | Se usan `SlidersVertical`, `CircleHalf`, `ListBullet`, `SquareGrid` y `SpeakerWave`; la papelera se dibuja en el lienzo |
 | BK-025 | plataforma / input | Sin atajos globales ni forma de ocultar y mostrar la ventana | media | Workaround probado: `curseterm --hotkey` |
-| BK-026 | app / plataforma | Sin campana, petición de atención ni notificaciones | media | Workaround probado: campana visual; bloque probado `notifications` |
+| BK-026 | app / plataforma | Sin campana, petición de atención ni notificaciones | media | Workaround probado: campana visual; `barrier_kit::notifications` |
 | BK-027 | controles / input | Una vista con teclado global no sabe si un campo de texto o un `Alert` se quedan la tecla | baja | Workaround probado: foco seguido y cierre diferido del `Alert` |
 | BK-028 | controles | Las etiquetas de `SegmentedControl` se parten en dos líneas | baja | Workaround: Ajustes a 980 px |
-| BK-029 | controles | `TextField` no puede tomar el foco al abrirse | media | Parche 0006 probado |
+| BK-029 | controles | `TextField` no puede tomar el foco al abrirse | media | En barrierkit: `TextField::auto_focus` |
 | BK-030 | entrada | Los eventos de ratón no traen modificadores | media | Workaround: modificadores seguidos con el teclado |
-| BK-031 | ventana / apariencia | Una ventana no puede pedir fondo translúcido | media | Parche 0007 probado |
-| BK-032 | plataforma | Los avisos de `Timers` sobreviven a su ventana | alta | Workaround probado: `alive` en `terminal.rs` |
-| BK-033 | entrada | Sin método de entrada (`zwp_text_input_v3`) | alta | Parche 0009 probado |
-| BK-034 | portapapeles | Sin selección primaria | media | Parche 0010 probado |
-| BK-035 | portapapeles | El portapapeles solo ofrece texto plano | baja | Parche 0011 probado |
-| BK-036 | controles | Sin vista de texto de varias líneas | media | Bloque probado `views::text_view` |
+| BK-031 | ventana / apariencia | Una ventana no puede pedir fondo translúcido | media | En barrierkit: `set_background_alpha` |
+| BK-032 | plataforma | Los avisos de `Timers` sobreviven a su ventana | alta | En barrierkit: `use_alive` del kit |
+| BK-033 | entrada | Sin método de entrada (`zwp_text_input_v3`) | alta | En barrierkit: `zwp_text_input_v3` (`ime_preedit`) |
+| BK-034 | portapapeles | Sin selección primaria | media | En barrierkit: `primary_selection()` |
+| BK-035 | portapapeles | El portapapeles solo ofrece texto plano | baja | En barrierkit: `copy_rich` (`text/html`) |
+| BK-036 | controles | Sin vista de texto de varias líneas | media | En barrierkit: `views::text_view` |
 | BK-037 | controles / avisos | `Alert` solo tiene dos botones y no se puede silenciar | baja | Workaround probado: hoja propia con `sheet` |
 | BK-038 | controles | `SearchField` no tiene menú de opciones | baja | Workaround probado: `PopUpButton` al lado |
 | BK-039 | controles / ventanas | Sin vista de contorno ni panel flotante | media | Workaround probado: panel dentro de la ventana |
 | BK-040 | controles | `PopUpButton` no se desplaza ni busca | media | Workaround probado: grupos y filtro |
-| BK-041 | ventanas | Un configure confirmado sale con la geometría vieja | alta | Parche 0012 probado |
-| BK-042 | controles | `PopUpButton` no tiene modo desplegable (pull-down) | baja | Workaround probado: remontar con `key` |
+| BK-041 | ventanas | Un configure confirmado sale con la geometría vieja | alta | En barrierkit: configure antes del commit |
+| BK-042 | controles | `PopUpButton` no tiene modo desplegable (pull-down) | baja | En barrierkit: `buttons::MenuButton` |
 | BK-043 | controles | `TextField` no puede abrirse con el texto seleccionado | baja | Sin workaround: ⌃A lo selecciona |
-| BK-044 | vistas | Sin vista flotante que se mueva y redimensione dentro de la ventana | media | Bloque probado: `views::floating_pane` |
-| BK-045 | plataforma | Sin cliente del Secret Service de freedesktop | media | Bloque probado: `secrets` |
-| BK-046 | apariencia | `Resolved` no lleva la preferencia de contraste | baja | Workaround probado: `theme::use_system_contrast` |
+| BK-044 | vistas | Sin vista flotante que se mueva y redimensione dentro de la ventana | media | En barrierkit: `views::floating_pane` |
+| BK-045 | plataforma | Sin cliente del Secret Service de freedesktop | media | En barrierkit: `secrets` |
+| BK-046 | apariencia | `Resolved` no lleva la preferencia de contraste | baja | En barrierkit: `Resolved::contrast` |
 | BK-047 | plataforma / animación | Las animaciones de `freya-animation` no reciben fotogramas | media | Workaround probado: fundido con `Timers` |
 
 ## Gaps

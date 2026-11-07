@@ -3872,3 +3872,45 @@ unos 34 por segundo.
 **Difiere de iTerm2:** la cadencia es por ventana y la decide la sesión más
 activa entre las que produjeron salida; no hay modo de bajo consumo ni
 ProMotion.
+
+## Fase 89 — El kit se completa en barrierkit
+
+### Plan
+
+[ADR 0006](decisiones/0006-el-kit-se-completa-en-barrierkit.md):
+
+1. Llevar a `main` de barrierkit los doce parches y los bloques genéricos de
+   `barrier-kit-next`, sobre la API actual del kit.
+2. Fijar CurseTerm en ese `rev`, quitar `crates/barrier-kit-next`,
+   `kit-parches/`, la feature `kit-parcheado` y los dos modos de `dev.sh`.
+3. Usar lo que el kit nuevo ya trae en lugar de los rodeos: `Table` con
+   selección múltiple, `MenuButton` para «Presets…», el selector de archivos
+   del portal para importar esquemas, `use_alive` y `Resolved::contrast`.
+
+### Resultado (2026-11-07)
+
+Probado en sway sin pantalla contra barrierkit `4e23c81`. `./dev.sh check`
+limpio; 87 tests.
+
+| Prueba | Resultado |
+|---|---|
+| El título de la ventana sigue a la sesión (`root@vm: ~`) | ✓ |
+| ⌘N abre la segunda ventana en el mismo proceso | ✓ |
+| Ajustes se abre en el mismo proceso | ✓ |
+| Doble clic en una palabra la publica en la selección primaria | ✓ |
+| ⌥⌘C ofrece `text/html` con los colores de la selección | ✓ |
+| Composición del IME subrayada en el cursor y texto confirmado en la shell | ✓ |
+| Profiles › Colors › «Import…» llama al portal FileChooser | ✓; el laboratorio no tiene portal y avisa por `tracing` |
+
+**No probado:** elegir un archivo `.itermcolors` en el diálogo del portal,
+«Presets…» con `MenuButton`, el alto contraste leído de `Resolved` y el
+fundido del hover con `use_alive`.
+
+**Quitado:** `curseterm --import-colors`, que solo suplía la falta de selector
+de archivos (BK-023).
+
+**En barrierkit queda:** `check-design-tokens.sh` falla por colores literales
+de las apps de prueba (Marea, Ondina, Tengen App Show) y fallan 8 tests de
+`tests/kit` y 6 de `tests/sidebar` (imágenes de referencia y la barra
+lateral), igual en `015f637`, antes de estos cambios. Las vistas nuevas no
+tienen aún página en Tengen App Show ni test de render.

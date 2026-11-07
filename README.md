@@ -26,9 +26,8 @@ nix develop
 ./dev.sh run
 ```
 
-`./dev.sh kit-parches` compila contra BarrierKit con `kit-parches/` aplicados y
-`./dev.sh kit-tal-cual` vuelve al kit publicado
-([ADR 0001](docs/decisiones/0001-bloques-y-parches-del-kit.md)).
+Lo que le falta a BarrierKit se completa en barrierkit
+([ADR 0006](docs/decisiones/0006-el-kit-se-completa-en-barrierkit.md)).
 
 ## Documentación
 

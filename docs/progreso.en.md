@@ -3845,3 +3845,45 @@ per second.
 **Differs from iTerm2:** the cadence is per window and the busiest session
 among those that produced output decides it; there is no low-power mode nor
 ProMotion.
+
+## Phase 89 — The kit is completed in barrierkit
+
+### Plan
+
+[ADR 0006](decisiones/0006-el-kit-se-completa-en-barrierkit.en.md):
+
+1. Move the twelve patches and the generic blocks of `barrier-kit-next` to
+   barrierkit's `main`, on the kit's current API.
+2. Pin CurseTerm at that `rev`, and remove `crates/barrier-kit-next`,
+   `kit-parches/`, the `kit-parcheado` feature and the two `dev.sh` modes.
+3. Use what the new kit already has instead of the workarounds: `Table` with
+   multiple selection, `MenuButton` for «Presets…», the portal file chooser
+   to import schemes, `use_alive` and `Resolved::contrast`.
+
+### Result (2026-11-07)
+
+Tested on headless sway against barrierkit `4e23c81`. `./dev.sh check`
+clean; 87 tests.
+
+| Test | Result |
+|---|---|
+| The window title follows the session (`root@vm: ~`) | ✓ |
+| ⌘N opens the second window in the same process | ✓ |
+| Settings opens in the same process | ✓ |
+| Double-clicking a word publishes it to the primary selection | ✓ |
+| ⌥⌘C offers `text/html` with the selection's colors | ✓ |
+| IME composition underlined at the cursor and committed text in the shell | ✓ |
+| Profiles › Colors › «Import…» calls the FileChooser portal | ✓; the lab has no portal and reports it through `tracing` |
+
+**Not tested:** choosing an `.itermcolors` file in the portal dialog,
+«Presets…» with `MenuButton`, the high contrast read from `Resolved` and the
+hover fade with `use_alive`.
+
+**Removed:** `curseterm --import-colors`, which only made up for the missing
+file chooser (BK-023).
+
+**Left in barrierkit:** `check-design-tokens.sh` fails on literal colors in
+the test apps (Marea, Ondina, Tengen App Show), and 8 tests in `tests/kit`
+and 6 in `tests/sidebar` fail (reference images and the sidebar), the same on
+`015f637`, before these changes. The new views have no Tengen App Show page
+or render test yet.

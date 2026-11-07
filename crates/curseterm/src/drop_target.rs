@@ -1,5 +1,5 @@
-use barrier_kit_next::canvas::canvas;
-use barrier_kit_next::tokens::MOVE_PANE;
+use crate::tokens::MOVE_PANE;
+use barrier_kit::canvas::canvas;
 use freya_core::prelude::*;
 use freya_engine::prelude::{FontMgr, FontStyle, PaintStyle, Rect as SkRect};
 use torin::prelude::{Position, Size};

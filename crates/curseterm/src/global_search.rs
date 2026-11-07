@@ -1,8 +1,8 @@
+use crate::tokens::GLOBAL_SEARCH;
 use barrier_kit::controls::{Button, ScrollView, SearchField};
 use barrier_kit::popup_button::PopUpButton;
 use barrier_kit::style::{Palette, text};
 use barrier_kit::theme::color;
-use barrier_kit_next::tokens::GLOBAL_SEARCH;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Position, Size};
 use vow_design::{CAPTION, DIALOG, DIALOG_PADDING, HEADLINE, SPACE_1, SPACE_2, TEXT};

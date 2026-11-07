@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use barrier_kit::app::{Action, Shortcut, ShortcutKey};
 use barrier_kit::app_menu::{AppMenu, Menu};
 use barrier_kit::menu::{CheckState, MenuItem};
-use barrier_kit_next::app_menu::submenu;
 use freya_core::prelude::Modifiers;
 
 use crate::config::{APP_NAME, MarkAlert};
@@ -11,6 +10,10 @@ use crate::key_report::KeyMode;
 use crate::localize::tr;
 use crate::session::{SessionId, TerminalState};
 use crate::workspace::Broadcast;
+
+fn submenu(id: &'static str, label: impl Into<String>, items: Vec<MenuItem>) -> MenuItem {
+    MenuItem::submenu(label, items).with_id(id)
+}
 
 const fn super_key(c: char) -> Shortcut {
     Shortcut::new(Modifiers::META, ShortcutKey::Char(c))
@@ -544,7 +547,7 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
                 SHOW_TAB_BAR.item_with(true, CheckState::Checkbox(false)),
                 FULL_SCREEN.item(true),
                 SHOW_TABS_IN_FULLSCREEN.item_with(true, CheckState::Checkbox(true)),
-                USE_TRANSPARENCY.item_with(false, CheckState::Checkbox(true)),
+                USE_TRANSPARENCY.item_with(true, CheckState::Checkbox(true)),
                 MenuItem::Separator,
                 FIND_CURSOR.item(true),
                 SHOW_ANNOTATIONS.item_with(true, CheckState::Checkbox(false)),

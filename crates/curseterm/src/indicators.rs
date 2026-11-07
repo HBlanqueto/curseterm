@@ -1,5 +1,5 @@
-use barrier_kit_next::canvas::CanvasContext;
-use barrier_kit_next::tokens::INDICATOR;
+use crate::tokens::INDICATOR;
+use barrier_kit::canvas::CanvasContext;
 use freya_engine::prelude::{PaintStyle, Path, RRect, Rect as SkRect};
 use vow_design::SYMBOL;
 

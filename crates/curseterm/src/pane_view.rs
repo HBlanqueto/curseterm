@@ -2,12 +2,12 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use crate::tokens::{ANNOTATION, COMPOSER, SHORTCUT_LABEL, TERMINAL};
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Line, Point, Side};
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::TermMode;
-use barrier_kit_next::canvas::canvas;
-use barrier_kit_next::tokens::{ANNOTATION, COMPOSER, SHORTCUT_LABEL, TERMINAL};
+use barrier_kit::canvas::canvas;
 use freya_core::prelude::*;
 use torin::prelude::Size;
 use vow_design::SPACE_2;
@@ -533,29 +533,19 @@ fn note_highlight(annotation: &Annotation) -> f32 {
 }
 
 #[derive(Clone)]
-struct Primary(#[cfg(feature = "kit-parcheado")] barrier_kit::platform::WindowControls);
+struct Primary(barrier_kit::platform::WindowControls);
 
-// BK-034: without patch 0010 there is no primary selection, so it reads nothing and keeps nothing.
 impl Primary {
     fn get() -> Self {
-        Self(
-            #[cfg(feature = "kit-parcheado")]
-            barrier_kit::platform::WindowControls::get(),
-        )
+        Self(barrier_kit::platform::WindowControls::get())
     }
 
     fn publish(&self, text: String) {
-        #[cfg(feature = "kit-parcheado")]
         let _ = self.0.primary_selection().set_contents(text);
-        #[cfg(not(feature = "kit-parcheado"))]
-        drop(text);
     }
 
     fn text(&self) -> Option<String> {
-        #[cfg(feature = "kit-parcheado")]
-        return self.0.primary_selection().get_contents().ok();
-        #[cfg(not(feature = "kit-parcheado"))]
-        None
+        self.0.primary_selection().get_contents().ok()
     }
 }
 

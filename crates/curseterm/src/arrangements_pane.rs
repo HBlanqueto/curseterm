@@ -1,10 +1,10 @@
+use crate::tokens::ARRANGEMENT_PREVIEW;
 use barrier_kit::compact::IconButton;
 use barrier_kit::controls::{Button, TextField};
 use barrier_kit::style::{Palette, text};
 use barrier_kit::symbol::Symbol;
 use barrier_kit::theme::color;
 use barrier_kit::views::table::Table;
-use barrier_kit_next::tokens::ARRANGEMENT_PREVIEW;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Size};
 use vow_design::{CAPTION, HAIRLINE, HEADLINE, SIDEBAR, SPACE_1, SPACE_3};
@@ -69,8 +69,11 @@ impl Component for ArrangementsPane {
                         rect().height(Size::flex(1.0)).child(
                             Table::new(tr!("pane-arrangements"), vec![tr!("arrangement-name")])
                                 .rows(rows)
-                                .selected(row)
-                                .on_select(move |row: usize| {
+                                .selected(row.into_iter().collect())
+                                .on_select(move |rows: Vec<usize>| {
+                                    let Some(&row) = rows.first() else {
+                                        return;
+                                    };
                                     selected.set(slots.get(row).copied().flatten())
                                 }),
                         ),

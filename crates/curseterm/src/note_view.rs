@@ -1,9 +1,9 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 
+use crate::tokens::{ANNOTATION, AnnotationColors};
+use barrier_kit::canvas::{CanvasContext, canvas};
 use barrier_kit::theme::color;
-use barrier_kit_next::canvas::{CanvasContext, canvas};
-use barrier_kit_next::tokens::{ANNOTATION, AnnotationColors};
-use barrier_kit_next::views::text_view::TextView;
+use barrier_kit::views::text_view::TextView;
 use freya_core::prelude::*;
 use freya_engine::prelude::{
     BlurStyle, MaskFilter, PaintStyle, Path, PathBuilder, Point as SkPoint, Rect as SkRect,

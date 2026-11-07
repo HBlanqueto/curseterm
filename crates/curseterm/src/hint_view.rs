@@ -1,9 +1,9 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::Instant;
 
+use crate::tokens::SHORTCUT_LABEL;
+use barrier_kit::canvas::canvas;
 use barrier_kit::style::Palette;
-use barrier_kit_next::canvas::canvas;
-use barrier_kit_next::tokens::SHORTCUT_LABEL;
 use freya_core::prelude::*;
 use freya_engine::prelude::{
     BlurStyle, Font, FontMgr, FontStyle, MaskFilter, PaintStyle, RRect, Rect as SkRect,
@@ -85,7 +85,7 @@ impl Component for HintLabel {
 // ContentNavigationShortcut.swift: an accent capsule with a white outline and a soft shadow; the
 // typed part of the key at half white.
 fn draw(
-    ctx: &mut barrier_kit_next::canvas::CanvasContext,
+    ctx: &mut barrier_kit::canvas::CanvasContext,
     face: &Font,
     key: &str,
     typed: usize,

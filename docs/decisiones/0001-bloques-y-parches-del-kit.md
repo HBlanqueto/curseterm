@@ -1,6 +1,6 @@
 # 0001 — Lo que le falta al kit se construye como bloques y parches trasladables
 
-Estado: **aceptado** (2026-11-05).
+Estado: **sustituido** por el [ADR 0006](0006-el-kit-se-completa-en-barrierkit.md) (2026-11-07).
 
 ## Contexto
 

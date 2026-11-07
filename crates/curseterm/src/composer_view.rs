@@ -1,12 +1,12 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 
+use crate::tokens::{COMPOSER, SHEET_MATERIAL_BLUR};
+use barrier_kit::canvas::{CanvasContext, canvas};
 use barrier_kit::controls::ScrollView;
 use barrier_kit::style::text;
 use barrier_kit::symbol::{Symbol, symbol};
 use barrier_kit::theme::color;
-use barrier_kit_next::canvas::{CanvasContext, canvas};
-use barrier_kit_next::tokens::{COMPOSER, SHEET_MATERIAL_BLUR};
-use barrier_kit_next::views::text_view::{KeyPress, TextView};
+use barrier_kit::views::text_view::{KeyPress, TextView};
 use freya_core::prelude::*;
 use freya_engine::prelude::{PaintStyle, RRect, Rect as SkRect, SaveLayerRec, TileMode, blur};
 use torin::prelude::{Alignment, Content, Direction, Gaps, Position, Size};

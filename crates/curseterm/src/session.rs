@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::tokens::GLOBAL_SEARCH;
 use alacritty_terminal::event::{Event, EventListener, OnResize, WindowSize};
 use alacritty_terminal::grid::{Dimensions, Row, Scroll};
 use alacritty_terminal::index::{Boundary, Column, Direction, Line, Point, Side};
@@ -24,7 +25,6 @@ use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::tty;
 use alacritty_terminal::vte::ansi::{CursorShape, CursorStyle, Handler, Processor};
 use barrier_kit::platform::WakeHandle;
-use barrier_kit_next::tokens::GLOBAL_SEARCH;
 
 use regex::Regex;
 use rustix::process::{Pid, Signal, kill_process_group};
@@ -1056,7 +1056,6 @@ impl Session {
             .retain(|annotation| annotation.id != id);
     }
 
-    #[cfg(feature = "kit-parcheado")]
     pub fn cursor_cell(&self) -> (usize, i32) {
         let term = self.term.lock();
         let cursor = term.grid().cursor.point;
