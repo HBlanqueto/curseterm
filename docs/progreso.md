@@ -3926,5 +3926,5 @@ tienen aún página en Tengen App Show ni test de render.
 
 ### Resultado (2026-11-07)
 
-Hecho con barrierkit `36e5958`. **No probado:** no se compiló ni se ejecutó;
-la sesión no pudo bajar Skia para el dev shell.
+Hecho con barrierkit `36e5958`. `cargo clippy -D warnings` y `cargo fmt`
+limpios, fuera del dev shell. **No probado:** no se ejecutó en Malaysia.

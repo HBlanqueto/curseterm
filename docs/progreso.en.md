@@ -3899,5 +3899,5 @@ or render test yet.
 
 ### Result (2026-11-07)
 
-Done with barrierkit `36e5958`. **Not tested:** it was not compiled or run;
-the session could not download Skia for the dev shell.
+Done with barrierkit `36e5958`. `cargo clippy -D warnings` and `cargo fmt`
+are clean, outside the dev shell. **Not tested:** it was not run on Malaysia.
