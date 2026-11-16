@@ -517,3 +517,8 @@ running app with a full history (only `io::tests`, on a headless `Term`);
 output speed with a full history (the limit is enforced after every line
 instead of by `alacritty_terminal`); lowering «Scrollback lines» in Settings
 with a session open.
+
+## OSC 52 behind a profile switch
+
+**Not tested:** a program copying with OSC 52 (`printf '\e]52;c;aGk=\a'`) with
+the switch off and on; the switch in Settings › Profiles › Keys.

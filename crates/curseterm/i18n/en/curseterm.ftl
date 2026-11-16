@@ -500,6 +500,7 @@ kitty-report-alternate-keys = Report Alternate Keys
 kitty-report-all-keys = Report All Keys as Escape Codes
 kitty-report-associated-text = Report Associated Text
 report-keys-csi-u = Report keys using CSI u
+allow-clipboard-access = Terminal applications can copy to the clipboard
 apps-change-key-reporting = Apps can change how keys are reported
 alt-key = Alt key acts as
 alt-key-normal = Normal

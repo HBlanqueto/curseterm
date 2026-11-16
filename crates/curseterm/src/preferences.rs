@@ -867,6 +867,11 @@ fn keys_section(index: usize, profile: &Profile) -> Section {
             profile.apps_change_key_reporting,
             |profile, on| profile.apps_change_key_reporting = on,
         ))
+        .row(switch(
+            tr!("allow-clipboard-access"),
+            profile.allow_clipboard_access,
+            |profile, on| profile.allow_clipboard_access = on,
+        ))
 }
 
 fn terminal_section(index: usize, profile: &Profile) -> Section {

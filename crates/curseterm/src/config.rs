@@ -169,6 +169,7 @@ pub struct Profile {
     pub alt_key: AltKey,
     pub report_keys_csi_u: bool,
     pub apps_change_key_reporting: bool,
+    pub allow_clipboard_access: bool,
     pub key_mappings: Vec<Binding>,
     pub notifications: bool,
     pub notify_bell: bool,
@@ -391,6 +392,7 @@ impl Default for Profile {
             // iTermProfilePreferences.m: KEY_USE_LIBTICKIT_PROTOCOL NO, KEY_ALLOW_MODIFY_OTHER_KEYS YES.
             report_keys_csi_u: false,
             apps_change_key_reporting: true,
+            allow_clipboard_access: false,
             key_mappings: Vec::new(),
             notifications: false,
             notify_bell: true,

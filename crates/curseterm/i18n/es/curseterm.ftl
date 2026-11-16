@@ -500,6 +500,7 @@ kitty-report-alternate-keys = Informar de las teclas alternativas
 kitty-report-all-keys = Informar de todas las teclas como escapes
 kitty-report-associated-text = Informar del texto asociado
 report-keys-csi-u = Enviar las teclas con CSI u
+allow-clipboard-access = Las aplicaciones del terminal pueden copiar al portapapeles
 apps-change-key-reporting = Las aplicaciones pueden cambiar cómo se envían las teclas
 alt-key = La tecla Alt actúa como
 alt-key-normal = Normal
