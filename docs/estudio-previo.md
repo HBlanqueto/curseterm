@@ -1,284 +1,287 @@
-# Estudio previo
+# Preliminary study
 
-**Objetivo:** fijar lo que hay que saber de BarrierKit, de la barra de menús de
-Malaysia y de iTerm2 antes de escribir CurseTerm.
-**Alcance:** desde la lectura de los tres repos hasta las decisiones abiertas de
-la fase 1. No describe código de CurseTerm, que aún no existe.
-**Lector:** quien implementa CurseTerm o revisa `barrierkit-gaps.md`.
+**Goal:** settle what we need to know about BarrierKit, Malaysia's menu bar
+and iTerm2 before writing CurseTerm.
+**Scope:** from reading the three repos to the open decisions of phase 1.
+It does not describe CurseTerm code, which does not exist yet.
+**Reader:** whoever implements CurseTerm or reviews `barrierkit-gaps.md`.
 
-**Entradas (2026-11-05):**
+**Inputs (2026-11-05):**
 
-| Repo | Commit | Uso |
+| Repo | Commit | Use |
 |---|---|---|
-| `barrierkit` | `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`) | Dependencia, solo lectura |
-| `malaysia` | `8a7eb92` (`main`); fija barrierkit en `9ff264b` | Barra de menús, solo lectura |
-| `iterm2` | `468c393` (`master`, clon superficial) | Referencia de comportamiento, solo lectura |
+| `barrierkit` | `ba58ce01ef1f8e07dd915f783290b6ef068c037a` (`main`) | Dependency, read only |
+| `malaysia` | `8a7eb92` (`main`); pins barrierkit at `9ff264b` | Menu bar, read only |
+| `iterm2` | `468c393` (`master`, shallow clone) | Behavior reference, read only |
 
-**Salida:** este documento y la primera versión de
+**Output:** this document and the first version of
 [`barrierkit-gaps.md`](barrierkit-gaps.md).
 
-## 1. Convenciones que CurseTerm adopta
+## 1. Conventions CurseTerm adopts
 
-Salen de `barrierkit/AGENTS.md` y `barrierkit/CLAUDE.md`:
+They come from `barrierkit/AGENTS.md` and `barrierkit/CLAUDE.md`:
 
-1. **Código mínimo.** Reutilizar antes de escribir; nada «por si acaso»; sin
-   comentarios salvo `// SAFETY:` y el porqué de un invariante; diff mínimo.
-2. **Tests solo para lógica pura con riesgo**, con el nombre como
-   especificación (`a_resize_sends_sigwinch_with_the_new_grid`).
-3. **Diseño solo con tokens.** Ningún literal de color ni medida: todo sale de
-   `vow_design` y de `Palette::current()`. La excepción son los colores del
-   esquema del terminal (ANSI, fondo y tinta del perfil), que son datos del
-   usuario y no tokens de interfaz (ver §6).
-4. **Texto visible por Fluent:** `i18n/{en,es}/curseterm.ftl` y `tr!`.
+1. **Minimal code.** Reuse before writing; nothing "just in case"; no
+   comments except `// SAFETY:` and the why of an invariant; minimal diff.
+2. **Tests only for risky pure logic**, with the name as the specification
+   (`a_resize_sends_sigwinch_with_the_new_grid`).
+3. **Design with tokens only.** No color or size literal: everything comes
+   from `vow_design` and `Palette::current()`. The exception is the terminal
+   scheme colors (ANSI, profile background and ink), which are user data and
+   not interface tokens (see §6).
+4. **Visible text through Fluent:** `i18n/{en,es}/curseterm.ftl` and `tr!`.
 5. **Commits** `tipo(ámbito): …` (`feat`, `fix`, `docs`, `refactor`, `test`,
    `perf`, `chore`, `build`).
-6. **Docs en español e inglés** (`nombre.md` y `nombre.en.md`, en el mismo
-   commit), como en barrierkit; código, comentarios y rustdoc solo en inglés.
-7. **ADR** con el formato del kit: título `NNNN — …`, «Estado», «Contexto»,
-   «Decisión», «Consecuencias» y «Referencias».
+6. **Docs in Spanish and English** (`name.md` and `name.md`, in the same
+   commit), as in barrierkit; code, comments and rustdoc only in English.
+7. **ADR** in the kit's format: title `NNNN — …`, "Status", "Context",
+   "Decision", "Consequences" and "References".
 
-## 2. Cómo se usa BarrierKit
+## 2. How BarrierKit is used
 
-### Arranque y modelo
+### Startup and model
 
-- Una app es un `App` de Freya (`render(&self) -> impl IntoElement`) envuelto en
-  `AppComponent` y lanzado con `platform::run_window(app, WindowOptions)`.
-  `run_window` es el único arranque y bloquea hasta cerrar.
-- La interfaz es una función del estado (`use_state`, `State<T>`); los
-  controles son controlados (`value`/`on_change`).
-- Capas (ADR 0047): 0 plataforma, 1 primitivas, 2 vistas, 3 patrones y la
-  columna App. Sin `prelude`: cada pieza se importa de su módulo.
-- Freya `=0.4.3`, solo `freya-core`, `freya-components` sin features,
-  `freya-animation`, `freya-engine`, `torin` y `ragnarok`. Nunca `freya` ni
+- An app is a Freya `App` (`render(&self) -> impl IntoElement`) wrapped in
+  `AppComponent` and launched with `platform::run_window(app, WindowOptions)`.
+  `run_window` is the only entry point and blocks until close.
+- The interface is a function of state (`use_state`, `State<T>`); controls
+  are controlled (`value`/`on_change`).
+- Layers (ADR 0047): 0 platform, 1 primitives, 2 views, 3 patterns and the
+  App column. No `prelude`: each piece is imported from its module.
+- Freya `=0.4.3`, only `freya-core`, `freya-components` without features,
+  `freya-animation`, `freya-engine`, `torin` and `ragnarok`. Never `freya` nor
   `freya-winit`.
-- Dibujo con Skia sobre Vulkan (ADR 0056); sin Vulkan no abre la ventana
-  (`RunError::Vulkan`). Lavapipe sirve.
-- Freya repinta el árbol entero en cada frame (sin damage parcial).
+- Drawing with Skia on Vulkan (ADR 0056); without Vulkan the window does not
+  open (`RunError::Vulkan`). Lavapipe works.
+- Freya repaints the whole tree on every frame (no partial damage).
 
-### Piezas útiles para un terminal
+### Useful pieces for a terminal
 
-| Necesidad | Pieza del kit | Nota |
+| Need | Kit piece | Note |
 |---|---|---|
-| Titlebar CSD y semáforos | `titlebar::Titlebar`, `chrome::WindowChrome` | Zonas `left`/`right`, título; estados de foco, maximizada y pantalla completa ya resueltos |
-| Estado y órdenes de ventana | `platform::WindowControls::get()` | `toggle_fullscreen`, `minimize`, `close`… |
-| Menú global | `app_menu::{AppMenu, Menu}` + `WindowOptions::menu` | dbusmenu + `org_kde_kwin_appmenu_manager` |
-| Acciones y atajos | `app::{Action, Shortcut, use_menu_action}` | El atajo solo llega si la acción está en el menú |
-| Estado vivo del menú | `app_menu::MenuHandle` (contexto raíz) y `MenuHandle::update(id, f)` | Lo usa `use_undo`; no está documentado |
-| Menú contextual | `context_menu(fila, items, on_select)` | `MenuView` en el puntero |
-| Preferencias | `patterns::preferences::PreferencesWindow`, `views::form::*` | Barra lateral + buscador + `Form` |
-| Pestañas | `views::tabs::TabView` | Pestañas de barra de herramientas con títulos `&'static str` |
-| Divisiones | `views::split::SplitView` | Barra lateral + detalle + inspector; no es un divisor genérico |
-| Alertas y hojas | `views::feedback::{Alert, sheet}` | Dentro de la misma ventana |
-| «Acerca de» | `patterns::about::about_window` | |
-| Persistencia | `app::{load_defaults, save_defaults, use_defaults, read_toml, write_toml}` | `.domain` TOML en `~/.config/malaysia/<app_id>.domain` |
-| Instancia única | `app::launch` | D-Bus; reenvía la activación |
-| Portapapeles | `freya_clipboard::Clipboard` | Solo texto sobre `wl_data_device` |
-| Cursor | `Cursor::set(CursorIcon::Text)` | Requiere `wp_cursor_shape_manager_v1` |
-| Fuente propia | `register_font(bytes)` | |
-| Idiomas | `barrier_kit::i18n`, `tr!` | |
-| Dibujo propio | `freya_core::element::ElementExt::render(RenderContext)` | Público en Freya; el kit lo usa internamente en `glass.rs` |
+| CSD titlebar and traffic lights | `titlebar::Titlebar`, `chrome::WindowChrome` | `left`/`right` zones, title; focus, maximized and full-screen states already handled |
+| Window state and commands | `platform::WindowControls::get()` | `toggle_fullscreen`, `minimize`, `close`… |
+| Global menu | `app_menu::{AppMenu, Menu}` + `WindowOptions::menu` | dbusmenu + `org_kde_kwin_appmenu_manager` |
+| Actions and shortcuts | `app::{Action, Shortcut, use_menu_action}` | The shortcut only arrives if the action is in the menu |
+| Live menu state | `app_menu::MenuHandle` (root context) and `MenuHandle::update(id, f)` | Used by `use_undo`; not documented |
+| Context menu | `context_menu(fila, items, on_select)` | `MenuView` at the pointer |
+| Preferences | `patterns::preferences::PreferencesWindow`, `views::form::*` | Sidebar + search field + `Form` |
+| Tabs | `views::tabs::TabView` | Toolbar tabs with `&'static str` titles |
+| Splits | `views::split::SplitView` | Sidebar + detail + inspector; not a generic divider |
+| Alerts and sheets | `views::feedback::{Alert, sheet}` | Inside the same window |
+| "About" | `patterns::about::about_window` | |
+| Persistence | `app::{load_defaults, save_defaults, use_defaults, read_toml, write_toml}` | TOML `.domain` in `~/.config/malaysia/<app_id>.domain` |
+| Single instance | `app::launch` | D-Bus; forwards the activation |
+| Clipboard | `freya_clipboard::Clipboard` | Text only over `wl_data_device` |
+| Cursor | `Cursor::set(CursorIcon::Text)` | Requires `wp_cursor_shape_manager_v1` |
+| Own font | `register_font(bytes)` | |
+| Languages | `barrier_kit::i18n`, `tr!` | |
+| Custom drawing | `freya_core::element::ElementExt::render(RenderContext)` | Public in Freya; the kit uses it internally in `glass.rs` |
 
-### Menú global, de punta a punta
+### Global menu, end to end
 
-1. La app pasa un `AppMenu` (lista de `Menu { title, items }`) en
+1. The app passes an `AppMenu` (a list of `Menu { title, items }`) in
    `WindowOptions::menu`.
-2. El runner crea un `MenuHandle`, lo publica en D-Bus como
-   `com.canonical.dbusmenu` y, si el compositor ofrece
-   `org_kde_kwin_appmenu_manager`, anuncia servicio y ruta para la superficie.
-   Sin el protocolo, el menú existe solo en D-Bus (`tracing::info!`).
-3. Una pulsación del menú llega a la app por `use_menu_action(|id| …)`, en el
-   hilo de interfaz.
-4. Un atajo de teclado se busca en el menú de la ventana con foco
-   (`find_menu_shortcut`) y se despacha igual que un clic. Los atajos se
-   guardan como texto (`"Ctrl+Shift+S"`); `Action` usa `Shortcut` tipado.
-5. Para cambiar el menú en vivo, la app toma `MenuHandle` con
-   `try_consume_root_context::<MenuHandle>()` y llama a `update(id, f)`: cambia
-   `enabled`, `check`, `label` o los hijos de un `Submenu` con id. El servidor
-   emite `LayoutUpdated`.
+2. The runner creates a `MenuHandle`, publishes it on D-Bus as
+   `com.canonical.dbusmenu` and, if the compositor offers
+   `org_kde_kwin_appmenu_manager`, announces service and path for the
+   surface. Without the protocol, the menu exists only on D-Bus
+   (`tracing::info!`).
+3. A menu click reaches the app through `use_menu_action(|id| …)`, on the
+   interface thread.
+4. A keyboard shortcut is looked up in the focused window's menu
+   (`find_menu_shortcut`) and dispatched like a click. Shortcuts are stored
+   as text (`"Ctrl+Shift+S"`); `Action` uses typed `Shortcut`.
+5. To change the menu live, the app takes `MenuHandle` with
+   `try_consume_root_context::<MenuHandle>()` and calls `update(id, f)`: it
+   changes `enabled`, `check`, `label` or the children of a `Submenu` with an
+   id. The server emits `LayoutUpdated`.
 
-### La barra de menús de Malaysia (`malaysia-shell menubar`)
+### Malaysia's menu bar (`malaysia-shell menubar`)
 
-- Lee el menú remoto de la ventana enfocada (`menubar/dbusmenu.rs`), atiende
-  `LayoutUpdated`, `ItemsPropertiesUpdated` y `AboutToShow`.
-- `MenuSources::compose` (`menubar/remote.rs`) mezcla el menú de la app con
-  los suyos:
-  - siempre pone primero el menú del sistema (copo) y luego uno con el nombre
-    de la app en negrita, con ranuras propias (Acerca de, Ajustes, Servicios,
-    Ocultar, Ocultar otras, Mostrar todo, Salir);
-  - un submenú remoto cuyo título coincide con el nombre de la app rellena esas
-    ranuras por etiqueta y añade el resto;
-  - «Window»/«Ventana» y «Help»/«Ayuda» remotos se añaden a los de la shell, que
-    ya traen controles de ventana y búsqueda;
-  - el resto va en medio, en orden.
-- El nombre de la app sale del `.desktop` con ese `app_id` o `StartupWMClass`;
-  si no hay, del último segmento del `app_id` con mayúscula inicial.
-- Por eso CurseTerm publica su menú «CurseTerm» con el mismo nombre que su
-  `.desktop`, y «Window» y «Help» se fusionan con los de la shell.
+- It reads the remote menu of the focused window (`menubar/dbusmenu.rs`),
+  handles `LayoutUpdated`, `ItemsPropertiesUpdated` and `AboutToShow`.
+- `MenuSources::compose` (`menubar/remote.rs`) merges the app's menu with
+  its own:
+  - it always puts the system menu (snowflake) first and then one with the
+    app name in bold, with its own slots (About, Settings, Services, Hide,
+    Hide Others, Show All, Quit);
+  - a remote submenu whose title matches the app name fills those slots by
+    label and adds the rest;
+  - remote "Window"/"Ventana" and "Help"/"Ayuda" are added to the shell's,
+    which already bring window controls and search;
+  - the rest goes in between, in order.
+- The app name comes from the `.desktop` with that `app_id` or
+  `StartupWMClass`; if there is none, from the last segment of the `app_id`
+  with an initial capital.
+- That is why CurseTerm publishes its "CurseTerm" menu with the same name as
+  its `.desktop`, and "Window" and "Help" merge with the shell's.
 
-### Atajos fijos de Malaysia
+### Malaysia's fixed shortcuts
 
-`malaysia/docs/configuracion/opciones.md` reserva en el compositor `Super+Q`
-(cerrar la app), `Super+W` (cerrar la ventana), `Super+M`, `Super+H`,
-`Alt+Super+H`, `Super+Space`, `Ctrl+Super+F`, `Shift+Super+3/4` y varios
-`Ctrl+Alt+…`. Una app no los recibe.
+`malaysia/docs/configuracion/opciones.md` reserves in the compositor `Super+Q`
+(close the app), `Super+W` (close the window), `Super+M`, `Super+H`,
+`Alt+Super+H`, `Super+Space`, `Ctrl+Super+F`, `Shift+Super+3/4` and several
+`Ctrl+Alt+…`. An app does not receive them.
 
-## 3. Lo que el kit no ofrece hoy (detectado al leer)
+## 3. What the kit does not offer today (found while reading)
 
-Cada punto tiene su entrada en [`barrierkit-gaps.md`](barrierkit-gaps.md); aquí
-solo el resumen:
+Each point has its entry in [`barrierkit-gaps.md`](barrierkit-gaps.md);
+here only the summary:
 
-1. **Una ventana por proceso.** `run_window` (`platform/window.rs:346`) crea
-   una ventana; `Runtime::create_window` es `pub(super)`. iTerm2 abre varias
-   ventanas en un proceso y las lista en «Window».
-2. **Título de ventana fijo.** No hay `set_title` en vivo; un terminal cambia
-   el título con OSC 0/2.
-3. **Atajos limitados y no consumidos.** `ShortcutKey` solo tiene `Char`,
-   `Left` y `Right` (`app/action.rs:9`); el título de `Action` es
-   `fn() -> &'static str` (`:66`). Cuando un atajo dispara su acción, la tecla
-   llega igualmente a la app (`platform/input/seat.rs:464`).
-4. **Sin IME** (`zwp_text_input_v3`) ni selección primaria (pendiente por
-   Freya en ADR 0047). El texto compuesto depende de lo que entregue xkb en
-   `utf8`.
-5. **Sin pestañas de documento.** `TabView` (`views/tabs.rs:16`) es el selector
-   de barra de herramientas con títulos estáticos; no hay cerrar, «+»,
-   reordenar ni títulos vivos como la barra de pestañas de iTerm2.
-6. **Sin divisor genérico.** `SplitView` (`views/split.rs:94`) es barra
-   lateral + detalle; no anida ni divide en vertical.
-7. **Sin cara monoespaciada en Tengen.** Las tipografías de `tokens.json` son
-   todas `sans`.
-8. **Sin primitiva pública de lienzo.** El kit dibuja a mano solo en módulos
-   privados (`glass.rs:176`); una app que necesita una rejilla implementa
-   `ElementExt` de Freya.
-9. **Caché de párrafos apagada** (`fonts.rs:20`): cada `label` se vuelve a
-   maquetar en cada frame.
-10. **Sin arrastrar y soltar entre apps, sin abrir URLs, sin portapapeles con
-    tipos** (pendientes en ADR 0047).
-11. **Diálogos solo dentro de la ventana** (`sheet`, `Alert`); una ventana de
-    Preferencias aparte depende del punto 1.
+1. **One window per process.** `run_window` (`platform/window.rs:346`)
+   creates one window; `Runtime::create_window` is `pub(super)`. iTerm2 opens
+   several windows in one process and lists them in "Window".
+2. **Fixed window title.** There is no live `set_title`; a terminal changes
+   the title with OSC 0/2.
+3. **Limited, unconsumed shortcuts.** `ShortcutKey` only has `Char`, `Left`
+   and `Right` (`app/action.rs:9`); the `Action` title is
+   `fn() -> &'static str` (`:66`). When a shortcut fires its action, the key
+   still reaches the app (`platform/input/seat.rs:464`).
+4. **No IME** (`zwp_text_input_v3`) nor primary selection (pending on Freya
+   in ADR 0047). Composed text depends on what xkb delivers in `utf8`.
+5. **No document tabs.** `TabView` (`views/tabs.rs:16`) is the toolbar
+   selector with static titles; there is no close, "+", reordering or live
+   titles like iTerm2's tab bar.
+6. **No generic divider.** `SplitView` (`views/split.rs:94`) is sidebar +
+   detail; it does not nest or split vertically.
+7. **No monospace face in Tengen.** The typefaces in `tokens.json` are all
+   `sans`.
+8. **No public canvas primitive.** The kit draws by hand only in private
+   modules (`glass.rs:176`); an app that needs a grid implements Freya's
+   `ElementExt`.
+9. **Paragraph cache turned off** (`fonts.rs:20`): each `label` is laid out
+   again on every frame.
+10. **No drag and drop between apps, no opening URLs, no typed clipboard**
+    (pending in ADR 0047).
+11. **Dialogs only inside the window** (`sheet`, `Alert`); a separate
+    Preferences window depends on point 1.
 
-Contradicciones entre documentación y código (manda el código):
+Contradictions between documentation and code (the code wins):
 
-- `docs/barrierkit/04-apariencia-y-tokens.md:33` cita `tengen/generated/` con
-  Slint, CSS y QML; la carpeta no existe.
-- `docs/barrierkit/01-que-es.md:30` habla de «cinco apps de prueba»; el
-  workspace tiene tres (`tengen-app-show`, `ondina`, `marea`).
-- `MenuHandle::update` es la única forma de cambiar el menú en vivo y no
-  aparece en la documentación; `replace_menu` existe pero solo en tests
+- `docs/barrierkit/04-apariencia-y-tokens.md:33` cites `tengen/generated/`
+  with Slint, CSS and QML; the folder does not exist.
+- `docs/barrierkit/01-que-es.md:30` speaks of "five test apps"; the workspace
+  has three (`tengen-app-show`, `ondina`, `marea`).
+- `MenuHandle::update` is the only way to change the menu live and does not
+  appear in the documentation; `replace_menu` exists but only in tests
   (`app_menu.rs:110`).
 
-## 4. Inventario de iTerm2
+## 4. iTerm2 inventory
 
-### Menús (`sources/MainMenu/Base.lproj/MainMenu.xib`)
+### Menus (`sources/MainMenu/Base.lproj/MainMenu.xib`)
 
-| Menú | Entradas principales (⌘ = Command, ⌥ = Option, ⇧ = Shift, ⌃ = Control) |
+| Menu | Main entries (⌘ = Command, ⌥ = Option, ⇧ = Shift, ⌃ = Control) |
 |---|---|
 | iTerm2 | About · Preferences… ⌘, · Services · Hide ⌘H · Hide Others ⌥⌘H · Show All · Secure Keyboard Entry · Install Shell Integration · Quit ⌘Q |
 | Shell | New Window ⌘N · New Tab ⌘T · New Tab with Current Profile ⌥⇧⌘T · Duplicate Tab · Split Horizontally with Current Profile ⇧⌘D · Split Vertically with Current Profile ⌘D · Save Selected Text… ⌘S · Close ⌘W · Close Terminal Window ⇧⌘W · Close All Panes in Tab ⌥⌘W · Undo Close ⇧⌘T · Broadcast Input ▸ · tmux ▸ · ssh ▸ · Print ▸ |
 | Edit | Undo · Redo · Cut · Copy ⌘C · Copy with Styles ⌥⌘C · Copy Mode ⇧⌘C · Paste ⌘V · Paste Special ▸ · Open Selection · Select All ⌘A · Select Output of Last Command ⇧⌘A · Find ▸ (Find… ⌘F, Find Next ⌘G, Find Previous ⇧⌘G, Use Selection for Find ⌘E…) · Marks and Annotations ▸ (Set Mark ⇧⌘M, Jump to Mark ⇧⌘J, Next/Previous Mark ⇧⌘↓/↑) · Clear Buffer ⌘K · Clear Scrollback Buffer ⇧⌘K |
 | View | Show Tabs in Fullscreen ⇧⌘U · Toggle Full Screen ⌃⌘F · Toolbelt ▸ · Use Transparency ⌘U · Find Cursor ⌘/ · Show Timestamps ⇧⌘E · Open Quickly ⇧⌘O · Maximize Active Pane · Make Text Bigger ⌘+ · Make Text Normal Size ⌘0 · Make Text Smaller ⌘- · Start Instant Replay |
 | Session | Edit Session… ⌘I · Run Coprocess… · Restart Session · Duplicate Session · Open Paste History… ⇧⌘H · Triggers ▸ · Reset ⌘R · Reset Character Set · Move Session ▸ · Log ▸ · Terminal State ▸ · Bury Session |
-| Scripts | Scripts de Python (fuera de alcance) |
-| Profiles | Open Profiles… ⌘O · lista dinámica de perfiles (⌃⌘1…) |
-| Window | Minimize ⌘M · Zoom · Arrangements ▸ · Edit Window Title · Tab ▸ (Select Next/Previous Tab ⇧⌘] / ⇧⌘[, Move Tab Left/Right) · Split Pane ▸ (Select Pane Above/Below/Left/Right ⌥⌘↑↓←→, Next/Previous Pane ⌘] / ⌘[, Move Divider ⌃⌘↑↓←→) · Window Style ▸ · Arrange Windows ▸ · Resize Window ▸ · Password Manager · Pin Hotkey Window · Bring All To Front · lista dinámica de ventanas |
+| Scripts | Python scripts (out of scope) |
+| Profiles | Open Profiles… ⌘O · dynamic profile list (⌃⌘1…) |
+| Window | Minimize ⌘M · Zoom · Arrangements ▸ · Edit Window Title · Tab ▸ (Select Next/Previous Tab ⇧⌘] / ⇧⌘[, Move Tab Left/Right) · Split Pane ▸ (Select Pane Above/Below/Left/Right ⌥⌘↑↓←→, Next/Previous Pane ⌘] / ⌘[, Move Divider ⌃⌘↑↓←→) · Window Style ▸ · Arrange Windows ▸ · Resize Window ▸ · Password Manager · Pin Hotkey Window · Bring All To Front · dynamic window list |
 | Help | iTerm2 Help ⌘? · Copy Mode Shortcuts · Open Source Licenses |
 
-Notas:
+Notes:
 
-- En el xib una letra mayúscula implica ⇧ (por ejemplo `D` es ⇧⌘D).
-- «Profiles» y la lista de ventanas de «Window» se rellenan en tiempo de
-  ejecución.
-- Muchas entradas van ocultas o son alternas con ⌥ (`isAlternate`); CurseTerm
-  no las reproduce.
+- In the xib an uppercase letter implies ⇧ (for example `D` is ⇧⌘D).
+- "Profiles" and the window list in "Window" are filled at run time.
+- Many entries are hidden or are ⌥ alternates (`isAlternate`); CurseTerm
+  does not reproduce them.
 
-### Preferencias (`PreferencePanel.xib`)
+### Preferences (`PreferencePanel.xib`)
 
-- Barra de herramientas: **General · Appearance · Profiles · Keys · Arrangements
-  · Pointer · Advanced** (y Shortcuts en la versión actual).
+- Toolbar: **General · Appearance · Profiles · Keys · Arrangements
+  · Pointer · Advanced** (and Shortcuts in the current version).
 - General: Startup · Closing · Magic · Selection · Window · Settings · tmux ·
   Experimental.
 - Appearance: General · Windows · Tabs · Panes · Dimming.
-- Profiles (editor por perfil): General · Colors · Text · Window · Terminal ·
+- Profiles (per-profile editor): General · Colors · Text · Window · Terminal ·
   Session · Keys · Advanced.
 - Keys: Key Bindings · Navigation Shortcuts · Hotkey · Remap Modifiers.
 
-### Código de referencia
+### Reference code
 
-| Área | Carpeta de `sources/` |
+| Area | `sources/` folder |
 |---|---|
-| Ventana, pestañas y barra | `iTermController`, `TerminalView`, `TabGroups`, `SplitPanel` |
-| Sesión y PTY | `PTYSession`, `SessionCreation`, `ProcessInfo` |
-| Emulación | `VT100`, `VT100Screen`, `LineBuffer`, `ScreenChar` |
-| Selección y copia | `Selection`, `CopyMode`, `Pasting` |
-| Búsqueda | `SearchingFiltering`, `GlobalSearch` |
-| Marcas y shell integration | `Marks`, `ShellIntegration` |
-| Imágenes en línea | `InlineImages` |
+| Window, tabs and bar | `iTermController`, `TerminalView`, `TabGroups`, `SplitPanel` |
+| Session and PTY | `PTYSession`, `SessionCreation`, `ProcessInfo` |
+| Emulation | `VT100`, `VT100Screen`, `LineBuffer`, `ScreenChar` |
+| Selection and copy | `Selection`, `CopyMode`, `Pasting` |
+| Search | `SearchingFiltering`, `GlobalSearch` |
+| Marks and shell integration | `Marks`, `ShellIntegration` |
+| Inline images | `InlineImages` |
 | Triggers | `Triggers` |
 | Broadcast | `InputBroadcasting` |
 | Hotkey window | `Hotkey` |
-| Perfiles y preferencias | `ProfilesPanel`, `Settings` |
+| Profiles and preferences | `ProfilesPanel`, `Settings` |
 
-## 5. Emulación y PTY: candidatos
+## 5. Emulation and PTY: candidates
 
-La decisión se cierra en un ADR al empezar la fase 1. Lo que hay:
+The decision closes in an ADR when phase 1 starts. What there is:
 
 | | `alacritty_terminal` 0.26.0 | `vte` 0.15.0 |
 |---|---|---|
-| Qué es | Parser + rejilla + scrollback + selección + búsqueda regex + PTY (`tty`, con `rustix-openpty`) + bucle de E/S | Solo el parser de secuencias (máquina de estados de Paul Williams) |
-| Lo que habría que escribir con él | Render, entrada, OSC propios (1337, 133) | Rejilla, scrollback, reflow, selección, búsqueda, PTY |
-| Riesgo | API semiestable, pensada para Alacritty; OSC desconocidos se ignoran | Reimplementar lo que el encargo pide no reinventar |
+| What it is | Parser + grid + scrollback + selection + regex search + PTY (`tty`, with `rustix-openpty`) + I/O loop | Only the sequence parser (Paul Williams' state machine) |
+| What would have to be written with it | Rendering, input, own OSCs (1337, 133) | Grid, scrollback, reflow, selection, search, PTY |
+| Risk | Semi-stable API, designed for Alacritty; unknown OSCs are ignored | Reimplementing what the brief asks not to reinvent |
 
-Inclinación: `alacritty_terminal`, con su `tty` para el PTY (cubre
-`TIOCSWINSZ`/`SIGWINCH` al redimensionar), y un `vte::Parser` propio en paralelo
-solo para los OSC que Alacritty ignora (1337, 133) en la fase 4. `portable-pty`
-sobra si `alacritty_terminal::tty` basta.
+Leaning: `alacritty_terminal`, with its `tty` for the PTY (it covers
+`TIOCSWINSZ`/`SIGWINCH` on resize), and a separate `vte::Parser` in parallel
+only for the OSCs that Alacritty ignores (1337, 133) in phase 4.
+`portable-pty` is unnecessary if `alacritty_terminal::tty` is enough.
 
-## 6. Decisiones abiertas para la fase 1
+## 6. Open decisions for phase 1
 
-1. **Dependencia del kit.** El flake de barrierkit no exporta `lib` ni
-   overlay; solo `packages.skia-binaries`. Plan: `barrierkit` como input del
-   flake de CurseTerm (para reutilizar `skia-binaries` y el dev shell) y las
-   crates como dependencia git en `Cargo.toml` con el mismo `rev`, como hace
-   malaysia (ADR 0048 §2).
-2. **Esquema de atajos.** Inclinación: **Super** como ⌘. Razones:
-   - la shell de Malaysia ya traduce ⌘ a Super en sus menús (Super+C, Super+V,
-     Super+Q, Super+H) y su compositor reserva Super+Q/H/M igual que macOS;
-   - un terminal no envía Super a la shell, así que ningún atajo de la app roba
-     una combinación a programas como `vim` o `emacs`, cosa que sí pasa con
-     Ctrl+Shift en modos CSI u.
-   Costes: Malaysia reserva Super+W (cerrar ventana) y GNOME reserva Super+A,
-   Super+H, Super+L, Super+V, etc. Se mide en la fase 1 y se documenta en el ADR.
-3. **App-id.** `org.curseterm.CurseTerm`. Malaysia solo trata como «propia» una
-   ventana con el prefijo `io.github.hblanqueto.malaysia.` (ADR 0035); con la
-   política `force_server` le añadiría una segunda titlebar. Con la política
-   por defecto respeta la CSD que pide el kit. Se anota como observación del
-   escritorio, no del kit.
-4. **Colores del terminal.** La paleta ANSI y el fondo son datos del perfil
-   (como los `.itermcolors`), no tokens de interfaz. Van en el perfil del
-   usuario y en esquemas incluidos como datos; la interfaz alrededor (titlebar,
-   pestañas, preferencias) usa solo `Palette` y tokens. Hay que comprobar que
-   `scripts/check-design-tokens.sh` del kit no se aplica a CurseTerm o
-   justificar la excepción en un ADR.
-5. **Rejilla.** Un elemento propio (`ElementExt`) que dibuja la rejilla con
-   Skia: un rectángulo de fondo por racha de color y un `TextBlob` por racha de
-   estilo, en vez de un `label` por celda.
+1. **Kit dependency.** The barrierkit flake exports neither `lib` nor an
+   overlay; only `packages.skia-binaries`. Plan: `barrierkit` as an input of
+   the CurseTerm flake (to reuse `skia-binaries` and the dev shell) and the
+   crates as a git dependency in `Cargo.toml` with the same `rev`, as
+   malaysia does (ADR 0048 §2).
+2. **Shortcut scheme.** Leaning: **Super** as ⌘. Reasons:
+   - Malaysia's shell already translates ⌘ to Super in its menus (Super+C,
+     Super+V, Super+Q, Super+H) and its compositor reserves Super+Q/H/M just
+     like macOS;
+   - a terminal does not send Super to the shell, so no app shortcut steals
+     a combination from programs like `vim` or `emacs`, which does happen
+     with Ctrl+Shift in CSI u modes.
+   Costs: Malaysia reserves Super+W (close window) and GNOME reserves
+   Super+A, Super+H, Super+L, Super+V, etc. It is measured in phase 1 and
+   documented in the ADR.
+3. **App-id.** `org.curseterm.CurseTerm`. Malaysia only treats as "its own" a
+   window with the `io.github.hblanqueto.malaysia.` prefix (ADR 0035); with
+   the `force_server` policy it would add a second titlebar. With the default
+   policy it respects the CSD the kit requests. It is noted as an observation
+   about the desktop, not the kit.
+4. **Terminal colors.** The ANSI palette and the background are profile data
+   (like `.itermcolors`), not interface tokens. They go in the user's profile
+   and in schemes bundled as data; the surrounding interface (titlebar, tabs,
+   preferences) uses only `Palette` and tokens. We must check that the kit's
+   `scripts/check-design-tokens.sh` does not apply to CurseTerm or justify the
+   exception in an ADR.
+5. **Grid.** A custom element (`ElementExt`) that draws the grid with Skia:
+   one background rectangle per color run and one `TextBlob` per style run,
+   instead of one `label` per cell.
 
-## 7. Entorno de este trabajo
+## 7. Environment of this work
 
-- No hay sesión gráfica en el contenedor. Para probar hace falta un compositor
-  sin pantalla (Weston o sway headless, como en `docs/barrierkit/14-plataforma.md`)
-  y Vulkan por software (lavapipe).
-- `nix develop` de barrierkit no termina aquí: construye `skia-binaries` desde
-  el código fuente (`nix/skia.nix`) y necesita descargas de GitHub.
-  1. Los `fetchgit` fallaban por TLS (el proxy re-firma); se resuelve con
-     `NIX_GIT_SSL_CAINFO=/root/.ccr/ca-bundle.crt` y
+- There is no graphical session in the container. Testing needs a headless
+  compositor (Weston or headless sway, as in
+  `docs/barrierkit/14-plataforma.md`) and software Vulkan (lavapipe).
+- barrierkit's `nix develop` does not finish here: it builds `skia-binaries`
+  from source (`nix/skia.nix`) and needs downloads from GitHub.
+  1. The `fetchgit` calls failed on TLS (the proxy re-signs); this is solved
+     with `NIX_GIT_SSL_CAINFO=/root/.ccr/ca-bundle.crt` and
      `--option extra-sandbox-paths /root/.ccr`.
-  2. El tarball `github.com/rust-skia/skia/archive/refs/tags/m148-0.97.0.tar.gz`
-     devuelve **403**: la política de red del entorno no deja descargar
-     archivos ni releases de `github.com` (sí `git clone`). Sin Skia no compila
-     `freya-skia-bindings` ni, por tanto, el kit.
-  Hasta que se permita `github.com` (y `codeload.github.com`) en la red del
-  entorno, nada que dependa del kit se puede compilar ni ejecutar aquí. La
-  fase 1 lo anota en `progreso.md` y no declara probado nada que no se haya
-  ejecutado.
-- `dev.sh lab` de malaysia necesita además Vulkan, un bus D-Bus privado y el
-  compositor anidado; se probará en la fase 1.
+  2. The tarball `github.com/rust-skia/skia/archive/refs/tags/m148-0.97.0.tar.gz`
+     returns **403**: the environment's network policy does not allow
+     downloading archives or releases from `github.com` (it does allow
+     `git clone`). Without Skia, `freya-skia-bindings` does not build, and so
+     neither does the kit.
+  Until `github.com` (and `codeload.github.com`) are allowed in the
+  environment's network, nothing that depends on the kit can be built or run
+  here. Phase 1 notes it in `progreso.md` and declares nothing tested that
+  has not been run.
+- malaysia's `dev.sh lab` also needs Vulkan, a private D-Bus bus and the
+  nested compositor; it will be tested in phase 1.

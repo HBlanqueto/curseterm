@@ -1,40 +1,40 @@
-# 0003 — ⌘ de iTerm2 es Super en CurseTerm
+# 0003 — iTerm2's ⌘ is Super in CurseTerm
 
-Estado: **aceptado** (2026-11-05).
+Status: **accepted** (2026-11-05).
 
-## Contexto
+## Context
 
-iTerm2 usa ⌘ para casi todo. En Linux hay dos esquemas habituales: Super
-(como macOS) o Ctrl+Mayús (GNOME Terminal, Konsole).
+iTerm2 uses ⌘ for almost everything. Linux has two common schemes: Super
+(like macOS) or Ctrl+Shift (GNOME Terminal, Konsole).
 
-- La shell de Malaysia ya traduce ⌘ a Super en sus menús (Super+C, Super+V,
-  Super+Q…) y su compositor reserva Super+Q, Super+H, Super+M y Super+W
-  como macOS (`malaysia/docs/configuracion/opciones.md`).
-- Un terminal no envía Super a los programas. Ctrl+Mayús sí llega a ellos en
-  los modos de teclado modernos (CSI u, kitty), así que un atajo Ctrl+Mayús le
-  quita una combinación a `vim` o a `emacs`.
-- GNOME reserva varias combinaciones Super+letra: entre ellas Super+V (lista de
-  notificaciones), Super+A, Super+L y Super+H.
+- The Malaysia shell already translates ⌘ to Super in its menus (Super+C, Super+V,
+  Super+Q…) and its compositor reserves Super+Q, Super+H, Super+M and Super+W
+  like macOS (`malaysia/docs/configuration/options.md`).
+- A terminal does not send Super to programs. Ctrl+Shift does reach them in
+  modern keyboard modes (CSI u, kitty), so a Ctrl+Shift shortcut
+  takes a combination away from `vim` or `emacs`.
+- GNOME reserves several Super+letter combinations: among them Super+V (notification
+  list), Super+A, Super+L and Super+H.
 
-## Decisión
+## Decision
 
-1. Todo ⌘ de iTerm2 es **Super**; ⌥ es Alt, ⌃ es Ctrl y ⇧ es Mayús. Ejemplos:
-   ⌘T → Super+T, ⇧⌘D → Super+Mayús+D, ⌥⌘← → Super+Alt+←.
-2. El menú global muestra ese atajo y la app lo atiende por `Action`.
-3. Única excepción, fuera del menú: **Ctrl+Mayús+C** y **Ctrl+Mayús+V** también
-   copian y pegan, para poder hacerlo en GNOME, donde Super+V no llega. Las
-   atiende el codificador de teclado del terminal y no se publican en el menú.
-4. El codificador de teclado nunca envía al PTY una tecla con Super.
+1. Every iTerm2 ⌘ is **Super**; ⌥ is Alt, ⌃ is Ctrl and ⇧ is Shift. Examples:
+   ⌘T → Super+T, ⇧⌘D → Super+Shift+D, ⌥⌘← → Super+Alt+←.
+2. The global menu shows that shortcut and the app handles it through `Action`.
+3. The only exception, outside the menu: **Ctrl+Shift+C** and **Ctrl+Shift+V** also
+   copy and paste, so that it works in GNOME, where Super+V does not arrive. The
+   terminal's keyboard encoder handles them and the menu does not publish them.
+4. The keyboard encoder never sends a key with Super to the PTY.
 
-## Consecuencias
+## Consequences
 
-- En Malaysia, Super+W cierra la ventana entera aunque tenga varias pestañas,
-  porque el compositor la atiende antes que la app. Se anota en `progreso.md`
-  como diferencia con iTerm2.
-- En GNOME, los atajos Super que reserva el escritorio no llegan; los menús
-  siguen funcionando con el ratón.
+- In Malaysia, Super+W closes the whole window even if it has several tabs,
+  because the compositor handles it before the app. `progreso.md` records it
+  as a difference from iTerm2.
+- In GNOME, the Super shortcuts the desktop reserves do not arrive; the menus
+  still work with the mouse.
 
-## Referencias
+## References
 
-- [`estudio-previo.md`](../estudio-previo.md), §2 «Atajos fijos de Malaysia» y
+- [`estudio-previo.md`](../estudio-previo.md), §2 "Malaysia's fixed shortcuts" and
   §6.2.

@@ -1,24 +1,22 @@
 # CurseTerm
 
-CurseTerm es un emulador de terminal para Linux y Wayland que reproduce el
-comportamiento, la interfaz y los menús de iTerm2, construido con
-[BarrierKit](https://github.com/HBlanqueto/barrierkit), el toolkit de
+CurseTerm is a terminal emulator for Linux and Wayland that reproduces the
+behavior, interface and menus of iTerm2. It is built with
+[BarrierKit](https://github.com/HBlanqueto/barrierkit), the toolkit of
 [Malaysia](https://github.com/HBlanqueto/malaysia).
 
-English: [README.en.md](README.en.md)
+## License and relationship with iTerm2
 
-## Licencia y relación con iTerm2
+CurseTerm is MIT. **It reimplements iTerm2's behavior by reading and using
+it; it does not port or translate iTerm2 code** (GPL-2.0). It does not use its
+name or its icon. If code is ever ported, CurseTerm moves to
+GPL-2.0-or-later and records it in `NOTICE`.
 
-CurseTerm es MIT. **Reimplementa el comportamiento de iTerm2 a partir de
-leerlo y usarlo; no porta ni traduce código de iTerm2** (GPL-2.0). No usa su
-nombre ni su icono. Si algún día se porta código, CurseTerm pasará a
-GPL-2.0-o-posterior y constará en `NOTICE`.
+Emulation and the PTY come from
+[`alacritty_terminal`](https://docs.rs/alacritty_terminal) (Apache-2.0), as a
+dependency ([ADR 0002](docs/decisiones/0002-emulacion-con-alacritty-terminal.md)).
 
-La emulación y el PTY son de
-[`alacritty_terminal`](https://docs.rs/alacritty_terminal) (Apache-2.0), como
-dependencia ([ADR 0002](docs/decisiones/0002-emulacion-con-alacritty-terminal.md)).
-
-## Compilar y probar
+## Build and test
 
 ```sh
 nix develop
@@ -26,18 +24,19 @@ nix develop
 ./dev.sh run
 ```
 
-Lo que le falta a BarrierKit se completa en barrierkit
+What BarrierKit lacks is completed in barrierkit
 ([ADR 0006](docs/decisiones/0006-el-kit-se-completa-en-barrierkit.md)).
 
-## Instalar
+## Install
 
-`nix build .#curseterm` deja el binario y su `.desktop` en `result/`. Malaysia
-lo instala con su módulo de NixOS y lo abre en `./dev.sh demo` y `./dev.sh lab`.
-La rejilla usa Geist Mono, que el módulo de Malaysia instala con `geist-font`.
+`nix build .#curseterm` leaves the binary and its `.desktop` in `result/`.
+Malaysia installs it with its NixOS module and opens it in `./dev.sh demo` and
+`./dev.sh lab`. The grid uses Geist Mono, which Malaysia's module installs with
+`geist-font`.
 
-## Documentación
+## Documentation
 
-- [`docs/estudio-previo.md`](docs/estudio-previo.md): lo aprendido antes de empezar.
-- [`docs/progreso.md`](docs/progreso.md): plan y resultado de cada fase.
-- [`docs/barrierkit-gaps.md`](docs/barrierkit-gaps.md): lo que le falta a BarrierKit.
-- [`docs/decisiones/`](docs/decisiones/): ADR.
+- [`docs/estudio-previo.md`](docs/estudio-previo.md): what was learned before starting.
+- [`docs/progreso.md`](docs/progreso.md): plan and outcome of each phase.
+- [`docs/barrierkit-gaps.md`](docs/barrierkit-gaps.md): what BarrierKit lacks.
+- [`docs/decisiones/`](docs/decisiones/): ADRs.

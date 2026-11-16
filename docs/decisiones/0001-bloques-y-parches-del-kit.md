@@ -1,68 +1,68 @@
-# 0001 — Lo que le falta al kit se construye como bloques y parches trasladables
+# 0001 — What the kit lacks is built as movable blocks and patches
 
-Estado: **sustituido** por el [ADR 0006](0006-el-kit-se-completa-en-barrierkit.md) (2026-11-07).
+Status: **superseded** by [ADR 0006](0006-el-kit-se-completa-en-barrierkit.md) (2026-11-07).
 
-## Contexto
+## Context
 
-CurseTerm mide BarrierKit tal como está y no lo modifica. El estudio previo
-encontró gaps de dos clases ([`barrierkit-gaps.md`](../barrierkit-gaps.md)):
+CurseTerm measures BarrierKit as it is and does not modify it. The prior study
+found gaps of two kinds ([`barrierkit-gaps.md`](../barrierkit-gaps.md)):
 
-- **Componibles:** se pueden construir sobre la API pública del kit y de Freya
-  (pestañas de documento, paneles divididos, lienzo, token monoespaciado, menús
-  dinámicos).
-- **De plataforma:** necesitan el runner, que es `pub(crate)` (varias ventanas,
-  título en vivo, atajos consumidos, IME, selección primaria).
+- **Composable:** they can be built on the public API of the kit and of Freya
+  (document tabs, split panes, canvas, monospace token, dynamic
+  menus).
+- **Platform:** they need the runner, which is `pub(crate)` (multiple windows,
+  live title, consumed shortcuts, IME, primary selection).
 
-El usuario quiere que lo que falte se pueda pasar al kit sin reescribirlo.
+The user wants whatever is missing to move into the kit without a rewrite.
 
-## Decisión
+## Decision
 
-### 1. Bloques componibles: `crates/barrier-kit-next`
+### 1. Composable blocks: `crates/barrier-kit-next`
 
-- Un crate del workspace de CurseTerm con la **misma ruta de módulo** que
-  tendría en `barrier-kit` (`views::tab_bar`, `views::split_panes`, `canvas`…).
-  Pasarlo al kit es mover el archivo.
-- Solo depende de `barrier-kit`, `vow-design`, `freya-*` y `torin`. Nunca de
+- A crate in the CurseTerm workspace with the **same module path** it
+  would have in `barrier-kit` (`views::tab_bar`, `views::split_panes`, `canvas`…).
+  Moving it to the kit means moving the file.
+- It depends only on `barrier-kit`, `vow-design`, `freya-*` and `torin`. Never on
   `curseterm`.
-- Cumple las reglas de todo componente del kit (ADR 0047 §2): valores de
-  Tengen, variantes, controlado, `use_interaction`, etiqueta accesible en `new`.
-- Los tokens nuevos viven en `barrier-kit-next/src/tokens.rs`, con el tipo de
-  `vow_design` y el nombre que tendrían en `tengen/tokens.json` o
-  `components.json`. Es el único sitio de CurseTerm con valores de diseño.
-- Los tests siguen la regla 8 del kit. La página en Tengen App Show y el test
-  de render en claro y oscuro se escriben al trasladarlo.
+- It follows the rules for every kit component (ADR 0047 §2): Tengen
+  values, variants, controlled, `use_interaction`, accessible label in `new`.
+- New tokens live in `barrier-kit-next/src/tokens.rs`, with the `vow_design`
+  type and the name they would have in `tengen/tokens.json` or
+  `components.json`. It is the only place in CurseTerm with design values.
+- Tests follow rule 8 of the kit. The Tengen App Show page and the
+  light and dark render test are written when the block moves.
 
-### 2. Gaps de plataforma: `kit-parches/` probados en local
+### 2. Platform gaps: `kit-parches/` tested locally
 
-1. Cada gap de plataforma tiene un parche `kit-parches/NNNN-<tema>.patch`
-   contra el `rev` fijado en `Cargo.toml`, escrito con las reglas de
+1. Each platform gap has a patch `kit-parches/NNNN-<tema>.patch`
+   against the `rev` pinned in `Cargo.toml`, written with the rules of
    `barrierkit/AGENTS.md`.
-2. `./dev.sh kit-parches` clona barrierkit en ese `rev` dentro de
-   `target/barrierkit-parcheado`, aplica los parches y escribe un
-   `.cargo/config.toml` **no versionado** con
+2. `./dev.sh kit-parches` clones barrierkit at that `rev` into
+   `target/barrierkit-parcheado`, applies the patches and writes an
+   **unversioned** `.cargo/config.toml` with
    `[patch."https://github.com/HBlanqueto/barrierkit"]`. `./dev.sh kit-tal-cual`
-   lo borra. Es el mismo mecanismo que `dev.sh kit-local` de malaysia.
-3. CurseTerm compila y funciona en los dos modos. El código que usa una API
-   parcheada va tras la feature `kit-parcheado`; sin ella usa el workaround.
-4. `barrierkit-gaps.md` dice, para cada gap, si se resolvió con un bloque o un
-   parche y en qué modo se probó.
+   deletes it. It is the same mechanism as malaysia's `dev.sh kit-local`.
+3. CurseTerm builds and works in both modes. Code that uses a patched
+   API sits behind the `kit-parcheado` feature; without it, it uses the workaround.
+4. `barrierkit-gaps.md` states, for each gap, whether a block or a
+   patch solved it and in which mode it was tested.
 
-### 3. Numeración
+### 3. Numbering
 
-Los ADR de CurseTerm se numeran aparte. Un bloque o parche que pase al kit
-lleva su propio ADR con el siguiente número libre de la serie común de
-barrierkit y malaysia (ADR 0048 §4).
+CurseTerm ADRs have their own numbering. A block or patch that moves to the kit
+gets its own ADR with the next free number of the series shared by
+barrierkit and malaysia (ADR 0048 §4).
 
-## Consecuencias
+## Consequences
 
-- Las pruebas en modo `kit-parcheado` no miden el kit publicado; cada gap lo
-  dice.
-- La feature `kit-parcheado` duplica algunas ramas de código hasta que los
-  parches lleguen al kit; entonces se borran el workaround y la feature.
-- `Cargo.lock` se sube siempre generado sin el `[patch]`.
+- Tests in `kit-parcheado` mode do not measure the published kit; each gap
+  says so.
+- The `kit-parcheado` feature duplicates some code branches until the
+  patches reach the kit; then the workaround and the feature are deleted.
+- `Cargo.lock` is always committed as generated without the `[patch]`.
 
-## Referencias
+## References
 
 - [`estudio-previo.md`](../estudio-previo.md), §3.
-- ADR 0047 de barrierkit: capas y reglas de componente.
-- ADR 0048 de barrierkit: dependencia git y `kit-local`.
+- barrierkit ADR 0047: layers and component rules.
+- barrierkit ADR 0048: git dependency and `kit-local`.

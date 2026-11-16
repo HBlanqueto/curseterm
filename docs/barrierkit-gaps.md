@@ -1,1133 +1,1130 @@
-# Lo que le faltó a BarrierKit al construir CurseTerm
+# What BarrierKit lacked when building CurseTerm
 
-Versión/commit de BarrierKit usado: `36e59583c1e699b0e44ae3021bb5eff75dbb06a3` (`main`, 2026-11-07)
+BarrierKit version/commit used: `36e59583c1e699b0e44ae3021bb5eff75dbb06a3` (`main`, 2026-11-07)
 
-Resumen: documento vivo; estado del 2026-11-07. Los bloques y parches que
-CurseTerm probó (ventanas, título, atajos, IME, selección primaria, menú en
-vivo, lienzo, vistas, notificaciones y Secret Service) ya están en barrierkit
-(ADR 0006). Siguen abiertos, con workaround: los handlers de
-`use_menu_action` fuera del contexto de Freya (BK-017), sin token de
-activación (BK-019), sin atajos globales (BK-025), sin interceptar el cierre
-(BK-013) y las animaciones de `freya-animation` sin fotogramas (BK-047).
+Summary: living document; state on 2026-11-07. The blocks and patches
+CurseTerm tested (windows, title, shortcuts, IME, primary selection, live
+menu, canvas, views, notifications and Secret Service) are now in barrierkit
+(ADR 0006). Still open, with a workaround: the `use_menu_action` handlers
+outside Freya's context (BK-017), no activation token (BK-019), no global
+shortcuts (BK-025), no close interception (BK-013) and `freya-animation`
+animations without frames (BK-047).
 
-Estados: **detectado** (leído en el código), **confirmado** (reproducido al
-ejecutar CurseTerm), **resuelto en CurseTerm** (con workaround).
+States: **detected** (read in the code), **confirmed** (reproduced by
+running CurseTerm), **solved in CurseTerm** (with a workaround).
 
-Cada gap dice cómo se resuelve (ADR 0006 de CurseTerm):
+Each gap says how it is solved (CurseTerm ADR 0006):
 
-- **en barrierkit**: el kit lo trae desde los commits `ba76e23`–`4e23c81`, que
-  llevaron allí los bloques y parches que CurseTerm probó antes;
-- **workaround**: lo que hace CurseTerm con el kit tal cual.
+- **in barrierkit**: the kit has it since commits `ba76e23`–`4e23c81`, which
+  took there the blocks and patches CurseTerm tested before;
+- **workaround**: what CurseTerm does with the kit as is.
 
-## Tabla resumen
+## Summary table
 
-| ID | Área | Gap | Gravedad | Cómo se resuelve |
+| ID | Area | Gap | Severity | How it is solved |
 |---|---|---|---|---|
-| BK-001 | ventana | Una ventana por proceso | alta | En barrierkit: `WindowControls::open_window` |
-| BK-002 | ventana | Título de ventana fijo | media | En barrierkit: `WindowControls::set_title` |
-| BK-003 | input / menú global | Atajos no consumidos y `ShortcutKey` limitado | alta | En barrierkit: atajos con `NamedKey` que se consumen |
-| BK-004 | IME | Sin `zwp_text_input_v3` | media | En barrierkit: `zwp_text_input_v3` (`ime_preedit`) |
-| BK-005 | portapapeles | Sin selección primaria | media | En barrierkit: `primary_selection()` |
-| BK-006 | contenedores | Sin pestañas de documento | media | Vista propia `tab_bar.rs`, con los estilos de iTerm2; el kit tiene `WindowTabs` |
-| BK-007 | contenedores | Sin divisor genérico anidable | media | En barrierkit: `views::split_panes` |
-| BK-008 | tokens / texto | Sin cara monoespaciada ni métricas de terminal en Tengen | baja | En barrierkit: `vow_design::MONO`; `TERMINAL` en `tokens.rs` |
-| BK-009 | texto / rendimiento | Sin lienzo público y caché de párrafos apagada | media | En barrierkit: `canvas` |
-| BK-010 | menú global | Títulos de `Action` estáticos y menú sin reemplazo en vivo | media | En barrierkit: hooks de `app_menu` y `set_menu_items` |
-| BK-011 | docs | Documentación que no coincide con el código | baja | — |
-| BK-012 | ventana / persistencia | El tamaño guardado es uno por `app_id` y no se puede pedir otro | media | Workaround probado: `forget_saved_size` |
-| BK-013 | ventana | El cierre pedido por el compositor no se puede interceptar | media | Ninguno |
-| BK-014 | plataforma | `Timers::wakeup` no se puede dar de baja | baja | Workaround: un solo canal por ventana |
-| BK-015 | persistencia | Las preferencias van siempre a `~/.config/malaysia/` | baja | Se acepta |
-| BK-016 | input / menú global | Los atajos con Mayús comparan el carácter producido | media | Workaround: atajo por texto con `}` y `{` |
-| BK-017 | menú global / plataforma | Los handlers del menú corren fuera del contexto de Freya | **bloqueante** | Workaround probado: handles tomados en `render` |
-| BK-018 | menú global / docs | Sin `org_kde_kwin_appmenu_manager` el menú no se publica en D-Bus | alta | En barrierkit: menú en D-Bus sin appmenu |
-| BK-019 | ventana / plataforma | Una app no puede pedir un token de xdg-activation | media | Ninguno; sin lista de ventanas en «Window» |
-| BK-020 | controles | Las etiquetas de paneles, filas y desplegables son `&'static str` | media | Workaround: `intern` en `preferences.rs` |
-| BK-021 | controles | `RadioGroup` es siempre horizontal | baja | Workaround: un grupo de una opción por fila |
-| BK-022 | plataforma / persistencia | Un cambio de `.domain` no repinta las ventanas sin foco | alta | En barrierkit: repintado sin foco |
-| BK-023 | app | Sin selector de archivos | media | En barrierkit: `portal::open_files` |
-| BK-024 | símbolos | Faltan símbolos para una barra de ajustes, la campana y la papelera | baja | Se usan `SlidersVertical`, `CircleHalf`, `ListBullet`, `SquareGrid` y `SpeakerWave`; la papelera se dibuja en el lienzo |
-| BK-025 | plataforma / input | Sin atajos globales ni forma de ocultar y mostrar la ventana | media | Workaround probado: `curseterm --hotkey` |
-| BK-026 | app / plataforma | Sin campana, petición de atención ni notificaciones | media | Workaround probado: campana visual; `barrier_kit::notifications` |
-| BK-027 | controles / input | Una vista con teclado global no sabe si un campo de texto o un `Alert` se quedan la tecla | baja | Workaround probado: foco seguido y cierre diferido del `Alert` |
-| BK-028 | controles | Las etiquetas de `SegmentedControl` se parten en dos líneas | baja | Workaround: Ajustes a 980 px |
-| BK-029 | controles | `TextField` no puede tomar el foco al abrirse | media | En barrierkit: `TextField::auto_focus` |
-| BK-030 | entrada | Los eventos de ratón no traen modificadores | media | Workaround: modificadores seguidos con el teclado |
-| BK-031 | ventana / apariencia | Una ventana no puede pedir fondo translúcido | media | En barrierkit: `set_background_alpha` |
-| BK-032 | plataforma | Los avisos de `Timers` sobreviven a su ventana | alta | En barrierkit: `use_alive` del kit |
-| BK-033 | entrada | Sin método de entrada (`zwp_text_input_v3`) | alta | En barrierkit: `zwp_text_input_v3` (`ime_preedit`) |
-| BK-034 | portapapeles | Sin selección primaria | media | En barrierkit: `primary_selection()` |
-| BK-035 | portapapeles | El portapapeles solo ofrece texto plano | baja | En barrierkit: `copy_rich` (`text/html`) |
-| BK-036 | controles | Sin vista de texto de varias líneas | media | En barrierkit: `views::text_view` |
-| BK-037 | controles / avisos | `Alert` solo tiene dos botones y no se puede silenciar | baja | Workaround probado: hoja propia con `sheet` |
-| BK-038 | controles | `SearchField` no tiene menú de opciones | baja | Workaround probado: `PopUpButton` al lado |
-| BK-039 | controles / ventanas | Sin vista de contorno ni panel flotante | media | Workaround probado: panel dentro de la ventana |
-| BK-040 | controles | `PopUpButton` no se desplaza ni busca | media | Workaround probado: grupos y filtro |
-| BK-041 | ventanas | Un configure confirmado sale con la geometría vieja | alta | En barrierkit: configure antes del commit |
-| BK-042 | controles | `PopUpButton` no tiene modo desplegable (pull-down) | baja | En barrierkit: `buttons::MenuButton` |
-| BK-043 | controles | `TextField` no puede abrirse con el texto seleccionado | baja | Sin workaround: ⌃A lo selecciona |
-| BK-044 | vistas | Sin vista flotante que se mueva y redimensione dentro de la ventana | media | En barrierkit: `views::floating_pane` |
-| BK-045 | plataforma | Sin cliente del Secret Service de freedesktop | media | En barrierkit: `secrets` |
-| BK-046 | apariencia | `Resolved` no lleva la preferencia de contraste | baja | En barrierkit: `Resolved::contrast` |
-| BK-047 | plataforma / animación | Las animaciones de `freya-animation` no reciben fotogramas | media | Workaround probado: fundido con `Timers` |
-| BK-048 | ventana / chrome | Sin forma de declarar la barra al dibujarla sin `Titlebar` | media | En barrierkit: `WindowControls::set_bar` |
+| BK-001 | window | One window per process | high | In barrierkit: `WindowControls::open_window` |
+| BK-002 | window | Fixed window title | medium | In barrierkit: `WindowControls::set_title` |
+| BK-003 | input / global menu | Shortcuts not consumed and `ShortcutKey` limited | high | In barrierkit: shortcuts with `NamedKey` that are consumed |
+| BK-004 | IME | No `zwp_text_input_v3` | medium | In barrierkit: `zwp_text_input_v3` (`ime_preedit`) |
+| BK-005 | clipboard | No primary selection | medium | In barrierkit: `primary_selection()` |
+| BK-006 | containers | No document tabs | medium | Own view `tab_bar.rs`, with iTerm2's styles; the kit has `WindowTabs` |
+| BK-007 | containers | No generic nestable splitter | medium | In barrierkit: `views::split_panes` |
+| BK-008 | tokens / text | No monospace face or terminal metrics in Tengen | low | In barrierkit: `vow_design::MONO`; `TERMINAL` in `tokens.rs` |
+| BK-009 | text / performance | No public canvas and paragraph cache turned off | medium | In barrierkit: `canvas` |
+| BK-010 | global menu | Static `Action` titles and no live menu replacement | medium | In barrierkit: `app_menu` hooks and `set_menu_items` |
+| BK-011 | docs | Documentation that does not match the code | low | — |
+| BK-012 | window / persistence | The saved size is one per `app_id` and another cannot be asked for | medium | Tested workaround: `forget_saved_size` |
+| BK-013 | window | A close requested by the compositor cannot be intercepted | medium | None |
+| BK-014 | platform | `Timers::wakeup` cannot be unregistered | low | Workaround: a single channel per window |
+| BK-015 | persistence | Preferences always go to `~/.config/malaysia/` | low | Accepted |
+| BK-016 | input / global menu | Shortcuts with Shift compare the produced character | medium | Workaround: text shortcut with `}` and `{` |
+| BK-017 | global menu / platform | Menu handlers run outside Freya's context | **blocking** | Tested workaround: handles taken in `render` |
+| BK-018 | global menu / docs | Without `org_kde_kwin_appmenu_manager` the menu is not published on D-Bus | high | In barrierkit: menu on D-Bus without appmenu |
+| BK-019 | window / platform | An app cannot request an xdg-activation token | medium | None; no window list in «Window» |
+| BK-020 | controls | Pane, row and pop-up labels are `&'static str` | medium | Workaround: `intern` in `preferences.rs` |
+| BK-021 | controls | `RadioGroup` is always horizontal | low | Workaround: one single-option group per row |
+| BK-022 | platform / persistence | A `.domain` change does not repaint unfocused windows | high | In barrierkit: repaint without focus |
+| BK-023 | app | No file chooser | medium | In barrierkit: `portal::open_files` |
+| BK-024 | symbols | Missing symbols for a settings bar, the bell and the trash | low | `SlidersVertical`, `CircleHalf`, `ListBullet`, `SquareGrid` and `SpeakerWave` are used; the trash is drawn on the canvas |
+| BK-025 | platform / input | No global shortcuts nor a way to hide and show the window | medium | Tested workaround: `curseterm --hotkey` |
+| BK-026 | app / platform | No bell, attention request or notifications | medium | Tested workaround: visual bell; `barrier_kit::notifications` |
+| BK-027 | controls / input | A view with global keyboard does not know whether a text field or an `Alert` keeps the key | low | Tested workaround: tracked focus and deferred `Alert` dismissal |
+| BK-028 | controls | `SegmentedControl` labels wrap onto two lines | low | Workaround: Settings at 980 px |
+| BK-029 | controls | `TextField` cannot take the focus when it opens | medium | In barrierkit: `TextField::auto_focus` |
+| BK-030 | input | Mouse events carry no modifiers | medium | Workaround: modifiers tracked through the keyboard |
+| BK-031 | window / appearance | A window cannot ask for a translucent background | medium | In barrierkit: `set_background_alpha` |
+| BK-032 | platform | `Timers` callbacks outlive their window | high | In barrierkit: the kit's `use_alive` |
+| BK-033 | input | No input method (`zwp_text_input_v3`) | high | In barrierkit: `zwp_text_input_v3` (`ime_preedit`) |
+| BK-034 | clipboard | No primary selection | medium | In barrierkit: `primary_selection()` |
+| BK-035 | clipboard | The clipboard only offers plain text | low | In barrierkit: `copy_rich` (`text/html`) |
+| BK-036 | controls | No multi-line text view | medium | In barrierkit: `views::text_view` |
+| BK-037 | controls / alerts | `Alert` has only two buttons and cannot be silenced | low | Tested workaround: own sheet with `sheet` |
+| BK-038 | controls | `SearchField` has no options menu | low | Tested workaround: a `PopUpButton` beside it |
+| BK-039 | controls / windows | No outline view nor floating panel | medium | Tested workaround: a panel inside the window |
+| BK-040 | controls | `PopUpButton` neither scrolls nor searches | medium | Tested workaround: groups and a filter |
+| BK-041 | windows | An acked configure goes out with the old geometry | high | In barrierkit: configure before the commit |
+| BK-042 | controls | `PopUpButton` has no pull-down mode | low | In barrierkit: `buttons::MenuButton` |
+| BK-043 | controls | `TextField` cannot open with its text selected | low | No workaround: ⌃A selects it |
+| BK-044 | views | No floating view that moves and resizes inside the window | medium | In barrierkit: `views::floating_pane` |
+| BK-045 | platform | No freedesktop Secret Service client | medium | In barrierkit: `secrets` |
+| BK-046 | appearance | `Resolved` does not carry the contrast preference | low | In barrierkit: `Resolved::contrast` |
+| BK-047 | platform / animation | `freya-animation` animations get no frames | medium | Workaround tested: a fade with `Timers` |
+| BK-048 | window / chrome | No way to declare the bar when drawing it without `Titlebar` | medium | In barrierkit: `WindowControls::set_bar` |
 
 ## Gaps
 
-### BK-001 — Una ventana por proceso
-- **Área**: ventana
-- **Qué necesitaba CurseTerm**: «Shell › New Window» (⌘N) y la lista de
-  ventanas de «Window», como iTerm2, que abre varias ventanas en un proceso.
-- **Qué ofrece hoy BarrierKit**: `platform::run_window`
-  (`crates/barrier-kit/src/platform/window.rs:346`) crea una ventana y bloquea.
-  `Runtime::create_window` (`:360`) ya sabe crear más, pero es `pub(super)`.
-- **Qué falta**: abrir y cerrar ventanas nuevas desde la app en el mismo
-  runner, y enumerarlas.
-- **Cómo lo resolví en CurseTerm**: workaround, probado en sway: New Window
-  abre un proceso nuevo y Quit cierra todos. Cada ventana es un proceso (`crates/curseterm/src/windows.rs`): «New Window»,
-  «About» y «Settings…» lanzan el ejecutable con `--about` o `--settings`; cada
-  proceso se registra por pid en `$XDG_RUNTIME_DIR/curseterm/windows/` y «Quit»
-  manda `SIGTERM` a los demás (comprueba antes `/proc/<pid>/exe`). Ajustes
-  escribe el `.domain` y las ventanas lo leen con `use_defaults`.
-- **Coste del workaround**: un contexto Vulkan y Skia por ventana; el estado
-  compartido pasa por ficheros; «Quit» no puede preguntar antes de cerrar en
-  los otros procesos; no se puede listar ni mover pestañas entre ventanas.
-- **Parche probado**:
+### BK-001 — One window per process
+- **Area**: window
+- **What CurseTerm needed**: «Shell › New Window» (⌘N) and the window list
+  in «Window», like iTerm2, which opens several windows in one process.
+- **What BarrierKit offers today**: `platform::run_window`
+  (`crates/barrier-kit/src/platform/window.rs:346`) creates a window and blocks.
+  `Runtime::create_window` (`:360`) already knows how to create more, but it is `pub(super)`.
+- **What is missing**: opening and closing new windows from the app in the same
+  runner, and listing them.
+- **How CurseTerm solves it**: workaround, tested on sway: New Window
+  opens a new process and Quit closes them all. Each window is a process (`crates/curseterm/src/windows.rs`): «New Window»,
+  «About» and «Settings…» launch the executable with `--about` or `--settings`; each
+  process registers by pid in `$XDG_RUNTIME_DIR/curseterm/windows/` and «Quit»
+  sends `SIGTERM` to the others (it checks `/proc/<pid>/exe` first). Settings
+  writes the `.domain` and the windows read it with `use_defaults`.
+- **Cost of the workaround**: one Vulkan and Skia context per window; shared
+  state goes through files; «Quit» cannot ask before closing in
+  the other processes; tabs cannot be listed or moved between windows.
+- **Tested patch**:
   [`kit-parches/0008-varias-ventanas.patch`](../kit-parches/0008-varias-ventanas.patch)
-  añade `WindowControls::open_window(app, opciones)`. Con él, `windows::open`
-  abre la ventana en el mismo proceso y Quit las cierra todas; el historial de
-  pegado es común. El parche también corrige un pánico de `close_window`, que
-  escribía el estado con la lectura aún prestada. Con el parche, una pestaña o
-  una sesión pasa viva a una ventana nueva (fase 86); sin él, esas órdenes no
-  aparecen, porque un pty no cambia de proceso.
-- **API propuesta para el kit**: `WindowControls::open(app: AppComponent, options: WindowOptions) -> WindowControls` y `Windows::get().list() -> State<Vec<WindowInfo>>`.
-- **Gravedad**: alta
-- **Cómo reproducirlo**: buscar en `barrier_kit::platform` una función pública
-  que cree una segunda `xdg_toplevel` después de `run_window`: no existe.
+  adds `WindowControls::open_window(app, options)`. With it, `windows::open`
+  opens the window in the same process and Quit closes them all; the paste
+  history is shared. The patch also fixes a `close_window` panic, which wrote
+  the status while the read was still borrowed. With the patch, a tab or a
+  session moves alive to a new window (phase 86); without it, those commands
+  do not appear, because a pty cannot change process.
+- **Proposed kit API**: `WindowControls::open(app: AppComponent, options: WindowOptions) -> WindowControls` and `Windows::get().list() -> State<Vec<WindowInfo>>`.
+- **Severity**: high
+- **How to reproduce**: search `barrier_kit::platform` for a public function
+  that creates a second `xdg_toplevel` after `run_window`: it does not exist.
 
-### BK-002 — Título de ventana fijo
-- **Área**: ventana
-- **Qué necesitaba CurseTerm**: el título de la ventana sigue a la sesión
-  (OSC 0/2, directorio actual); lo usan la barra de menús, el Dock y la lista
-  de «Window».
-- **Qué ofrece hoy BarrierKit**: `WindowOptions::new(title, …)`; el runner
-  llama a `set_title` una vez (`platform/window.rs:382`). `WindowCommand`
-  (`:256`) no tiene orden de título.
-- **Qué falta**: cambiar el título de `xdg_toplevel` en vivo.
-- **Cómo lo resolví en CurseTerm**: parche
+### BK-002 — Fixed window title
+- **Area**: window
+- **What CurseTerm needed**: the window title follows the session
+  (OSC 0/2, current directory); the menu bar, the Dock and the «Window»
+  list use it.
+- **What BarrierKit offers today**: `WindowOptions::new(title, …)`; the runner
+  calls `set_title` once (`platform/window.rs:382`). `WindowCommand`
+  (`:256`) has no title command.
+- **What is missing**: changing the `xdg_toplevel` title live.
+- **How CurseTerm solves it**: patch
   [`kit-parches/0001-titulo-en-vivo.patch`](../kit-parches/0001-titulo-en-vivo.patch)
-  (`WindowControls::set_title` y `WindowCommand::SetTitle`, con su línea en
-  `docs/barrierkit/06-ventanas{,.en}.md`). Con la feature `kit-parcheado`,
-  `terminal.rs` lo llama al cambiar el título; sin ella solo cambia la
-  `Titlebar`. Probado: en sway, con el parche, la barra del compositor muestra
-  `root@vm: /tmp` tras `cd /tmp`; sin él, siempre «CurseTerm».
-- **Coste del workaround**: sin el parche, el compositor y la shell muestran
-  siempre «CurseTerm».
-- **API propuesta para el kit**: `WindowControls::set_title(&self, title: impl Into<String>)`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: `grep -rn set_title crates/barrier-kit/src` da una
-  sola llamada, en la creación.
+  (`WindowControls::set_title` and `WindowCommand::SetTitle`, with its line in
+  `docs/barrierkit/06-ventanas{,.en}.md`). With the `kit-parcheado` feature,
+  `terminal.rs` calls it when the title changes; without it only the
+  `Titlebar` changes. Tested: on sway, with the patch, the compositor bar shows
+  `root@vm: /tmp` after `cd /tmp`; without it, always «CurseTerm».
+- **Cost of the workaround**: without the patch, the compositor and the shell always show
+  «CurseTerm».
+- **Proposed kit API**: `WindowControls::set_title(&self, title: impl Into<String>)`.
+- **Severity**: medium
+- **How to reproduce**: `grep -rn set_title crates/barrier-kit/src` gives a
+  single call, at creation.
 
-### BK-003 — Atajos que no se consumen y teclas que no se pueden declarar
-- **Área**: input / menú global
-- **Qué necesitaba CurseTerm**: atajos como ⌘D, ⌥⌘←, ⌘[, ⌘] o ⇧⌘↓; y que la
-  pulsación de un atajo no llegue además a la shell del terminal.
-- **Qué ofrece hoy BarrierKit**: `ShortcutKey` (`app/action.rs:9`) tiene
-  `Char`, `Left` y `Right`. El texto del menú (`MenuItem::Action::shortcut`)
-  admite más teclas (`F11`, `Page_Down`), pero sin tipo. En
-  `platform/input/seat.rs:424-468` el atajo se despacha y la tecla se envía
-  igualmente a la app (`:464`).
-- **Qué falta**: `Up`, `Down`, `Tab`, `Home`/`End`, `PageUp`/`PageDown`, `F1–F12`
-  y teclas de símbolo en `ShortcutKey`; y que un atajo despachado no se
-  reenvíe como tecla.
-- **Cómo lo resolví en CurseTerm**: parche
+### BK-003 — Shortcuts that are not consumed and keys that cannot be declared
+- **Area**: input / global menu
+- **What CurseTerm needed**: shortcuts such as ⌘D, ⌥⌘←, ⌘[, ⌘] or ⇧⌘↓; and that
+  pressing a shortcut does not also reach the terminal shell.
+- **What BarrierKit offers today**: `ShortcutKey` (`app/action.rs:9`) has
+  `Char`, `Left` and `Right`. The menu text (`MenuItem::Action::shortcut`)
+  accepts more keys (`F11`, `Page_Down`), but untyped. In
+  `platform/input/seat.rs:424-468` the shortcut is dispatched and the key is sent
+  to the app anyway (`:464`).
+- **What is missing**: `Up`, `Down`, `Tab`, `Home`/`End`, `PageUp`/`PageDown`, `F1–F12`
+  and symbol keys in `ShortcutKey`; and that a dispatched shortcut is not
+  forwarded as a key.
+- **How CurseTerm solves it**: patch
   [`kit-parches/0002-atajos-con-nombre-y-consumidos.patch`](../kit-parches/0002-atajos-con-nombre-y-consumidos.patch):
-  `ShortcutKey::Named(NamedKey)` y `key_event` no reenvía la tecla de un atajo
-  despachado; amplía el test `a_typed_shortcut_and_its_menu_text_match_the_same_keys`
-  y `docs/barrierkit/11-app{,.en}.md`. Con el kit tal cual,
-  `crates/curseterm/src/keys.rs` nunca envía al PTY una tecla con Super
-  (ADR 0003), así que los atajos de CurseTerm no llegan a la shell. El parche
-  pasa `cargo test -p barrier-kit --lib` (incluido el test ampliado) y
-  `clippy -D warnings`; los atajos Super funcionan en los dos modos.
-- **Coste del workaround**: solo funciona porque todos los atajos usan Super; un
-  atajo sin Super llegaría dos veces. Las teclas sin tipo se declaran como
-  texto en `MenuItem`.
-- **API propuesta para el kit**: `enum ShortcutKey { Char(char), Named(NamedKey) }` y que `key_event` no empuje el `PlatformEvent::Keyboard` cuando `shortcut_action.is_some()`.
-- **Gravedad**: alta
-- **Cómo reproducirlo**: una `Action` con `Shortcut::ctrl(ShortcutKey::Char('d'))`
-  y un `on_global_key_down` en la raíz: los dos se disparan con Ctrl+D.
+  `ShortcutKey::Named(NamedKey)` and `key_event` does not forward the key of a dispatched
+  shortcut; it extends the test `a_typed_shortcut_and_its_menu_text_match_the_same_keys`
+  and `docs/barrierkit/11-app{,.en}.md`. With the kit as is,
+  `crates/curseterm/src/keys.rs` never sends a key with Super to the PTY
+  (ADR 0003), so CurseTerm's shortcuts do not reach the shell. The patch
+  passes `cargo test -p barrier-kit --lib` (including the extended test) and
+  `clippy -D warnings`; Super shortcuts work in both modes.
+- **Cost of the workaround**: it only works because every shortcut uses Super; a
+  shortcut without Super would arrive twice. Untyped keys are declared as
+  text in `MenuItem`.
+- **Proposed kit API**: `enum ShortcutKey { Char(char), Named(NamedKey) }` and that `key_event` does not push the `PlatformEvent::Keyboard` when `shortcut_action.is_some()`.
+- **Severity**: high
+- **How to reproduce**: an `Action` with `Shortcut::ctrl(ShortcutKey::Char('d'))`
+  and an `on_global_key_down` at the root: both fire with Ctrl+D.
 
-### BK-004 — Sin método de entrada
-- **Área**: IME
-- **Qué necesitaba CurseTerm**: escribir en chino, japonés o coreano y ver el
-  texto en preparación en la posición del cursor.
-- **Qué ofrece hoy BarrierKit**: teclado con xkb vía SCTK; ningún módulo usa
-  `zwp_text_input_v3`. Freya 0.4.3 ya tiene el evento `on_ime_preedit`
-  (`ImePreeditEventData`), pero el runner nunca lo emite.
-- **Qué falta**: el protocolo de entrada de texto y un evento de preedición.
-- **Cómo lo resolví en CurseTerm**: pendiente.
-- **Coste del workaround**: sin IME no hay workaround dentro de la app.
-- **API propuesta para el kit**: eventos `Ime::Preedit { text, cursor }` y `Ime::Commit(String)`, y `ime_area(rect)` para colocar la ventana del IME.
-- **Gravedad**: media
-- **Cómo reproducirlo**: `grep -rn text_input crates/barrier-kit/src` no da
-  resultados.
+### BK-004 — No input method
+- **Area**: IME
+- **What CurseTerm needed**: typing in Chinese, Japanese or Korean and seeing the
+  preedit text at the cursor position.
+- **What BarrierKit offers today**: keyboard with xkb via SCTK; no module uses
+  `zwp_text_input_v3`. Freya 0.4.3 already has the `on_ime_preedit` event
+  (`ImePreeditEventData`), but the runner never emits it.
+- **What is missing**: the text input protocol and a preedit event.
+- **How CurseTerm solves it**: pending.
+- **Cost of the workaround**: without IME there is no workaround inside the app.
+- **Proposed kit API**: events `Ime::Preedit { text, cursor }` and `Ime::Commit(String)`, and `ime_area(rect)` to place the IME window.
+- **Severity**: medium
+- **How to reproduce**: `grep -rn text_input crates/barrier-kit/src` gives no
+  results.
 
-### BK-005 — Sin selección primaria
-- **Área**: portapapeles
-- **Qué necesitaba CurseTerm**: copiar al seleccionar y pegar con el botón
-  central, como cualquier terminal de Linux.
-- **Qué ofrece hoy BarrierKit**: portapapeles de texto sobre `wl_data_device`
-  (`platform/clipboard.rs`), expuesto como `freya_clipboard::Clipboard`. La
-  selección primaria está pendiente en ADR 0047 («Bloqueado por Freya 0.4.3»).
-- **Qué falta**: `zwp_primary_selection_device_v1`.
-- **Cómo lo resolví en CurseTerm**: pendiente.
-- **Coste del workaround**: —
-- **API propuesta para el kit**: `PrimarySelection::set(String)` y `PrimarySelection::get() -> Option<String>`, separados del `Input` de Freya.
-- **Gravedad**: media
-- **Cómo reproducirlo**: leer ADR 0047, «Pendiente».
+### BK-005 — No primary selection
+- **Area**: clipboard
+- **What CurseTerm needed**: copy on select and paste with the middle
+  button, like any Linux terminal.
+- **What BarrierKit offers today**: a text clipboard over `wl_data_device`
+  (`platform/clipboard.rs`), exposed as `freya_clipboard::Clipboard`. The
+  primary selection is pending in ADR 0047 («Bloqueado por Freya 0.4.3», blocked by Freya 0.4.3).
+- **What is missing**: `zwp_primary_selection_device_v1`.
+- **How CurseTerm solves it**: pending.
+- **Cost of the workaround**: —
+- **Proposed kit API**: `PrimarySelection::set(String)` and `PrimarySelection::get() -> Option<String>`, separate from Freya's `Input`.
+- **Severity**: medium
+- **How to reproduce**: read ADR 0047, «Pendiente» (Pending).
 
-### BK-006 — Sin pestañas de documento
-- **Área**: contenedores
-- **Qué necesitaba CurseTerm**: la barra de pestañas de iTerm2: título vivo
-  por sesión, botón de cerrar, «+», indicador de actividad y reordenar.
-- **Qué ofrece hoy BarrierKit**: `views::tabs::TabView`
-  (`views/tabs.rs:13-35`), pestañas de barra de herramientas con símbolo y
-  título `&'static str`.
-- **Qué falta**: un `TabBar` de documento con títulos `String` y acciones por
-  pestaña.
-- **Cómo lo resolví en CurseTerm**: bloque `barrier_kit_next::views::tab_bar::TabBar`
-  (`crates/barrier-kit-next/src/views/tab_bar.rs`): títulos `String`, botón de
-  cerrar en la pestaña elegida o bajo el puntero, `use_interaction` y
-  `Palette`; su alto es `tokens::TAB_BAR`; `on_add(label, ..)` añade el
-  botón «+». Probado: pestañas con título por OSC, elegir, cerrar y «+»
-  (`docs/capturas/fase2-barra-de-pestanas.png`). Falta reordenar arrastrando
-  e indicador de actividad.
-- **Coste del workaround**: —
-- **API propuesta para el kit**: `TabBar::new(label).tab(Tab::new(id, title: String).closable(true)).on_select(..).on_close(..).on_add(..)`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: `TabView::tab` no acepta un `String`.
+### BK-006 — No document tabs
+- **Area**: containers
+- **What CurseTerm needed**: iTerm2's tab bar: live title
+  per session, close button, «+», activity indicator and reordering.
+- **What BarrierKit offers today**: `views::tabs::TabView`
+  (`views/tabs.rs:13-35`), toolbar tabs with a symbol and a
+  `&'static str` title.
+- **What is missing**: a document `TabBar` with `String` titles and per-tab
+  actions.
+- **How CurseTerm solves it**: block `barrier_kit_next::views::tab_bar::TabBar`
+  (`crates/barrier-kit-next/src/views/tab_bar.rs`): `String` titles, a close
+  button on the selected tab or the one under the pointer, `use_interaction` and
+  `Palette`; its height is `tokens::TAB_BAR`; `on_add(label, ..)` adds the
+  «+» button. Tested: tabs with title by OSC, select, close and «+»
+  (`docs/capturas/fase2-barra-de-pestanas.png`). Drag reordering
+  and the activity indicator are missing.
+- **Cost of the workaround**: —
+- **Proposed kit API**: `TabBar::new(label).tab(Tab::new(id, title: String).closable(true)).on_select(..).on_close(..).on_add(..)`.
+- **Severity**: medium
+- **How to reproduce**: `TabView::tab` does not accept a `String`.
 
-### BK-007 — Sin divisor genérico
-- **Área**: contenedores
-- **Qué necesitaba CurseTerm**: paneles divididos en vertical y horizontal,
-  anidados, con asa redimensionable.
-- **Qué ofrece hoy BarrierKit**: `views::split::SplitView`
-  (`views/split.rs:94`): barra lateral + detalle + inspector.
-- **Qué falta**: un divisor de N hijos en una dirección, anidable.
-- **Cómo lo resolví en CurseTerm**: bloque
+### BK-007 — No generic splitter
+- **Area**: containers
+- **What CurseTerm needed**: vertical and horizontal split panes,
+  nested, with a resize handle.
+- **What BarrierKit offers today**: `views::split::SplitView`
+  (`views/split.rs:94`): sidebar + detail + inspector.
+- **What is missing**: a nestable splitter of N children along one direction.
+- **How CurseTerm solves it**: block
   `barrier_kit_next::views::split_panes::SplitPanes`
-  (`crates/barrier-kit-next/src/views/split_panes.rs`): N paneles en un eje
-  con `Size::flex(ratio)`, divisores de `tokens::SPLIT_PANES.divider` que se
-  arrastran (`ColResize`/`RowResize`), mínimo `pane_min` por panel; controlado
-  con `.ratios(..)` y `.on_ratios(..)`; se anida poniendo un `SplitPanes` como
-  panel. CurseTerm guarda el árbol en `panes.rs`. Probado: divisiones
-  anidadas, arrastre y teclado (`docs/capturas/fase2-paneles.png`,
+  (`crates/barrier-kit-next/src/views/split_panes.rs`): N panes on one axis
+  with `Size::flex(ratio)`, `tokens::SPLIT_PANES.divider` dividers that can be
+  dragged (`ColResize`/`RowResize`), a `pane_min` minimum per pane; controlled
+  with `.ratios(..)` and `.on_ratios(..)`; it nests by putting a `SplitPanes` as a
+  pane. CurseTerm keeps the tree in `panes.rs`. Tested: nested splits,
+  dragging and keyboard (`docs/capturas/fase2-paneles.png`,
   `fase2-divisor-arrastrado.png`).
-- **Coste del workaround**: el arrastre usa las proporciones del último
-  render; con muchos eventos entre dos frames se pierde algo de recorrido.
-- **API propuesta para el kit**: la del bloque: `SplitPanes::new(label, Direction).pane(a).pane(b).ratios(Vec<f32>).on_ratios(cb)`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: `SplitView` no tiene opción de dirección.
+- **Cost of the workaround**: dragging uses the ratios of the last
+  render; with many events between two frames some travel is lost.
+- **Proposed kit API**: the block's: `SplitPanes::new(label, Direction).pane(a).pane(b).ratios(Vec<f32>).on_ratios(cb)`.
+- **Severity**: medium
+- **How to reproduce**: `SplitView` has no direction option.
 
-### BK-008 — Sin cara monoespaciada en Tengen
-- **Área**: tokens / texto
-- **Qué necesitaba CurseTerm**: la fuente del terminal por defecto y textos de
-  código en Preferencias.
-- **Qué ofrece hoy BarrierKit**: `vow_design::Font` con `family`; en
-  `crates/vow-design/tengen/tokens.json:285-321` todas son `sans`. ADR 0047
-  menciona un estilo «Mono» que no existe.
-- **Qué falta**: un token `MONO` (familia, tamaño, alto de línea) y las
-  métricas de una vista de terminal: alfa de las franjas de broadcast, del
-  resaltado y de la campana, ancho de franja, intervalo de multiclic y rango
-  de tamaños de letra; también los tamaños de las ventanas de terminal,
-  Ajustes y Acerca de.
-- **Cómo lo resolví en CurseTerm**: bloque `barrier_kit_next::tokens::MONO`
-  (Geist Mono 13/16, que ya trae el dev shell del kit en `geist-font`), y
-  `tokens::TERMINAL`, `SETTINGS_WINDOW_SIZE` y `ABOUT_WINDOW_SIZE` (el
-  terminal se mide en celdas, BK-012).
-- **Coste del workaround**: —
-- **API propuesta para el kit**: `vow_design::MONO: Font` en `tokens.json` y `vow_design::TERMINAL: TerminalMetrics` en `components.json`.
-- **Gravedad**: baja
-- **Cómo reproducirlo**: `grep -n '"family"' crates/vow-design/tengen/tokens.json`.
+### BK-008 — No monospace face in Tengen
+- **Area**: tokens / text
+- **What CurseTerm needed**: the default terminal font and code text in
+  Preferences.
+- **What BarrierKit offers today**: `vow_design::Font` with `family`; in
+  `crates/vow-design/tengen/tokens.json:285-321` all are `sans`. ADR 0047
+  mentions a «Mono» style that does not exist.
+- **What is missing**: a `MONO` token (family, size, line height) and the
+  metrics of a terminal view: alpha of the broadcast stripes, the highlight
+  and the bell, stripe width, multi-click interval and font size range; also
+  the sizes of the terminal, Settings and About windows.
+- **How CurseTerm solves it**: block `barrier_kit_next::tokens::MONO`
+  (Geist Mono 13/16, which the kit's dev shell already ships in `geist-font`),
+  and `tokens::TERMINAL`, `SETTINGS_WINDOW_SIZE` and `ABOUT_WINDOW_SIZE` (the
+  terminal is measured in cells, BK-012).
+- **Cost of the workaround**: —
+- **Proposed kit API**: `vow_design::MONO: Font` in `tokens.json` and `vow_design::TERMINAL: TerminalMetrics` in `components.json`.
+- **Severity**: low
+- **How to reproduce**: `grep -n '"family"' crates/vow-design/tengen/tokens.json`.
 
-### BK-009 — Sin lienzo público y caché de párrafos apagada
-- **Área**: texto / rendimiento
-- **Qué necesitaba CurseTerm**: dibujar una rejilla de 80×24 a 300×100 celdas
-  a 60 Hz.
-- **Qué ofrece hoy BarrierKit**: `style::text`, `label` y `paragraph` de
-  Freya. El kit dibuja a mano solo en módulos privados (`glass.rs:176`). La
-  colección de fuentes apaga la caché de párrafos (`fonts.rs:20`), y Freya
-  repinta el árbol entero en cada frame (ADR 0047).
-- **Qué falta**: una primitiva de lienzo documentada que dé el `Canvas` de
-  Skia, la colección de fuentes del kit y la escala.
-- **Cómo lo resolví en CurseTerm**: bloque `barrier_kit_next::canvas::canvas(revision, painter)`
-  (`crates/barrier-kit-next/src/canvas.rs`): un `ElementExt` que llena su padre,
-  recorta, traslada y escala a píxeles lógicos y llama al pintor con el
-  `Canvas` de Skia y la `FontCollection`; vuelve a pintar cuando cambia
-  `revision`. La rejilla del terminal (`crates/curseterm/src/grid.rs`) lo usa.
-  Probado a escala 1 y 1,5, sin costuras; en reposo no produce frames. La app
-  debe meter en `revision` todo lo que cambia el dibujo (foco, esquema,
-  fuente): el lienzo no ve el estado que lee el pintor.
-- **Coste del workaround**: depende de `ElementExt`, API de Freya que el kit no
-  documenta; la rejilla dibuja celda a celda.
-- **API propuesta para el kit**: `canvas(|ctx: &mut CanvasContext| { .. })` con `ctx.canvas()`, `ctx.fonts()` y `ctx.scale()`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: buscar «canvas» en `docs/barrierkit/`: no aparece.
+### BK-009 — No public canvas and paragraph cache turned off
+- **Area**: text / performance
+- **What CurseTerm needed**: drawing a grid of 80×24 to 300×100 cells
+  at 60 Hz.
+- **What BarrierKit offers today**: Freya's `style::text`, `label` and `paragraph`. The kit draws by hand only in private modules (`glass.rs:176`). The
+  font collection turns off the paragraph cache (`fonts.rs:20`), and Freya
+  repaints the whole tree on every frame (ADR 0047).
+- **What is missing**: a documented canvas primitive that gives Skia's `Canvas`,
+  the kit's font collection and the scale.
+- **How CurseTerm solves it**: block `barrier_kit_next::canvas::canvas(revision, painter)`
+  (`crates/barrier-kit-next/src/canvas.rs`): an `ElementExt` that fills its parent,
+  clips, translates and scales to logical pixels and calls the painter with Skia's
+  `Canvas` and the `FontCollection`; it paints again when
+  `revision` changes. The terminal grid (`crates/curseterm/src/grid.rs`) uses it.
+  Tested at scale 1 and 1.5, without seams; at rest it produces no frames. The app
+  must put into `revision` everything that changes the drawing (focus, scheme,
+  font): the canvas does not see the state the painter reads.
+- **Cost of the workaround**: it depends on `ElementExt`, a Freya API the kit does not
+  document; the grid draws cell by cell.
+- **Proposed kit API**: `canvas(|ctx: &mut CanvasContext| { .. })` with `ctx.canvas()`, `ctx.fonts()` and `ctx.scale()`.
+- **Severity**: medium
+- **How to reproduce**: search for «canvas» in `docs/barrierkit/`: it does not appear.
 
-### BK-010 — Títulos de acción estáticos y menú sin reemplazo en vivo
-- **Área**: menú global
-- **Qué necesitaba CurseTerm**: «Profiles» se rellena con los perfiles
-  guardados y «Window» con las ventanas abiertas.
-- **Qué ofrece hoy BarrierKit**: `Action::new(id, title: fn() -> &'static str)`
-  (`app/action.rs:79`); `WindowOptions::menu` fija el menú al crear la
-  ventana. `MenuHandle::update(id, f)` (`app_menu.rs`) cambia un ítem o los
-  hijos de un `Submenu` con id; `replace_menu` existe solo bajo `#[cfg(test)]`
+### BK-010 — Static action titles and no live menu replacement
+- **Area**: global menu
+- **What CurseTerm needed**: «Profiles» fills with the saved
+  profiles and «Window» with the open windows.
+- **What BarrierKit offers today**: `Action::new(id, title: fn() -> &'static str)`
+  (`app/action.rs:79`); `WindowOptions::menu` fixes the menu when the
+  window is created. `MenuHandle::update(id, f)` (`app_menu.rs`) changes an item or the
+  children of a `Submenu` with an id; `replace_menu` exists only under `#[cfg(test)]`
   (`app_menu.rs:110`).
-- **Qué falta**: acciones con título calculado y un hook documentado para
-  menús dinámicos.
-- **Cómo lo resolví en CurseTerm**: bloque
-  `barrier_kit_next::app_menu::use_menu_enabled(id, enabled)`, la versión
-  pública del `use_menu_enabled` privado de `app/undo.rs`; «Copy» se apaga sin
-  selección. En la fase 2 se generalizó: `use_menu_update(id, value, apply)`,
-  `use_menu_checked`, `use_submenu_items` y `submenu(id, ..)` (no hay
-  constructor de `MenuItem::Submenu` con id). Probado por D-Bus: «Select Tab»
-  se rellena con las pestañas y marca la activa; «Show Tab Bar» y «Maximize
-  Active Pane» llevan marca; una docena de entradas se activan según el
-  contexto. Para el menú «Profiles», que es de primer nivel, `update` no
-  sirve: el parche
+- **What is missing**: actions with a computed title and a documented hook for
+  dynamic menus.
+- **How CurseTerm solves it**: block
+  `barrier_kit_next::app_menu::use_menu_enabled(id, enabled)`, the public
+  version of the private `use_menu_enabled` in `app/undo.rs`; «Copy» turns off with no
+  selection. In phase 2 it was generalized: `use_menu_update(id, value, apply)`,
+  `use_menu_checked`, `use_submenu_items` and `submenu(id, ..)` (there is no
+  `MenuItem::Submenu` constructor with an id). Tested over D-Bus: «Select Tab»
+  fills with the tabs and checks the active one; «Show Tab Bar» and «Maximize
+  Active Pane» carry a check mark; a dozen entries enable according to the
+  context. For the «Profiles» menu, which is top-level, `update` does not
+  work: the patch
   [`kit-parches/0004-items-de-un-menu-en-vivo.patch`](../kit-parches/0004-items-de-un-menu-en-vivo.patch)
-  añade `MenuHandle::set_menu_items(título, ítems)` y documenta `MenuHandle`
-  en `11-app{,.en}.md`. Probado por D-Bus: «+» en Ajustes añade «New Profile»
-  al menú del terminal al momento. Con el kit tal cual solo se renombran los
-  ítems que ya existían.
-- **Coste del workaround**: las entradas dinámicas no son `Action`, así que no
-  tienen `Shortcut` tipado.
-- **API propuesta para el kit**: `use_menu(|menu: &mut AppMenu| ..)` que se vuelve a evaluar cuando cambia su estado.
-- **Gravedad**: media
-- **Cómo reproducirlo**: intentar `Action::new("profile-1", || nombre_cargado)`:
-  no compila, porque el título no puede capturar.
+  adds `MenuHandle::set_menu_items(título, ítems)` and documents `MenuHandle`
+  in `11-app{,.en}.md`. Tested over D-Bus: «+» in Settings adds «New Profile»
+  to the terminal menu at once. With the kit as is, only items that already
+  existed are renamed.
+- **Cost of the workaround**: dynamic entries are not `Action`s, so they do not
+  have a typed `Shortcut`.
+- **Proposed kit API**: `use_menu(|menu: &mut AppMenu| ..)` that is re-evaluated when its state changes.
+- **Severity**: medium
+- **How to reproduce**: try `Action::new("profile-1", || nombre_cargado)`:
+  it does not compile, because the title cannot capture.
 
-### BK-011 — Documentación que no coincide con el código
-- **Área**: docs
-- Ver «Documentación de BarrierKit», abajo.
-- **Gravedad**: baja
+### BK-011 — Documentation that does not match the code
+- **Area**: docs
+- See «BarrierKit documentation», below.
+- **Severity**: low
 
-### BK-012 — El tamaño guardado es uno por `app_id` y no se puede pedir otro
-- **Área**: ventana / persistencia
-- **Qué necesitaba CurseTerm**: abrir «About» (tamaño fijo) sin cambiar el
-  tamaño con el que se abre la siguiente ventana de terminal; y, desde la
-  fase 6, abrir cada ventana nueva con las columnas y filas del perfil, como
-  iTerm2.
-- **Qué ofrece hoy BarrierKit**: `platform/window.rs:333` guarda
-  `<app_id>.window` al cerrar cualquier ventana y lo restaura en todas las del
-  mismo `app_id` (`:373`).
-  El tamaño restaurado gana siempre sobre `WindowOptions::size`, y
-  `WindowControls` no puede pedir otro tamaño después.
-- **Qué falta**: una clave de restauración por tipo de ventana y poder
-  abrir con un tamaño propio aunque haya uno guardado.
-- **Cómo lo resolví en CurseTerm**: `windows::forget_saved_size` vacía ese
-  estado antes de cada `run_window`; el terminal calcula su tamaño con las
-  métricas de la fuente del perfil (`main.rs::terminal_size`) y cada ventana
-  auxiliar usa el suyo.
-- **Coste del workaround**: escribe un fichero privado del kit por su nombre;
-  ninguna ventana recuerda su tamaño ni si estaba maximizada.
-- **API propuesta para el kit**: `WindowOptions::restoration_key(impl Into<String>)` y `WindowOptions::restore(false)`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: dos ventanas del mismo `app_id`, una fija de 320×280;
-  cerrar la fija y abrir la otra: abre a 320×280 recortado a su mínimo.
+### BK-012 — The saved size is one per `app_id` and another cannot be asked for
+- **Area**: window / persistence
+- **What CurseTerm needed**: opening «About» (fixed size) without changing the
+  size the next terminal window opens with; and, since phase 6, opening each
+  new window with the profile's columns and rows, like iTerm2.
+- **What BarrierKit offers today**: `platform/window.rs:333` saves
+  `<app_id>.window` when any window closes and restores it in all windows of the
+  same `app_id` (`:373`).
+  The restored size always wins over `WindowOptions::size`, and
+  `WindowControls` cannot ask for another size later.
+- **What is missing**: a restoration key per window kind and opening at an
+  own size even when one is saved.
+- **How CurseTerm solves it**: `windows::forget_saved_size` empties that
+  state before each `run_window`; the terminal computes its size from the
+  profile's font metrics (`main.rs::terminal_size`) and each auxiliary
+  window uses its own.
+- **Cost of the workaround**: it writes a private kit file by its name; no
+  window remembers its size or whether it was maximized.
+- **Proposed kit API**: `WindowOptions::restoration_key(impl Into<String>)` and `WindowOptions::restore(false)`.
+- **Severity**: medium
+- **How to reproduce**: two windows with the same `app_id`, one fixed at 320×280;
+  close the fixed one and open the other: it opens at 320×280 clamped to its minimum.
 
-### BK-013 — El cierre pedido por el compositor no se puede interceptar
-- **Área**: ventana
-- **Qué necesitaba CurseTerm**: preguntar «¿Cerrar la ventana? Hay N
-  sesiones en marcha», como iTerm2.
-- **Qué ofrece hoy BarrierKit**: `WindowHandler::request_close`
-  (`platform/window.rs`) llama a `close_window` sin avisar a la app.
-- **Qué falta**: un aviso que la app pueda cancelar.
-- **Cómo lo resolví en CurseTerm**: ninguno; la ventana se cierra sin preguntar.
-- **Coste del workaround**: —
-- **API propuesta para el kit**: `use_close_request(|| CloseResponse::Allow | Cancel)`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: en Malaysia, Super+W sobre una ventana con un programa
-  en marcha.
+### BK-013 — A close requested by the compositor cannot be intercepted
+- **Area**: window
+- **What CurseTerm needed**: asking «Close the window? N
+  sessions are running», like iTerm2.
+- **What BarrierKit offers today**: `WindowHandler::request_close`
+  (`platform/window.rs`) calls `close_window` without telling the app.
+- **What is missing**: a notice the app can cancel.
+- **How CurseTerm solves it**: none; the window closes without asking.
+- **Cost of the workaround**: —
+- **Proposed kit API**: `use_close_request(|| CloseResponse::Allow | Cancel)`.
+- **Severity**: medium
+- **How to reproduce**: in Malaysia, Super+W on a window with a program
+  running.
 
-### BK-014 — `Timers::wakeup` no se puede dar de baja
-- **Área**: plataforma
-- **Qué necesitaba CurseTerm**: despertar el hilo de interfaz desde el hilo de
-  E/S de cada sesión.
-- **Qué ofrece hoy BarrierKit**: `Timers::wakeup(callback) -> WakeHandle`
-  (`platform/timer.rs`); el callback queda registrado para siempre y corre en
-  cada despertar de cualquier origen (`platform/runtime.rs:213`).
-- **Qué falta**: dar de baja el callback al desmontar.
-- **Cómo lo resolví en CurseTerm**: un solo `wakeup` por ventana y un canal
-  compartido por todas sus sesiones (`terminal.rs`, `listen`).
-- **Coste del workaround**: ninguno apreciable.
-- **API propuesta para el kit**: `use_wakeup(callback) -> WakeHandle` que se dé de baja con `use_drop`.
-- **Gravedad**: baja
-- **Cómo reproducirlo**: llamar a `wakeup` en un componente que se monta y
-  desmonta: el callback sigue corriendo.
+### BK-014 — `Timers::wakeup` cannot be unregistered
+- **Area**: platform
+- **What CurseTerm needed**: waking the UI thread from the I/O thread of
+  each session.
+- **What BarrierKit offers today**: `Timers::wakeup(callback) -> WakeHandle`
+  (`platform/timer.rs`); the callback stays registered forever and runs on
+  every wakeup from any source (`platform/runtime.rs:213`).
+- **What is missing**: unregistering the callback on unmount.
+- **How CurseTerm solves it**: a single `wakeup` per window and a channel
+  shared by all its sessions (`terminal.rs`, `listen`).
+- **Cost of the workaround**: none worth noting.
+- **Proposed kit API**: `use_wakeup(callback) -> WakeHandle` that unregisters with `use_drop`.
+- **Severity**: low
+- **How to reproduce**: call `wakeup` in a component that mounts and
+  unmounts: the callback keeps running.
 
-### BK-015 — Las preferencias van siempre a `~/.config/malaysia/`
-- **Área**: persistencia
-- **Qué necesitaba CurseTerm**: el encargo sugería `~/.config/curseterm/`.
-- **Qué ofrece hoy BarrierKit**: `load_defaults`, `save_defaults` y
-  `use_defaults` (`app/defaults.rs`) usan `~/.config/malaysia/<app_id>.domain`,
-  y `use_watched` solo vigila las carpetas de Malaysia.
-- **Qué falta**: nada para una app del escritorio; para una app de terceros
-  que corre en otros escritorios, una carpeta propia.
-- **Cómo lo resolví en CurseTerm**: se acepta; las preferencias están en
+### BK-015 — Preferences always go to `~/.config/malaysia/`
+- **Area**: persistence
+- **What CurseTerm needed**: the brief suggested `~/.config/curseterm/`.
+- **What BarrierKit offers today**: `load_defaults`, `save_defaults` and
+  `use_defaults` (`app/defaults.rs`) use `~/.config/malaysia/<app_id>.domain`,
+  and `use_watched` only watches Malaysia's folders.
+- **What is missing**: nothing for a desktop app; for a third-party app
+  that runs on other desktops, a folder of its own.
+- **How CurseTerm solves it**: accepted; the preferences live in
   `~/.config/malaysia/org.curseterm.CurseTerm.domain`.
-- **Coste del workaround**: —
-- **API propuesta para el kit**: ninguna por ahora.
-- **Gravedad**: baja
-- **Cómo reproducirlo**: leer `app/defaults.rs:65`.
+- **Cost of the workaround**: —
+- **Proposed kit API**: none for now.
+- **Severity**: low
+- **How to reproduce**: read `app/defaults.rs:65`.
 
-### BK-016 — Los atajos con Mayús comparan el carácter producido
-- **Área**: input / menú global
-- **Qué necesitaba CurseTerm**: ⇧⌘] y ⇧⌘[ de iTerm2 (pestaña siguiente y
-  anterior) como Super+Mayús+] y Super+Mayús+[.
-- **Qué ofrece hoy BarrierKit**: `shortcut_matches` (`menu/shortcut.rs`)
-  compara el glifo del atajo con `key.to_string()`. Con Mayús, en un teclado
-  US, la tecla `]` llega como `}`.
-- **Qué falta**: comparar por tecla física (`Code`) o por keysym sin Mayús.
-- **Cómo lo resolví en CurseTerm**: «Select Next Tab» y «Select Previous
-  Tab» se declaran por texto como `Super+Shift+}` y `Super+Shift+{`, y
-  «Show Composer» (⇧⌘.) como `Super+Shift+>` (`crates/curseterm/src/menu.rs`).
-  Probado con `wtype`.
-- **Coste del workaround**: depende de la distribución de teclado; el menú muestra `}` en vez de `]`.
-- **API propuesta para el kit**: que `find_menu_shortcut` reciba también el `Code` y compare por él cuando hay Mayús.
-- **Gravedad**: media
-- **Cómo reproducirlo**: un `MenuItem` con `"Super+Shift+bracketright"`;
-  pulsar Super+Mayús+] no lo dispara.
+### BK-016 — Shortcuts with Shift compare the produced character
+- **Area**: input / global menu
+- **What CurseTerm needed**: iTerm2's ⇧⌘] and ⇧⌘[ (next and previous
+  tab) as Super+Shift+] and Super+Shift+[.
+- **What BarrierKit offers today**: `shortcut_matches` (`menu/shortcut.rs`)
+  compares the shortcut glyph with `key.to_string()`. With Shift, on a
+  US keyboard, the `]` key arrives as `}`.
+- **What is missing**: comparing by physical key (`Code`) or by keysym without Shift.
+- **How CurseTerm solves it**: «Select Next Tab» and «Select Previous
+  Tab» are declared as text as `Super+Shift+}` and `Super+Shift+{`, and
+  «Show Composer» (⇧⌘.) as `Super+Shift+>` (`crates/curseterm/src/menu.rs`).
+  Tested with `wtype`.
+- **Cost of the workaround**: it depends on the keyboard layout; the menu shows `}` instead of `]`.
+- **Proposed kit API**: that `find_menu_shortcut` also receives the `Code` and compares by it when Shift is held.
+- **Severity**: medium
+- **How to reproduce**: a `MenuItem` with `"Super+Shift+bracketright"`;
+  pressing Super+Shift+] does not fire it.
 
-### BK-017 — Los handlers del menú corren fuera del contexto de Freya
-- **Área**: menú global / plataforma
-- **Qué necesitaba CurseTerm**: copiar, pegar y cerrar desde «Edit › Copy»,
-  «Paste» y «Shell › Close», o desde sus atajos.
-- **Qué ofrece hoy BarrierKit**: `use_menu_action` (`app/action.rs`). El
-  runner llama a `MenuActions::dispatch` desde `Runtime::key_event`
-  (`platform/input/seat.rs:454`) y desde las acciones de D-Bus, fuera del
-  contexto de Freya. `docs/barrierkit/11-app.md` solo dice que corre «en el
-  hilo de la interfaz». Lo mismo pasa con los callbacks de `Timers::wakeup`.
-- **Qué falta**: ejecutar los handlers dentro del contexto del árbol, como un
-  evento, o documentar qué APIs no se pueden usar en ellos.
-- **Cómo lo resolví en CurseTerm**: `Handles` en `terminal.rs` guarda el
-  `State` del portapapeles (`consume_root_context`) y `WindowControls` durante
-  `render`; los handlers y los callbacks de `wakeup` usan esas copias. Las
-  ventanas auxiliares capturan `WindowControls` igual. En la fase 4,
-  `Timers::get()` dentro de un callback de `wakeup` también abortó la app
-  (campana de un trigger): `Handles` guarda además `Timers`.
-- **Coste del workaround**: la app usa el `State` interno de
-  `freya-clipboard` en vez de `Clipboard`.
-- **API propuesta para el kit**: que `MenuActions::dispatch` corra dentro de `with_context` del árbol de la ventana, o que el handler reciba un `MenuContext` con portapapeles y ventana.
-- **Gravedad**: bloqueante (la app aborta con
+### BK-017 — Menu handlers run outside Freya's context
+- **Area**: global menu / platform
+- **What CurseTerm needed**: copy, paste and close from «Edit › Copy»,
+  «Paste» and «Shell › Close», or from their shortcuts.
+- **What BarrierKit offers today**: `use_menu_action` (`app/action.rs`). The
+  runner calls `MenuActions::dispatch` from `Runtime::key_event`
+  (`platform/input/seat.rs:454`) and from the D-Bus actions, outside
+  Freya's context. `docs/barrierkit/11-app.md` only says it runs «en el
+  hilo de la interfaz» (on the UI thread). The same happens with the `Timers::wakeup` callbacks.
+- **What is missing**: running the handlers inside the tree's context, like an
+  event, or documenting which APIs cannot be used in them.
+- **How CurseTerm solves it**: `Handles` in `terminal.rs` keeps the clipboard
+  `State` (`consume_root_context`) and `WindowControls` during
+  `render`; the handlers and the `wakeup` callbacks use those copies. The
+  auxiliary windows capture `WindowControls` the same way. In phase 4,
+  `Timers::get()` inside a `wakeup` callback also aborted the app
+  (bell from a trigger): `Handles` now keeps `Timers` as well.
+- **Cost of the workaround**: the app uses the internal `State` of
+  `freya-clipboard` instead of `Clipboard`.
+- **Proposed kit API**: that `MenuActions::dispatch` runs inside `with_context` of the window's tree, or that the handler receives a `MenuContext` with clipboard and window.
+- **Severity**: blocking (the app aborts with
   «Your trying to access Freya's current context outside of it»).
-- **Cómo reproducirlo**: `use_menu_action(|id| { let _ = Clipboard::set(id.into()); })`
-  y pulsar el atajo de esa acción.
+- **How to reproduce**: `use_menu_action(|id| { let _ = Clipboard::set(id.into()); })`
+  and press that action's shortcut.
 
-### BK-018 — Sin `org_kde_kwin_appmenu_manager` el menú no se publica en D-Bus
-- **Área**: menú global / docs
-- **Qué necesitaba CurseTerm**: el menú global en GNOME o KDE sin Malaysia, y
-  poder comprobarlo por D-Bus.
-- **Qué ofrece hoy BarrierKit**: `README.md` y `docs/barrierkit/11-app.md`
-  dicen que sin el protocolo el menú «sigue existiendo en D-Bus», pero
-  `platform/window.rs:407-419` solo llama a `app_menu::server::register` si
-  existe `appmenu_manager`.
-- **Qué falta**: registrar siempre el menú y anunciarlo solo si hay protocolo.
-- **Cómo lo resolví en CurseTerm**: parche
+### BK-018 — Without `org_kde_kwin_appmenu_manager` the menu is not published on D-Bus
+- **Area**: global menu / docs
+- **What CurseTerm needed**: the global menu on GNOME or KDE without Malaysia, and
+  being able to check it over D-Bus.
+- **What BarrierKit offers today**: `README.md` and `docs/barrierkit/11-app.md`
+  say that without the protocol the menu «sigue existiendo en D-Bus» (still exists on D-Bus), but
+  `platform/window.rs:407-419` only calls `app_menu::server::register` if
+  `appmenu_manager` exists.
+- **What is missing**: always registering the menu and announcing it only if the protocol is present.
+- **How CurseTerm solves it**: patch
   [`kit-parches/0003-menu-en-dbus-sin-appmenu.patch`](../kit-parches/0003-menu-en-dbus-sin-appmenu.patch).
-  Probado en sway: `com.canonical.dbusmenu.GetLayout` en `/MenuBar/0` devuelve
-  CurseTerm, Shell y Edit con sus atajos; «Copy» pasa de `enabled=false` a
-  `true` al seleccionar; `Event(clicked)` sobre «New Tab» abre la pestaña.
-- **Coste del workaround**: con el kit tal cual no hay forma de comprobar el
-  menú fuera de Malaysia.
-- **API propuesta para el kit**: ninguna; es el cambio del parche.
-- **Gravedad**: alta
-- **Cómo reproducirlo**: abrir cualquier app con `.menu(..)` en sway y listar
-  los objetos de su nombre en el bus: no hay `/MenuBar/*`.
+  Tested on sway: `com.canonical.dbusmenu.GetLayout` on `/MenuBar/0` returns
+  CurseTerm, Shell and Edit with their shortcuts; «Copy» goes from `enabled=false` to
+  `true` on selection; `Event(clicked)` on «New Tab» opens the tab.
+- **Cost of the workaround**: with the kit as is there is no way to check the
+  menu outside Malaysia.
+- **Proposed kit API**: none; it is the patch's change.
+- **Severity**: high
+- **How to reproduce**: open any app with `.menu(..)` on sway and list
+  the objects of its name on the bus: there is no `/MenuBar/*`.
 
-### BK-019 — Una app no puede pedir un token de xdg-activation
-- **Área**: ventana / plataforma
-- **Qué necesitaba CurseTerm**: la lista de ventanas abiertas del menú
-  «Window» de iTerm2, que trae al frente la elegida.
-- **Qué ofrece hoy BarrierKit**: `WindowControls::present(token)`
-  (`platform/window.rs:207`) usa un token que ya se tiene; pedirlo
-  (`xdg_activation_v1.get_activation_token`) solo existe en
-  `shell::Activation` (`shell/activation.rs`), tras la feature `shell`.
-- **Qué falta**: `Activation::request` para cualquier app, con la superficie y
-  el último serial de entrada de la ventana.
-- **Cómo lo resolví en CurseTerm**: no se muestra la lista; una entrada que no
-  traiga la ventana sería decorativa. En Malaysia, la barra de menús ya añade
-  a «Window» las ventanas de la app.
-- **Coste del workaround**: fuera de Malaysia no hay forma de saltar a otra
-  ventana de CurseTerm desde el menú.
-- **API propuesta para el kit**: mover `Activation` de `shell/` a `platform/` y darle `WindowControls::activation_token(callback)`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: buscar `get_activation_token` fuera de
-  `crates/barrier-kit/src/shell/`: no aparece.
+### BK-019 — An app cannot request an xdg-activation token
+- **Area**: window / platform
+- **What CurseTerm needed**: the list of open windows in iTerm2's
+  «Window» menu, which brings the chosen one to the front.
+- **What BarrierKit offers today**: `WindowControls::present(token)`
+  (`platform/window.rs:207`) uses a token it already has; requesting one
+  (`xdg_activation_v1.get_activation_token`) only exists in
+  `shell::Activation` (`shell/activation.rs`), behind the `shell` feature.
+- **What is missing**: `Activation::request` for any app, with the window's surface and
+  last input serial.
+- **How CurseTerm solves it**: the list is not shown; an entry that does not
+  bring the window forward would be decorative. In Malaysia, the menu bar already adds
+  the app's windows to «Window».
+- **Cost of the workaround**: outside Malaysia there is no way to jump to another
+  CurseTerm window from the menu.
+- **Proposed kit API**: move `Activation` from `shell/` to `platform/` and give it `WindowControls::activation_token(callback)`.
+- **Severity**: medium
+- **How to reproduce**: search for `get_activation_token` outside
+  `crates/barrier-kit/src/shell/`: it does not appear.
 
-### BK-020 — Las etiquetas de paneles, filas y desplegables son `&'static str`
-- **Área**: controles
-- **Qué necesitaba CurseTerm**: nombres de perfil y de esquemas importados, que escribe el usuario, como ítems de `PopUpButton` y títulos de `Pane`.
-- **Qué ofrece hoy BarrierKit**: `PopUpButton::item(&'static str)`
+### BK-020 — Pane, row and pop-up labels are `&'static str`
+- **Area**: controls
+- **What CurseTerm needed**: profile names and imported scheme names, which the user types, as `PopUpButton` items and `Pane` titles.
+- **What BarrierKit offers today**: `PopUpButton::item(&'static str)`
   (`popup_button.rs:38`), `Row::new(&'static str)` (`views/form.rs:31`),
   `Pane::new(&'static str, &'static str, ..)` (`patterns/preferences.rs:35`),
-  `RadioGroup::option(&'static str)`. Pensado para `tr!`, que devuelve
+  `RadioGroup::option(&'static str)`. Designed for `tr!`, which returns
   `&'static str`.
-- **Qué falta**: aceptar `impl Into<Cow<'static, str>>` como ya hacen
-  `Button::new` y `about_window`.
-- **Cómo lo resolví en CurseTerm**: `intern` en `crates/curseterm/src/preferences.rs`
-  filtra cada nombre una vez a un `&'static str` y lo reutiliza.
-- **Coste del workaround**: memoria que no se libera por cada nombre distinto
-  (pequeña en la práctica).
-- **API propuesta para el kit**: `fn item(self, label: impl Into<Cow<'static, str>>)` y lo mismo en `Row`, `Pane` y `RadioGroup`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: `PopUpButton::new("x").item(nombre.as_str())` no compila.
+- **What is missing**: accepting `impl Into<Cow<'static, str>>` as
+  `Button::new` and `about_window` already do.
+- **How CurseTerm solves it**: `intern` in `crates/curseterm/src/preferences.rs`
+  leaks each name once into a `&'static str` and reuses it.
+- **Cost of the workaround**: memory that is never freed for each distinct name
+  (small in practice).
+- **Proposed kit API**: `fn item(self, label: impl Into<Cow<'static, str>>)` and the same in `Row`, `Pane` and `RadioGroup`.
+- **Severity**: medium
+- **How to reproduce**: `PopUpButton::new("x").item(nombre.as_str())` does not compile.
 
-### BK-021 — `RadioGroup` es siempre horizontal
-- **Área**: controles
-- **Qué necesitaba CurseTerm**: «Initial directory» de iTerm2: tres opciones en columna.
-- **Qué ofrece hoy BarrierKit**: `choice_group` fija `Direction::Horizontal`
-  (`choices.rs:50`); con tres opciones largas la última se sale de la fila.
-- **Qué falta**: `.direction(Direction::Vertical)` o una variante en columna.
-- **Cómo lo resolví en CurseTerm**: `directory_choices` en `preferences.rs`
-  apila tres `RadioGroup` de una opción, controlados desde el perfil.
-- **Coste del workaround**: el lector de pantalla ve tres grupos en vez de uno.
-- **API propuesta para el kit**: `RadioGroup::new(label).vertical(true)`.
-- **Gravedad**: baja
-- **Cómo reproducirlo**: un `RadioGroup` con tres opciones en una `Row` estrecha.
+### BK-021 — `RadioGroup` is always horizontal
+- **Area**: controls
+- **What CurseTerm needed**: iTerm2's «Initial directory»: three options in a column.
+- **What BarrierKit offers today**: `choice_group` fixes `Direction::Horizontal`
+  (`choices.rs:50`); with three long options the last one overflows the row.
+- **What is missing**: `.direction(Direction::Vertical)` or a column variant.
+- **How CurseTerm solves it**: `directory_choices` in `preferences.rs`
+  stacks three single-option `RadioGroup`s, controlled from the profile.
+- **Cost of the workaround**: the screen reader sees three groups instead of one.
+- **Proposed kit API**: `RadioGroup::new(label).vertical(true)`.
+- **Severity**: low
+- **How to reproduce**: a `RadioGroup` with three options in a narrow `Row`.
 
-### BK-022 — Un cambio de `.domain` no repinta las ventanas sin foco
-- **Área**: plataforma / persistencia
-- **Qué necesitaba CurseTerm**: que el terminal cambie de esquema en cuanto
-  se elige en Ajustes, que es otro proceso y tiene el foco.
-- **Qué ofrece hoy BarrierKit**: al cambiar un `.domain`, el runner sube
-  `defaults_revision` y hace `ping` (`platform/runtime.rs:255`), pero no marca
-  `request_redraw_all`, como sí hace con la apariencia (`:263`).
-- **Qué falta**: pedir el repintado también en ese caso.
-- **Cómo lo resolví en CurseTerm**: parche
+### BK-022 — A `.domain` change does not repaint unfocused windows
+- **Area**: platform / persistence
+- **What CurseTerm needed**: that the terminal changes scheme as soon as
+  it is chosen in Settings, which is another process and has focus.
+- **What BarrierKit offers today**: when a `.domain` changes, the runner bumps
+  `defaults_revision` and does a `ping` (`platform/runtime.rs:255`), but does not set
+  `request_redraw_all`, as it does for appearance (`:263`).
+- **What is missing**: requesting the repaint in that case too.
+- **How CurseTerm solves it**: patch
   [`kit-parches/0005-domain-repinta-sin-foco.patch`](../kit-parches/0005-domain-repinta-sin-foco.patch).
-  Probado en sway: con Ajustes delante y el terminal sin foco, editar el
-  `.domain` no cambia el terminal con el kit tal cual y sí con el parche
+  Tested on sway: with Settings in front and the terminal unfocused, editing the
+  `.domain` does not change the terminal with the kit as is and does with the patch
   (`docs/capturas/fase3-repintado-sin-foco-parche-0005.png`).
-- **Coste del workaround**: con el kit tal cual, el cambio aparece cuando la
-  ventana recibe cualquier otro evento.
-- **API propuesta para el kit**: ninguna; es el cambio del parche.
-- **Gravedad**: alta
-- **Cómo reproducirlo**: dos ventanas que usan `use_defaults`; con el foco en
-  una, cambiar el `.domain` desde ella: la otra no se repinta.
+- **Cost of the workaround**: with the kit as is, the change appears when the
+  window receives any other event.
+- **Proposed kit API**: none; it is the patch's change.
+- **Severity**: high
+- **How to reproduce**: two windows that use `use_defaults`; with focus on
+  one, change the `.domain` from it: the other does not repaint.
 
-### BK-023 — Sin selector de archivos
-- **Área**: app
-- **Qué necesitaba CurseTerm**: «Import…» de esquemas `.itermcolors`.
-- **Qué ofrece hoy BarrierKit**: nada; ADR 0047 deja «`Open` de archivos y
-  URLs» pendiente hasta la primera app que lo use. Freya tiene
-  `on_file_drop`, pero el runner no lo emite.
-- **Qué falta**: un diálogo de abrir por el portal
-  `org.freedesktop.portal.FileChooser` (Malaysia tiene su
+### BK-023 — No file chooser
+- **Area**: app
+- **What CurseTerm needed**: «Import…» of `.itermcolors` schemes.
+- **What BarrierKit offers today**: nothing; ADR 0047 leaves «`Open` de archivos y
+  URLs» (`Open` for files and URLs) pending until the first app that uses it. Freya has
+  `on_file_drop`, but the runner does not emit it.
+- **What is missing**: an open dialog through the
+  `org.freedesktop.portal.FileChooser` portal (Malaysia has its
   `xdg-desktop-portal-malaysia`).
-- **Cómo lo resolví en CurseTerm**: un `TextField` con la ruta y el botón
-  «Import» en Colors, y `curseterm --import-colors <archivo>`.
-- **Coste del workaround**: hay que escribir la ruta a mano.
-- **API propuesta para el kit**: `app::open_file(filters: &[(&str, &[&str])], callback: impl FnOnce(Option<PathBuf>))`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: buscar `FileChooser` en `crates/barrier-kit/src`: no aparece.
+- **How CurseTerm solves it**: a `TextField` with the path and the
+  «Import» button in Colors, and `curseterm --import-colors <archivo>`.
+- **Cost of the workaround**: the path must be typed by hand.
+- **Proposed kit API**: `app::open_file(filters: &[(&str, &[&str])], callback: impl FnOnce(Option<PathBuf>))`.
+- **Severity**: medium
+- **How to reproduce**: search for `FileChooser` in `crates/barrier-kit/src`: it does not appear.
 
-### BK-024 — Faltan símbolos para una barra de ajustes, la campana y la papelera
-- **Área**: símbolos
-- **Qué necesitaba CurseTerm**: los iconos de la barra de Settings de iTerm2
-  (engranaje, ojo, persona, teclado, puntero, rayo), la campana que marca
-  una pestaña de fondo donde ha sonado (fase 5), la papelera que borra una
-  anotación (fase 35) y los indicadores de sesión (fase 42): flechas de
-  maximizar, ondas de difusión, dos rectángulos que se cambian, ojo y dos
-  documentos.
-- **Qué ofrece hoy BarrierKit**: 31 símbolos en `symbol.rs`; ninguno de esos.
-  `Symbol::path` es privado, así que un lienzo tampoco puede dibujar los que
-  hay.
-- **Qué falta**: ampliar el registro y exponer la ruta de cada símbolo.
-- **Cómo lo resolví en CurseTerm**: `SlidersVertical` para General,
-  `CircleHalf` para Appearance, `ListBullet` para Profiles, `SquareGrid` para
-  Pointer y `SpeakerWave` en la insignia de la pestaña
-  (`Badge` del bloque `views::tab_bar`). La papelera de la nota se dibuja en
-  su lienzo con la rejilla y el trazo de `SYMBOL` (`note_view.rs`), igual
-  que los indicadores (`indicators.rs`).
-- **Coste del workaround**: menos parecido a iTerm2; rutas SVG fuera del
-  registro, con los extremos sin redondear porque `freya-engine` no
-  reexporta `paint::Cap`.
-- **API propuesta para el kit**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt, Bell, Trash, Broadcast, Swap, DocOnDoc}` y un `Symbol::path` público.
-- **Gravedad**: baja
-- **Cómo reproducirlo**: leer `enum Symbol` en `crates/barrier-kit/src/symbol.rs`.
+### BK-024 — Missing symbols for a settings bar, the bell and the trash
+- **Area**: symbols
+- **What CurseTerm needed**: the icons of iTerm2's Settings bar
+  (gear, eye, person, keyboard, pointer, bolt), the bell that marks a
+  background tab where it rang (phase 5), the trash that deletes an
+  annotation (phase 35) and the session indicators (phase 42): maximize
+  arrows, broadcast waves, two swapping rectangles, an eye and two
+  documents.
+- **What BarrierKit offers today**: 31 symbols in `symbol.rs`; none of those.
+  `Symbol::path` is private, so a canvas cannot draw the ones there are
+  either.
+- **What is missing**: extending the registry and exposing each symbol's
+  path.
+- **How CurseTerm solves it**: `SlidersVertical` for General,
+  `CircleHalf` for Appearance, `ListBullet` for Profiles, `SquareGrid` for
+  Pointer and `SpeakerWave` in the tab badge (`Badge` of
+  the `views::tab_bar` block). The note's trash is drawn on its canvas with
+  the grid and stroke of `SYMBOL` (`note_view.rs`), like the indicators
+  (`indicators.rs`).
+- **Cost of the workaround**: less like iTerm2; SVG paths outside the
+  registry, with unrounded ends because `freya-engine` does not re-export
+  `paint::Cap`.
+- **Proposed kit API**: `Symbol::{Gear, Eye, Person, Keyboard, Pointer, Bolt, Bell, Trash, Broadcast, Swap, DocOnDoc}` and a public `Symbol::path`.
+- **Severity**: low
+- **How to reproduce**: read `enum Symbol` in `crates/barrier-kit/src/symbol.rs`.
 
-### BK-025 — Sin atajos globales ni forma de ocultar y mostrar la ventana
-- **Área**: plataforma / input
-- **Qué necesitaba CurseTerm**: la ventana hotkey de iTerm2: un atajo de todo
-  el sistema que muestra y oculta una ventana de terminal sin perder sus
-  sesiones.
-- **Qué ofrece hoy BarrierKit**: nada. Los atajos de `Action` solo llegan con
-  la ventana enfocada; `WindowControls` puede minimizar, pero xdg-shell no
-  deja a un cliente desminimizarse. El portal de Malaysia
-  (`crates/xdg-desktop-portal-malaysia/src`) solo implementa `Settings`, y su
-  auditoría (`docs/auditoria-claude-2026-11-03.md:613`) anota que el respaldo
-  GTK no da `GlobalShortcuts`.
-- **Qué falta**: registrar atajos con el portal
-  `org.freedesktop.portal.GlobalShortcuts` (y que Malaysia lo implemente), y
-  ocultar y volver a mostrar una ventana propia.
-- **Cómo lo resolví en CurseTerm**: `curseterm --hotkey` (`windows.rs`)
-  guarda su pid en `$XDG_RUNTIME_DIR/curseterm/hotkey`; si ya hay una ventana
-  hotkey viva, la cierra con `SIGTERM` y sale; si no, se convierte en ella. El
-  usuario lo enlaza a un atajo del escritorio.
-- **Coste del workaround**: cerrar la ventana pierde sus sesiones; sin
-  animación ni posición propia; hay que configurar el atajo fuera de la app.
-- **API propuesta para el kit**: `app::global_shortcut(id, description, preferred: Shortcut, on_activated: impl Fn())` sobre el portal, y `WindowControls::{hide, show}`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: buscar `GlobalShortcuts` en `crates/`: no aparece.
+### BK-025 — No global shortcuts nor a way to hide and show the window
+- **Area**: platform / input
+- **What CurseTerm needed**: iTerm2's hotkey window: a system-wide
+  shortcut that shows and hides a terminal window without losing its
+  sessions.
+- **What BarrierKit offers today**: nothing. `Action` shortcuts only arrive while
+  the window is focused; `WindowControls` can minimize, but xdg-shell does not
+  let a client unminimize itself. Malaysia's portal
+  (`crates/xdg-desktop-portal-malaysia/src`) only implements `Settings`, and its
+  audit (`docs/auditoria-claude-2026-11-03.md:613`) notes that the GTK
+  fallback does not provide `GlobalShortcuts`.
+- **What is missing**: registering shortcuts with the
+  `org.freedesktop.portal.GlobalShortcuts` portal (and Malaysia implementing it), and
+  hiding and showing one's own window again.
+- **How CurseTerm solves it**: `curseterm --hotkey` (`windows.rs`)
+  saves its pid in `$XDG_RUNTIME_DIR/curseterm/hotkey`; if a hotkey window
+  is already alive, it closes it with `SIGTERM` and exits; if not, it becomes it. The
+  user binds it to a desktop shortcut.
+- **Cost of the workaround**: closing the window loses its sessions; no
+  animation or position of its own; the shortcut must be configured outside the app.
+- **Proposed kit API**: `app::global_shortcut(id, description, preferred: Shortcut, on_activated: impl Fn())` over the portal, and `WindowControls::{hide, show}`.
+- **Severity**: medium
+- **How to reproduce**: search for `GlobalShortcuts` in `crates/`: it does not appear.
 
-### BK-026 — Sin campana, petición de atención ni notificaciones
-- **Área**: app / plataforma
-- **Qué necesitaba CurseTerm**: la campana (BEL y el trigger «Ring Bell»),
-  que en iTerm2 suena, pide atención si la ventana no tiene el foco y puede
-  publicar una notificación; y las alertas de marca y del perfil (fases 40 y
-  41), que usan `NSUserNotificationCenter` y `NSSound` y muestran la sesión
-  al pulsar la notificación.
-- **Qué ofrece hoy BarrierKit**: nada; en `crates/barrier-kit/src` no hay
-  sonido, urgencia ni notificaciones (solo aparece «notifies» en un test de
-  menús).
-- **Qué falta**: un sonido de evento del tema freedesktop y una notificación
-  por `org.freedesktop.portal.Notification`.
-- **Cómo lo resolví en CurseTerm**: campana visual: el panel se aclara un
-  20 % con el color del texto durante `DURATION_FAST_MS` y `Timers::after`
-  lo repinta al terminar. Para las notificaciones y los sonidos, el bloque
-  `notifications` en `barrier-kit-next`: `post(Notice, clicked)` llama a
-  `Notify` de `org.freedesktop.Notifications` en un hilo, con la acción
-  `default` y la pista `desktop-entry`; un hilo escucha `ActivationToken`,
-  `ActionInvoked` y `NotificationClosed` y llama a `clicked` con el token de
-  activación si el servidor lo manda. `play_event_sound(nombre)` lanza
-  `canberra-gtk-play --id nombre` con un nombre de la especificación de
-  sonidos de freedesktop.
-- **Coste del workaround**: la campana sigue sin sonido ni petición de
-  atención; `canberra-gtk-play` es un programa externo y, si no está, solo
-  queda un aviso en el log; `zbus` ya estaba en el árbol por el menú global.
-- **API propuesta para el kit**: `app::beep()`, y `notifications::post` y
-  `notifications::play_event_sound` como el bloque, con el nombre y el
-  `desktop-entry` sacados de la app.
-- **Gravedad**: media
-- **Cómo reproducirlo**: `grep -rni "bell\|attention\|notif" crates/barrier-kit/src`.
+### BK-026 — No bell, attention request or notifications
+- **Area**: app / platform
+- **What CurseTerm needed**: the bell (BEL and the «Ring Bell» trigger),
+  which in iTerm2 sounds, requests attention if the window has no focus and can
+  post a notification; and the mark and profile alerts (phases 40 and 41),
+  which use `NSUserNotificationCenter` and `NSSound` and reveal the session
+  when the notification is clicked.
+- **What BarrierKit offers today**: nothing; in `crates/barrier-kit/src` there is no
+  sound, urgency or notifications (only «notifies» appears, in a menu
+  test).
+- **What is missing**: an event sound from the freedesktop theme and a notification
+  through `org.freedesktop.portal.Notification`.
+- **How CurseTerm solves it**: visual bell: the pane lightens by
+  20 % with the text color for `DURATION_FAST_MS` and `Timers::after`
+  repaints it when done. For notifications and sounds, the `notifications`
+  block in `barrier-kit-next`: `post(Notice, clicked)` calls `Notify` on
+  `org.freedesktop.Notifications` on a thread, with the `default` action and
+  the `desktop-entry` hint; one thread listens for `ActivationToken`,
+  `ActionInvoked` and `NotificationClosed` and calls `clicked` with the
+  activation token when the server sends one. `play_event_sound(name)` runs
+  `canberra-gtk-play --id name` with a name from the freedesktop sound
+  naming specification.
+- **Cost of the workaround**: the bell still has no sound nor attention
+  request; `canberra-gtk-play` is an external program and, without it, only a
+  warning is logged; `zbus` was already in the tree through the global menu.
+- **Proposed kit API**: `app::beep()`, and `notifications::post` and
+  `notifications::play_event_sound` like the block, with the name and the
+  `desktop-entry` taken from the app.
+- **Severity**: medium
+- **How to reproduce**: `grep -rni "bell\|attention\|notif" crates/barrier-kit/src`.
 
-### BK-027 — Una vista con teclado global no sabe si un campo de texto tiene el foco
-- **Área**: controles / input
-- **Qué necesitaba CurseTerm**: la barra de búsqueda (Edit › Find): lo que se
-  escribe en ella no debe llegar a la shell, y Escape la cierra. En la fase
-  6, el aviso «¿Cerrar?»: su Intro o su Escape no deben llegar a la shell.
-- **Qué ofrece hoy BarrierKit**: `SearchField` con `auto_focus`,
-  `on_focus_change` y `on_navigate` (Arriba, Abajo, Intro). Su
-  `stop_propagation` no frena los `on_global_key_down`, que Freya deriva de
-  cada `KeyDown` (`freya-core` 0.4.3, `events/name.rs:144`), y Escape no llega
-  a `on_navigate` (`controls.rs:951`). `Alert` (`views/feedback.rs`) atiende
-  Intro y Escape en su propio `on_global_key_down`, que tampoco frena a los
-  demás.
-- **Qué falta**: saber desde la vista si un campo de texto del kit tiene el
-  foco, y un callback de cancelar.
-- **Cómo lo resolví en CurseTerm**: `terminal.rs` sigue el foco del
-  `SearchField` con `on_focus_change`; con la barra abierta y enfocada, el
-  manejador global ignora las teclas y Escape cierra la barra. Con el aviso
-  abierto el manejador ignora todo, y el aviso se quita con
-  `Timers::after(Duration::ZERO)` (`dismiss_later`) para que el manejador
-  aún lo vea abierto al recibir esa misma tecla. Las notas y el Composer
-  avisan del foco con `on_focus_change` del bloque `views::text_view`, y el
-  Composer deja de editar una vuelta después de cerrarse con Escape.
-- **Coste del workaround**: un estado más que se desincroniza si la barra se
-  cierra sin pasar por `Find::close`.
-- **API propuesta para el kit**: `SearchField::on_cancel` y
-  `use_text_input_focused() -> bool`, y que `Alert` consuma sus teclas.
-- **Gravedad**: baja
-- **Cómo reproducirlo**: un `rect().on_global_key_down(…)` con un
-  `SearchField` dentro: cada tecla del campo llega también al manejador.
-  Detectado en el código; el workaround se puso antes de reproducirlo. Con
-  `Alert` sí se reprodujo: sin `dismiss_later`, Escape cancelaba el aviso y
-  la shell recibía `^[`.
+### BK-027 — A view with global keyboard does not know whether a text field has focus
+- **Area**: controls / input
+- **What CurseTerm needed**: the search bar (Edit › Find): what is
+  typed in it must not reach the shell, and Escape closes it. In phase 6,
+  the "Close?" alert: its Enter or Escape must not reach the shell.
+- **What BarrierKit offers today**: `SearchField` with `auto_focus`,
+  `on_focus_change` and `on_navigate` (Up, Down, Enter). Its
+  `stop_propagation` does not stop the `on_global_key_down` handlers, which Freya derives from
+  each `KeyDown` (`freya-core` 0.4.3, `events/name.rs:144`), and Escape does not reach
+  `on_navigate` (`controls.rs:951`). `Alert` (`views/feedback.rs`) handles
+  Enter and Escape in its own `on_global_key_down`, which does not stop the
+  others either.
+- **What is missing**: knowing from the view whether a kit text field has
+  focus, and a cancel callback.
+- **How CurseTerm solves it**: `terminal.rs` tracks the focus of the
+  `SearchField` with `on_focus_change`; with the bar open and focused, the
+  global handler ignores keys and Escape closes the bar. With the alert up
+  the handler ignores everything, and the alert is removed with
+  `Timers::after(Duration::ZERO)` (`dismiss_later`) so the handler still
+  sees it open when it gets that same key. Notes and the Composer report
+  focus with `on_focus_change` of the `views::text_view` block, and the
+  Composer stops editing one loop after Escape closes it.
+- **Cost of the workaround**: one more piece of state that goes out of sync if the bar
+  closes without going through `Find::close`.
+- **Proposed kit API**: `SearchField::on_cancel` and
+  `use_text_input_focused() -> bool`, and an `Alert` that consumes its keys.
+- **Severity**: low
+- **How to reproduce**: a `rect().on_global_key_down(…)` with a
+  `SearchField` inside: each key in the field also reaches the handler.
+  Detected in the code; the workaround went in before reproducing it. With
+  `Alert` it was reproduced: without `dismiss_later`, Escape cancelled the
+  alert and the shell got `^[`.
 
-### BK-028 — Las etiquetas de `SegmentedControl` se parten en dos líneas
-- **Área**: controles
-- **Qué necesitaba CurseTerm**: las ocho secciones del perfil de iTerm2
-  (General, Colors, Text, Window, Terminal, Session, Keys, Advanced) en un
+### BK-028 — `SegmentedControl` labels wrap onto two lines
+- **Area**: controls
+- **What CurseTerm needed**: iTerm2's eight profile sections (General,
+  Colors, Text, Window, Terminal, Session, Keys, Advanced) in a
   `SegmentedControl`.
-- **Qué ofrece hoy BarrierKit**: cada segmento ocupa `Size::flex(1.0)` y su
-  `label()` no limita las líneas (`controls.rs:769-791`): a 860 px,
-  «Advanced» sale partida en dos.
-- **Qué falta**: una línea por etiqueta, con anchos según el texto o con
-  desplazamiento cuando no caben.
-- **Cómo lo resolví en CurseTerm**: `SETTINGS_WINDOW_SIZE` pasa a 980 × 600.
-- **Coste del workaround**: por debajo de ese ancho la etiqueta se vuelve a
-  partir.
-- **API propuesta para el kit**: `label().max_lines(1)` en el segmento y anchos por contenido.
-- **Gravedad**: baja
-- **Cómo reproducirlo**: Ajustes de CurseTerm con `SETTINGS_WINDOW_SIZE` a 860 × 560, Perfiles.
+- **What BarrierKit offers today**: each segment takes `Size::flex(1.0)` and
+  its `label()` has no line limit (`controls.rs:769-791`): at 860 px,
+  "Advanced" wraps in two.
+- **What is missing**: one line per label, with widths by content or
+  scrolling when they do not fit.
+- **How CurseTerm solves it**: `SETTINGS_WINDOW_SIZE` becomes 980 × 600.
+- **Cost of the workaround**: below that width the label wraps again.
+- **Proposed kit API**: `label().max_lines(1)` in the segment and widths by content.
+- **Severity**: low
+- **How to reproduce**: CurseTerm Settings with `SETTINGS_WINDOW_SIZE` at 860 × 560, Profiles.
 
-### BK-029 — `TextField` no puede tomar el foco al abrirse
-- **Área**: controles
-- **Qué necesitaba CurseTerm**: Window › Edit Tab Title y Edit Window Title,
-  una hoja con un solo campo en el que se escribe nada más abrirla.
-- **Qué ofrece hoy BarrierKit**: `SearchField::auto_focus`, pero `TextField`
-  (`controls.rs:805`) no pasa `auto_focus` a su `Input`.
-- **Qué falta**: `TextField::auto_focus(bool)`, como en `SearchField`.
-- **Cómo lo resolví en CurseTerm**: el parche
+### BK-029 — `TextField` cannot take the focus when it opens
+- **Area**: controls
+- **What CurseTerm needed**: Window › Edit Tab Title and Edit Window Title,
+  a sheet with a single field that takes typing as soon as it opens.
+- **What BarrierKit offers today**: `SearchField::auto_focus`, but
+  `TextField` (`controls.rs:805`) does not pass `auto_focus` to its `Input`.
+- **What is missing**: `TextField::auto_focus(bool)`, as in `SearchField`.
+- **How CurseTerm solves it**: the patch
   [`kit-parches/0006-textfield-auto-focus.patch`](../kit-parches/0006-textfield-auto-focus.patch)
-  añade el método y su documentación. Con el kit tal cual, el campo toma el
-  foco solo al hacer clic.
-- **Coste del workaround**: sin el parche, lo tecleado antes del clic se
-  pierde.
-- **API propuesta para el kit**: `TextField::auto_focus(bool)`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: Window › Edit Tab Title con `./dev.sh kit-tal-cual` y escribir sin hacer clic.
+  adds the method and its documentation. With the kit as is, the field only
+  takes the focus on a click.
+- **Workaround cost**: without the patch, whatever is typed before the
+  click is lost.
+- **Proposed kit API**: `TextField::auto_focus(bool)`.
+- **Severity**: medium
+- **How to reproduce**: Window › Edit Tab Title with `./dev.sh kit-tal-cual` and type without clicking.
 
-### BK-030 — Los eventos de ratón no traen modificadores
-- **Área**: entrada
-- **Qué necesitaba CurseTerm**: Super+clic para abrir un enlace, como ⌘-clic
-  en iTerm2; Mayús para seleccionar cuando el programa pide el ratón, y Ctrl
-  y Alt dentro del informe del ratón.
-- **Qué ofrece hoy BarrierKit**: el runner guarda los modificadores del
-  teclado (`platform/input/seat.rs:399`), pero `MouseEventData` de Freya 0.4.3
-  solo lleva posición y botón.
-- **Qué falta**: los modificadores en los eventos de ratón y de rueda.
-- **Cómo lo resolví en CurseTerm**: la ventana sigue Super, Mayús, Ctrl y
-  Alt con `on_global_key_down` y `on_global_key_up`. Al pulsar un
-  modificador, el compositor manda la tecla antes que los modificadores, así
-  que la propia tecla cuenta como pulsada.
-- **Coste del workaround**: si un modificador se suelta con la ventana sin
-  foco, la ventana lo cree pulsado hasta la siguiente tecla.
-- **API propuesta para el kit**: `modifiers` en los datos de puntero, o una consulta de los modificadores actuales.
-- **Gravedad**: media
-- **Cómo reproducirlo**: leer `MouseEventData` en `freya-core-0.4.3/src/events/data.rs`.
+### BK-030 — Mouse events carry no modifiers
+- **Area**: input
+- **What CurseTerm needed**: Super+click to open a link, like ⌘-click in
+  iTerm2; Shift to select when the program asks for the mouse, and Ctrl and
+  Alt inside the mouse report.
+- **What BarrierKit offers today**: the runner keeps the keyboard modifiers
+  (`platform/input/seat.rs:399`), but Freya 0.4.3's `MouseEventData` only
+  carries position and button.
+- **What is missing**: the modifiers in mouse and wheel events.
+- **How CurseTerm solves it**: the window tracks Super, Shift, Ctrl and Alt
+  with `on_global_key_down` and `on_global_key_up`. When a modifier is
+  pressed, the compositor sends the key before the modifiers, so the key
+  itself counts as held.
+- **Workaround cost**: if a modifier is released while the window has no
+  focus, the window thinks it is held until the next key.
+- **Proposed kit API**: `modifiers` in the pointer data, or a query for the current modifiers.
+- **Severity**: medium
+- **How to reproduce**: read `MouseEventData` in `freya-core-0.4.3/src/events/data.rs`.
 
-### BK-031 — Una ventana no puede pedir fondo translúcido
-- **Área**: ventana / apariencia
-- **Qué necesitaba CurseTerm**: View › Use Transparency (⌘U) y la
-  transparencia por perfil de iTerm2.
-- **Qué ofrece hoy BarrierKit**: el runner limpia cada ventana con
-  `surface_background` (`theme.rs:30`), que sale de la apariencia global; con
-  alfa 1 declara la región opaca (`platform/surface.rs:238`). La app no puede
-  cambiarlo.
-- **Qué falta**: un fondo por ventana, o un alfa que la app pueda pedir, y que
-  el compositor lo componga con su desenfoque.
-- **Cómo lo resolví en CurseTerm**: el parche
+### BK-031 — A window cannot ask for a translucent background
+- **Area**: window / appearance
+- **What CurseTerm needed**: View › Use Transparency (⌘U) and iTerm2's
+  per-profile transparency.
+- **What BarrierKit offers today**: the runner clears each window with
+  `surface_background` (`theme.rs:30`), which comes from the global
+  appearance; with alpha 1 it declares the region opaque
+  (`platform/surface.rs:238`). The app cannot change it.
+- **What is missing**: a per-window background, or an alpha the app can ask
+  for, composed by the compositor with its blur.
+- **How CurseTerm solves it**: the patch
   [`kit-parches/0007-fondo-translucido.patch`](../kit-parches/0007-fondo-translucido.patch)
-  añade `WindowControls::set_background_alpha`, que multiplica el alfa de ese
-  fondo, y su documentación. Con el kit tal cual, View › Use Transparency
-  queda desactivada.
-- **Coste del workaround**: sin el parche, la ventana es siempre opaca.
-- **API propuesta para el kit**: `WindowControls::set_background(Rgba)` o `WindowOptions::background`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: pintar la raíz de la app con alfa 0,5; la ventana sigue opaca.
+  adds `WindowControls::set_background_alpha`, which multiplies that
+  background's alpha, and its documentation. With the kit as is, View › Use
+  Transparency stays disabled.
+- **Workaround cost**: without the patch, the window is always opaque.
+- **Proposed kit API**: `WindowControls::set_background(Rgba)` or `WindowOptions::background`.
+- **Severity**: medium
+- **How to reproduce**: paint the app root with alpha 0.5; the window stays opaque.
 
-### BK-032 — Los avisos de `Timers` sobreviven a su ventana
-- **Área**: plataforma
-- **Qué necesitaba CurseTerm**: cerrar una ventana de terminal mientras las
-  demás del mismo proceso siguen abiertas (parche 0008).
-- **Qué ofrece hoy BarrierKit**: `Timers::wakeup` y `Timers::after`
-  (`platform/timer.rs:47-58`) guardan la función en una cola del runtime, común
-  a todas las ventanas; cada aviso llama a todas las de `wakeup` y ninguna se
-  quita al cerrar su ventana.
-- **Qué falta**: atar los avisos a la ventana que los pidió y soltarlos al
-  cerrarla.
-- **Cómo lo resolví en CurseTerm**: un `alive: Rc<Cell<bool>>` que se apaga en
-  `use_drop`; el aviso de E/S y `Handles::after` no hacen nada si está
-  apagado. Sin él, cerrar una ventana hacía que el aviso siguiente leyera
-  estados ya liberados y el proceso entraba en pánico.
-- **Coste del workaround**: las funciones de las ventanas cerradas siguen en
-  la cola y se llaman en cada aviso hasta que termina el proceso.
-- **API propuesta para el kit**: que `Timers` sea por ventana o que `wakeup` devuelva un guardián que lo quite al soltarse.
-- **Gravedad**: alta
-- **Cómo reproducirlo**: con el parche 0008, abrir dos ventanas de terminal y cerrar una sin el indicador `alive`.
+### BK-032 — `Timers` callbacks outlive their window
+- **Area**: platform
+- **What CurseTerm needed**: closing a terminal window while the others in
+  the same process stay open (patch 0008).
+- **What BarrierKit offers today**: `Timers::wakeup` and `Timers::after`
+  (`platform/timer.rs:47-58`) keep the function in a runtime queue shared by
+  every window; each ping calls all the `wakeup` ones and none is removed when
+  its window closes.
+- **What is missing**: tying callbacks to the window that asked for them and
+  dropping them when it closes.
+- **How CurseTerm solves it**: an `alive: Rc<Cell<bool>>` turned off in
+  `use_drop`; the I/O wakeup and `Handles::after` do nothing when it is off.
+  Without it, closing a window made the next ping read freed states and the
+  process panicked.
+- **Workaround cost**: the closed windows' functions stay in the queue and
+  run on every ping until the process ends.
+- **Proposed kit API**: make `Timers` per window, or have `wakeup` return a guard that removes it when dropped.
+- **Severity**: high
+- **How to reproduce**: with patch 0008, open two terminal windows and close one without the `alive` flag.
 
-### BK-033 — Sin método de entrada (`zwp_text_input_v3`)
-- **Área**: entrada
-- **Qué necesitaba CurseTerm**: escribir con un método de entrada (chino,
-  japonés, acentos compuestos), con el texto en composición en el cursor.
-- **Qué ofrece hoy BarrierKit**: Freya 0.4.3 trae `ImePreeditEventData`, pero
-  el runner no enlaza `zwp_text_input_manager_v3`, así que ningún método de
-  entrada llega a la app.
-- **Qué falta**: la entrada de texto del protocolo, el texto en composición
-  para la app y la posición del cursor para el método de entrada.
-- **Cómo lo resolví en CurseTerm**: el parche
+### BK-033 — No input method (`zwp_text_input_v3`)
+- **Area**: input
+- **What CurseTerm needed**: typing with an input method (Chinese, Japanese,
+  composed accents), with the composition text at the cursor.
+- **What BarrierKit offers today**: Freya 0.4.3 has `ImePreeditEventData`,
+  but the runner does not bind `zwp_text_input_manager_v3`, so no input
+  method reaches the app.
+- **What is missing**: the protocol's text input, the composition text for
+  the app and the cursor position for the input method.
+- **How CurseTerm solves it**: the patch
   [`kit-parches/0009-metodo-de-entrada.patch`](../kit-parches/0009-metodo-de-entrada.patch)
-  añade `platform/ime.rs`: el texto en composición se publica en
-  `WindowControls::ime_preedit`, el confirmado llega como `Key::Character` y
-  `set_ime_cursor_area` coloca la ventana del método de entrada. CurseTerm
-  dibuja la composición subrayada en el cursor. smithay-client-toolkit solo
-  avisa de las seats que aparecen después de arrancar, así que la inicial se
-  enlaza al construir el runtime.
-- **Coste del workaround**: sin el parche no hay método de entrada; los
-  campos de texto del kit reciben el texto confirmado pero no muestran la
-  composición.
-- **API propuesta para el kit**: la del parche, o los eventos `ImePreedit` de Freya entregados al elemento con foco.
-- **Gravedad**: alta
-- **Cómo reproducirlo**: buscar `text_input` en `crates/barrier-kit/src/platform`: no aparece.
+  adds `platform/ime.rs`: the composition text is published in
+  `WindowControls::ime_preedit`, the committed text arrives as
+  `Key::Character` and `set_ime_cursor_area` places the input method's
+  window. CurseTerm draws the composition underlined at the cursor.
+  smithay-client-toolkit only reports seats that appear after start-up, so
+  the initial one is attached when the runtime is built.
+- **Workaround cost**: without the patch there is no input method; the kit's
+  text fields get the committed text but do not show the composition.
+- **Proposed kit API**: the patch's, or Freya's `ImePreedit` events delivered to the focused element.
+- **Severity**: high
+- **How to reproduce**: search `crates/barrier-kit/src/platform` for `text_input`: it does not appear.
 
-### BK-034 — Sin selección primaria
-- **Área**: portapapeles
-- **Qué necesitaba CurseTerm**: lo habitual en Linux: seleccionar con el ratón
-  publica el texto y el botón central lo pega, también entre apps.
-- **Qué ofrece hoy BarrierKit**: el portapapeles (`platform/clipboard.rs`)
-  solo usa `wl_data_device`; smithay-client-toolkit 0.20 ya trae
-  `primary_selection`, pero el runner no lo enlaza.
-- **Qué falta**: el dispositivo de `zwp_primary_selection` y un proveedor
-  para la app.
-- **Cómo lo resolví en CurseTerm**: el parche
+### BK-034 — No primary selection
+- **Area**: clipboard
+- **What CurseTerm needed**: the usual Linux behaviour: selecting with the
+  mouse publishes the text and the middle button pastes it, also across apps.
+- **What BarrierKit offers today**: the clipboard (`platform/clipboard.rs`)
+  only uses `wl_data_device`; smithay-client-toolkit 0.20 already ships
+  `primary_selection`, but the runner does not bind it.
+- **What is missing**: the `zwp_primary_selection` device and a provider for
+  the app.
+- **How CurseTerm solves it**: the patch
   [`kit-parches/0010-seleccion-primaria.patch`](../kit-parches/0010-seleccion-primaria.patch)
-  añade `platform/primary.rs`, que reutiliza el `Clipboard` del kit con ese
-  dispositivo, y `WindowControls::primary_selection()`. CurseTerm publica la
-  selección al soltar el ratón y pega la primaria con el botón central.
-- **Coste del workaround**: sin el parche, el botón central no hace nada.
-- **API propuesta para el kit**: la del parche.
-- **Gravedad**: media
-- **Cómo reproducirlo**: seleccionar en CurseTerm con el kit tal cual y `wl-paste --primary`: no da nada.
+  adds `platform/primary.rs`, which reuses the kit's `Clipboard` with that
+  device, and `WindowControls::primary_selection()`. CurseTerm publishes the
+  selection on mouse release and pastes the primary one with the middle
+  button.
+- **Workaround cost**: without the patch, the middle button does nothing.
+- **Proposed kit API**: the patch's.
+- **Severity**: medium
+- **How to reproduce**: select in CurseTerm with the kit as is and run `wl-paste --primary`: it gives nothing.
 
-### BK-035 — El portapapeles solo ofrece texto plano
-- **Área**: portapapeles
-- **Qué necesitaba CurseTerm**: Edit › Copy with Styles (⌥⌘C), que copia la
-  selección con sus colores y estilos para pegarla con formato.
-- **Qué ofrece hoy BarrierKit**: `ClipboardProvider::set_contents` publica
-  solo `TEXT_MIMES` (`platform/clipboard.rs:20`).
-- **Qué falta**: ofrecer varios formatos a la vez y servir cada uno.
-- **Cómo lo resolví en CurseTerm**: el parche
+### BK-035 — The clipboard only offers plain text
+- **Area**: clipboard
+- **What CurseTerm needed**: Edit › Copy with Styles (⌥⌘C), which copies the
+  selection with its colours and styles to paste it formatted.
+- **What BarrierKit offers today**: `ClipboardProvider::set_contents` only
+  publishes `TEXT_MIMES` (`platform/clipboard.rs:20`).
+- **What is missing**: offering several formats at once and serving each.
+- **How CurseTerm solves it**: the patch
   [`kit-parches/0011-copiar-con-formato.patch`](../kit-parches/0011-copiar-con-formato.patch)
-  añade `WindowControls::copy_rich(texto, html)`, que ofrece además
-  `text/html`. CurseTerm construye el HTML con los colores ya resueltos de
-  cada celda (`styled.rs`). Sin el parche, la entrada copia texto plano.
-- **Coste del workaround**: ninguno con el parche.
-- **API propuesta para el kit**: la del parche, o una lista de pares formato y datos.
-- **Gravedad**: baja
-- **Cómo reproducirlo**: copiar con el kit tal cual y `wl-paste -l`: solo hay tipos de texto.
+  adds `WindowControls::copy_rich(text, html)`, which also offers
+  `text/html`. CurseTerm builds the HTML from each cell's resolved colours
+  (`styled.rs`). Without the patch, the item copies plain text.
+- **Workaround cost**: none with the patch.
+- **Proposed kit API**: the patch's, or a list of format and data pairs.
+- **Severity**: low
+- **How to reproduce**: copy with the kit as is and run `wl-paste -l`: there are only text types.
 
-### BK-036 — Sin vista de texto de varias líneas
-- **Área**: controles
-- **Qué necesitaba CurseTerm**: el texto de una anotación, que en iTerm2 es
-  un `NSTextView` sin marco: Enter parte la línea, el texto se ajusta al ancho
-  y Escape devuelve el foco al terminal (`PTYNoteViewController.m`).
-- **Qué ofrece hoy BarrierKit**: `TextField`, `SearchField` y `SecureField`,
-  todos de una línea sobre el `Input` de Freya, que usa `max_lines(1)` y
-  convierte Enter en `on_submit`.
-- **Qué falta**: un control de texto de varias líneas.
-- **Cómo lo resolví en CurseTerm**: el bloque `views::text_view::TextView` en
-  `barrier-kit-next`, sobre `use_editable` de `freya-edit` 0.4.3, con la misma
-  edición, selección con arrastre, IME y parpadeo del cursor que `Input`.
-  Avisa del cambio de texto y del foco por callbacks; `on_key` deja a la app
-  quedarse una tecla con la posición del cursor (el Composer usa ⇧↩ y ⌥⇧↩),
-  y no escribe caracteres con Super o Ctrl, salvo las órdenes de edición.
-- **Coste del workaround**: dos dependencias más en el bloque
-  (`freya-components` sin features por defecto y `freya-edit`, ya en el
-  árbol por el kit) y sin barra de desplazamiento: crece con el texto.
-- **API propuesta para el kit**: `TextView::new(value, family, size,
-  line_height, ink)` con `cursor`, `width`, `height`, `auto_focus`,
-  `on_change`, `on_focus_change` y `on_key`, como el bloque. `height` deja
-  que el campo ocupe su caja, para que un clic en cualquier punto de ella
-  (Value de Edit Snippet) le dé el foco.
-- **Gravedad**: media
-- **Cómo reproducirlo**: buscar en `crates/barrier-kit/src/controls.rs` un
-  control que acepte Enter como salto de línea.
+### BK-036 — No multi-line text view
+- **Area**: controls
+- **What CurseTerm needed**: the text of an annotation, which in iTerm2 is a
+  frameless `NSTextView`: Enter breaks the line, the text wraps to the width
+  and Escape gives the focus back to the terminal (`PTYNoteViewController.m`).
+- **What BarrierKit offers today**: `TextField`, `SearchField` and
+  `SecureField`, all single-line on Freya's `Input`, which uses
+  `max_lines(1)` and turns Enter into `on_submit`.
+- **What is missing**: a multi-line text control.
+- **How CurseTerm solves it**: the `views::text_view::TextView` block in
+  `barrier-kit-next`, on `use_editable` from `freya-edit` 0.4.3, with the same
+  editing, drag selection, IME and cursor blink as `Input`. It reports text
+  and focus changes through callbacks; `on_key` lets the app take a key with
+  the cursor position (the Composer uses ⇧↩ and ⌥⇧↩), and it types no
+  characters with Super or Ctrl held, except the editing commands.
+- **Cost of the workaround**: two more dependencies in the block
+  (`freya-components` without default features and `freya-edit`, already in
+  the tree through the kit) and no scroll bar: it grows with the text.
+- **Proposed kit API**: `TextView::new(value, family, size, line_height,
+  ink)` with `cursor`, `width`, `height`, `auto_focus`, `on_change`,
+  `on_focus_change` and `on_key`, like the block. `height` lets the field
+  fill its box, so a click anywhere in it (Edit Snippet's Value) focuses it.
+- **Severity**: medium
+- **How to reproduce**: look in `crates/barrier-kit/src/controls.rs` for a
+  control that takes Enter as a line break.
 
-### BK-037 — `Alert` solo tiene dos botones y no se puede silenciar
-- **Área**: controles / avisos
-- **Qué necesitaba CurseTerm**: el aviso de pegar varias líneas de iTerm2
-  (`iTermPasteHelper.m`), con Paste, Paste Without Newline, Cancel y
-  Advanced…, y la casilla de no volver a preguntar de `iTermWarning`.
-- **Qué ofrece hoy BarrierKit**: `views::feedback::Alert` con un botón de
-  confirmar y otro de cancelar (`feedback.rs:60`).
-- **Qué falta**: más acciones en un `Alert` y una casilla para silenciarlo.
-- **Cómo lo resolví en CurseTerm**: los avisos de pegado son una hoja propia
-  (`paste_question_sheet` en `terminal.rs`) hecha con `sheet` y `Button` del
-  kit, con todos los botones de iTerm2; para no verlos se desmarcan las
-  casillas de Edit › Paste Special.
-- **Coste del workaround**: una hoja a mano en vez del `Alert` del kit, y sin
-  «no volver a preguntar» desde el propio aviso.
-- **API propuesta para el kit**: `Alert::action(label, callback)` para
-  añadir botones y `Alert::suppression(label, State<bool>)`.
-- **Gravedad**: baja
-- **Cómo reproducirlo**: leer `pub struct Alert` en
+### BK-037 — `Alert` has only two buttons and cannot be silenced
+- **Area**: controls / alerts
+- **What CurseTerm needed**: iTerm2's multi-line paste warning
+  (`iTermPasteHelper.m`), with Paste, Paste Without Newline, Cancel and
+  Advanced…, and `iTermWarning`'s do-not-ask-again checkbox.
+- **What BarrierKit offers today**: `views::feedback::Alert` with a confirm
+  button and a cancel button (`feedback.rs:60`).
+- **What is missing**: more actions in an `Alert` and a checkbox to silence
+  it.
+- **How CurseTerm solves it**: the paste warnings are a sheet of its own
+  (`paste_question_sheet` in `terminal.rs`) built from the kit's `sheet` and
+  `Button`, with every iTerm2 button; to stop them, uncheck the boxes in
+  Edit › Paste Special.
+- **Cost of the workaround**: a hand-made sheet instead of the kit's
+  `Alert`, and no «don't ask again» from the warning itself.
+- **Proposed kit API**: `Alert::action(label, callback)` to add buttons and
+  `Alert::suppression(label, State<bool>)`.
+- **Severity**: low
+- **How to reproduce**: read `pub struct Alert` in
   `crates/barrier-kit/src/views/feedback.rs`.
 
-### BK-038 — `SearchField` no tiene menú de opciones
-- **Área**: controles
-- **Qué necesitaba CurseTerm**: el modo de búsqueda de iTerm2 (Smart Case
-  Substring, Case-Sensitive Substring, Case-Insensitive Substring,
-  Case-Sensitive Regex y Case-Insensitive Regex), que en `FindView.xib` es el
-  menú de la lupa del campo de búsqueda.
-- **Qué ofrece hoy BarrierKit**: `SearchField` con `auto_focus`,
-  `on_focus_change` y `on_navigate` (`controls.rs:850`); la lupa es solo un
-  dibujo.
-- **Qué falta**: un menú en la lupa del `SearchField`, como
+### BK-038 — `SearchField` has no options menu
+- **Area**: controls
+- **What CurseTerm needed**: iTerm2's find mode (Smart Case Substring,
+  Case-Sensitive Substring, Case-Insensitive Substring, Case-Sensitive Regex
+  and Case-Insensitive Regex), which in `FindView.xib` is the menu of the
+  search field's magnifier.
+- **What BarrierKit offers today**: `SearchField` with `auto_focus`,
+  `on_focus_change` and `on_navigate` (`controls.rs:850`); the magnifier is
+  only a drawing.
+- **What is missing**: a menu on the `SearchField` magnifier, like
   `NSSearchField.searchMenuTemplate`.
-- **Cómo lo resolví en CurseTerm**: un `PopUpButton` con los cinco modos al
-  lado del campo, en las barras de Find y de Filter (`mode_popup` en
-  `terminal.rs`).
-- **Coste del workaround**: la barra pierde ancho y el modo se ve siempre, no
-  solo al abrir el menú.
-- **API propuesta para el kit**: `SearchField::menu(Vec<MenuItem>)` con
-  radio para la opción elegida.
-- **Gravedad**: baja
-- **Cómo reproducirlo**: leer `pub struct SearchField` en
+- **How I solved it in CurseTerm**: a `PopUpButton` with the five modes beside
+  the field, in the Find and Filter bars (`mode_popup` in `terminal.rs`).
+- **Cost of the workaround**: the bar loses width and the mode is always
+  visible, not only when the menu opens.
+- **Proposed kit API**: `SearchField::menu(Vec<MenuItem>)` with a radio for
+  the chosen option.
+- **Severity**: low
+- **How to reproduce**: read `pub struct SearchField` in
   `crates/barrier-kit/src/controls.rs`.
 
-### BK-039 — Sin vista de contorno ni panel flotante
-- **Área**: controles / ventanas
-- **Qué necesitaba CurseTerm**: Find Globally de iTerm2
-  (`iTermGlobalSearchWindowController.m`): un panel flotante de 741 × 567
-  que no bloquea las ventanas, con un `NSOutlineView` de sesiones y sus
-  resultados.
-- **Qué ofrece hoy BarrierKit**: `Table` de filas planas
-  (`views/table.rs`), `sheet`, que bloquea la ventana, y `open_window` solo
-  con el parche 0008 (BK-001).
-- **Qué falta**: una vista de contorno con grupos y selección por teclado, y
-  una ventana auxiliar flotante (`xdg_toplevel` con padre y sin bloquear).
-- **Cómo lo resolví en CurseTerm**: un panel con posición absoluta arriba a la
-  derecha de la zona de paneles (`global_search.rs`). Las filas están hechas a
-  mano y las flechas del campo recorren los resultados. Busca solo en las
-  sesiones de su ventana.
-- **Coste del workaround**: el panel tapa parte del terminal y no se puede
-  mover. Tampoco busca en otras ventanas, que sin el parche son otros
-  procesos.
-- **API propuesta para el kit**: `views::outline::Outline` con grupos,
-  `selected` y `on_select`, y `WindowOptions::utility(parent)`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: buscar `Outline` o un panel flotante en
-  `crates/barrier-kit/src`; no hay ninguno.
+### BK-039 — No outline view nor floating panel
+- **Area**: controls / windows
+- **What CurseTerm needed**: iTerm2's Find Globally
+  (`iTermGlobalSearchWindowController.m`): a 741 × 567 floating panel that
+  does not block the windows, with an `NSOutlineView` of sessions and their
+  results.
+- **What BarrierKit offers today**: a `Table` of flat rows
+  (`views/table.rs`), `sheet`, which blocks the window, and `open_window`
+  only with patch 0008 (BK-001).
+- **What is missing**: an outline view with groups and keyboard selection,
+  and a floating auxiliary window (`xdg_toplevel` with a parent and no
+  blocking).
+- **How I solved it in CurseTerm**: a panel with absolute position at the top
+  right of the pane area (`global_search.rs`). Its rows are hand-built, and
+  the field's arrows walk the results. It searches only the sessions of its
+  window.
+- **Cost of the workaround**: the panel covers part of the terminal and
+  cannot be moved. It does not search other windows either, which are other
+  processes without the patch.
+- **Proposed kit API**: `views::outline::Outline` with groups, `selected` and
+  `on_select`, and `WindowOptions::utility(parent)`.
+- **Severity**: medium
+- **How to reproduce**: look for `Outline` or a floating panel in
+  `crates/barrier-kit/src`; there is none.
 
-### BK-040 — `PopUpButton` no se desplaza ni busca
-- **Área**: controles
-- **Qué necesitaba CurseTerm**: la acción de una combinación de teclas
-  (`iTermEditKeyActionWindowController.m`), una lista buscable de más de
-  treinta acciones en grupos, y Select Menu Item…, con todas las entradas del
-  menú.
-- **Qué ofrece hoy BarrierKit**: `PopUpButton` con elementos planos; su menú
-  crece hacia abajo y lo que no cabe en la ventana no se puede elegir.
-- **Qué falta**: desplazamiento en un menú largo, secciones con título y un
-  campo de búsqueda, como `iTermSearchableComboView`.
-- **Cómo lo resolví en CurseTerm**: dos desplegables, el grupo de iTerm2 y
-  sus acciones (seis como mucho), y para Select Menu Item… un campo que filtra
-  y un desplegable con las doce primeras coincidencias
-  (`key_bindings_pane.rs`).
-- **Coste del workaround**: dos controles donde iTerm2 tiene uno, y el
-  filtro en un campo aparte.
-- **API propuesta para el kit**: `PopUpButton::section(title)`, menú con
-  desplazamiento y `PopUpButton::searchable(true)`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: un `PopUpButton` con cuarenta elementos en una
-  ventana de 700 de alto.
+### BK-040 — `PopUpButton` neither scrolls nor searches
+- **Area**: controls
+- **What CurseTerm needed**: a key binding's action
+  (`iTermEditKeyActionWindowController.m`), a searchable list of more than
+  thirty actions in groups, and Select Menu Item…, with every menu entry.
+- **What BarrierKit offers today**: `PopUpButton` with flat items; its menu
+  grows downwards and what does not fit in the window cannot be chosen.
+- **What is missing**: scrolling in a long menu, titled sections and a
+  search field, like `iTermSearchableComboView`.
+- **How I solved it in CurseTerm**: two pop-ups, iTerm2's group and its
+  actions (six at most), and for Select Menu Item… a field that filters and
+  a pop-up with the first twelve matches (`key_bindings_pane.rs`).
+- **Cost of the workaround**: two controls where iTerm2 has one, and the
+  filter in a separate field.
+- **Proposed kit API**: `PopUpButton::section(title)`, a scrolling menu and
+  `PopUpButton::searchable(true)`.
+- **Severity**: medium
+- **How to reproduce**: a `PopUpButton` with forty items in a 700-high
+  window.
 
-### BK-041 — Un configure confirmado sale con la geometría vieja
-- **Área**: ventanas
-- **Qué necesitaba CurseTerm**: Window Style Maximized del perfil, que pide
-  maximizar al abrir la ventana.
-- **Qué ofrece hoy BarrierKit**: SCTK confirma cada configure al recibirlo.
-  Con la ventana ya dibujada, `WindowHandler::configure` lo deja pendiente
-  hasta el siguiente fotograma (`platform/window.rs`), pero
-  `request_frame_callback` hace `commit` enseguida
-  (`platform/surface.rs:96`).
-- **Qué falta**: que el commit que sigue a la confirmación lleve la geometría
-  del configure. xdg-shell lo exige en maximizada y pantalla completa; weston
-  responde con el error `invalid_surface_state` y cierra la conexión.
-- **Cómo lo resolví en CurseTerm**: el parche
+### BK-041 — An acked configure goes out with the old geometry
+- **Area**: windows
+- **What CurseTerm needed**: the profile's Window Style Maximized, which asks
+  to maximize when the window opens.
+- **What BarrierKit offers today**: SCTK acks each configure when it arrives.
+  With the window already drawn, `WindowHandler::configure` leaves it pending
+  until the next frame (`platform/window.rs`), but `request_frame_callback`
+  commits straight away (`platform/surface.rs:96`).
+- **What is missing**: the commit after the ack must carry the configure's
+  geometry. xdg-shell requires it when maximized or full screen; weston
+  answers with the `invalid_surface_state` error and closes the connection.
+- **How CurseTerm solves it**: the patch
   [`kit-parches/0012-configure-antes-del-commit.patch`](../kit-parches/0012-configure-antes-del-commit.patch)
-  aplica el configure en el acto si no hay fotograma pendiente.
-- **Coste del workaround**: ninguno con el parche. Sin él, CurseTerm se
-  cierra en weston al abrir maximizada.
-- **API propuesta para el kit**: ninguna; es una corrección interna.
-- **Gravedad**: alta
-- **Cómo reproducirlo**: weston 16 con `window_style = "maximized"` en el
-  perfil: «xdg_surface geometry (656 x 470) does not match the configured
+  applies the configure at once when no frame is pending.
+- **Workaround cost**: none with the patch. Without it, CurseTerm quits in
+  weston when it opens maximized.
+- **Proposed kit API**: none; it is an internal fix.
+- **Severity**: high
+- **How to reproduce**: weston 16 with `window_style = "maximized"` in the
+  profile: «xdg_surface geometry (656 x 470) does not match the configured
   maximized state (1100 x 668)».
 
-### BK-042 — `PopUpButton` no tiene modo desplegable (pull-down)
-- **Área**: controles
-- **Qué necesitaba CurseTerm**: el pop-up Presets… de Keys, que en iTerm2 es
-  un `NSPopUpButton` con `pullsDown`: elegir carga el preset y el botón vuelve
-  a decir «Presets…».
-- **Qué ofrece hoy BarrierKit**: `PopUpButton` guarda la opción elegida con
-  `use_controlled`, que solo sigue a `selected()` cuando su valor cambia
-  (`choices.rs:21`). Con `selected(0)` fijo se queda en la última opción.
-- **Qué falta**: un modo desplegable que no recuerde la elección.
-- **Cómo lo resolví en CurseTerm**: el pop-up va dentro de un `rect` con una
-  `key` que sube en cada elección, así se remonta con «Presets…».
-- **Coste del workaround**: un estado contador y un remontaje por elección.
-- **API propuesta para el kit**: `PopUpButton::pulls_down(true)`.
-- **Gravedad**: baja
-- **Cómo reproducirlo**: un `PopUpButton` con `.selected(0)` fijo; tras
-  elegir la segunda opción sigue mostrándola.
+### BK-042 — `PopUpButton` has no pull-down mode
+- **Area**: controls
+- **What CurseTerm needed**: the Keys Presets… pop-up, which in iTerm2 is an
+  `NSPopUpButton` with `pullsDown`: choosing loads the preset and the button
+  says “Presets…” again.
+- **What BarrierKit offers today**: `PopUpButton` keeps the chosen option
+  with `use_controlled`, which only follows `selected()` when its value
+  changes (`choices.rs:21`). With a fixed `selected(0)` it stays on the last
+  choice.
+- **What is missing**: a pull-down mode that does not remember the choice.
+- **How I solved it in CurseTerm**: the pop-up sits in a `rect` whose `key`
+  goes up on every choice, so it remounts showing “Presets…”.
+- **Cost of the workaround**: a counter state and one remount per choice.
+- **Proposed kit API**: `PopUpButton::pulls_down(true)`.
+- **Severity**: low
+- **How to reproduce**: a `PopUpButton` with a fixed `.selected(0)`; after
+  choosing the second option it keeps showing it.
 
-### BK-043 — `TextField` no puede abrirse con el texto seleccionado
-- **Área**: controles
-- **Qué necesitaba CurseTerm**: la hoja «Grupo de pestañas nuevo», que en
-  iTerm2 trae el título de la pestaña seleccionado (`[field selectText:nil]`)
-  para que escribir lo reemplace.
-- **Qué ofrece hoy BarrierKit**: `TextField` envuelve el `Input` de Freya,
-  que limpia la selección cuando el valor cambia por fuera
+### BK-043 — `TextField` cannot open with its text selected
+- **Area**: controls
+- **What CurseTerm needed**: the “New Tab Group” sheet, which in iTerm2 shows
+  the tab's title selected (`[field selectText:nil]`) so typing replaces it.
+- **What BarrierKit offers today**: `TextField` wraps Freya's `Input`, which
+  clears the selection when the value changes from outside
   (`freya-components` 0.4.3 `input.rs:407`).
-- **Qué falta**: una opción para abrir el campo con todo seleccionado.
-- **Cómo lo resolví en CurseTerm**: no lo resolví; el campo trae el título y
-  ⌃A (`freya-edit` `text_editor.rs:627`) lo selecciona.
-- **Coste del workaround**: un atajo más para renombrar.
-- **API propuesta para el kit**: `TextField::select_on_focus(true)`.
-- **Gravedad**: baja
-- **Cómo reproducirlo**: Window › Tab › Add Tab to New Group… y escribir: el
-  texto se añade al título en vez de reemplazarlo.
+- **What is missing**: an option to open the field with everything selected.
+- **How I solved it in CurseTerm**: I did not; the field shows the title and
+  ⌃A (`freya-edit` `text_editor.rs:627`) selects it.
+- **Cost of the workaround**: one more shortcut to rename.
+- **Proposed kit API**: `TextField::select_on_focus(true)`.
+- **Severity**: low
+- **How to reproduce**: Window › Tab › Add Tab to New Group… and type: the
+  text is added to the title instead of replacing it.
 
-### BK-044 — Sin vista flotante que se mueva y redimensione dentro de la ventana
-- **Área**: vistas
-- **Qué necesitaba CurseTerm**: los paneles flotantes de iTerm2
-  (`iTermFloatingPaneView.swift`): un panel sobre los demás, con barra de
-  título para moverlo, una banda de 6 pt para redimensionarlo por bordes y
-  esquinas, contorno de 1 pt y sombra.
-- **Qué ofrece hoy BarrierKit**: `SplitPanes` reparte el espacio sin solapar y
-  `sheet` bloquea la ventana; nada se mueve ni se redimensiona con el ratón.
-- **Qué falta**: una vista con marco propio que se arrastre y redimensione.
-- **Cómo lo resolví en CurseTerm**: `barrier_kit_next::views::floating_pane`
-  (`FloatingPane` y `PaneFrame`); CurseTerm guarda el marco y lo ajusta a la
-  pestaña.
-- **Coste del workaround**: ninguno; el bloque es pequeño.
-- **API propuesta para el kit**: la de `FloatingPane`, con `on_frame` y
+### BK-044 — No floating view that moves and resizes inside the window
+- **Area**: views
+- **What CurseTerm needed**: iTerm2's floating panes
+  (`iTermFloatingPaneView.swift`): a pane above the others, with a title bar
+  to move it, a 6 pt band to resize it by edges and corners, a 1 pt outline
+  and a shadow.
+- **What BarrierKit offers today**: `SplitPanes` shares the space without
+  overlap and `sheet` blocks the window; nothing moves or resizes with the
+  mouse.
+- **What is missing**: a view with its own frame that can be dragged and
+  resized.
+- **How I solved it in CurseTerm**: `barrier_kit_next::views::floating_pane`
+  (`FloatingPane` and `PaneFrame`); CurseTerm keeps the frame and fits it to
+  the tab.
+- **Cost of the workaround**: none; the block is small.
+- **Proposed kit API**: that of `FloatingPane`, with `on_frame` and
   `on_raise`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: no aplica; es una vista que falta.
+- **Severity**: medium
+- **How to reproduce**: not applicable; it is a missing view.
 
-### BK-045 — Sin cliente del Secret Service de freedesktop
-- **Área**: plataforma
-- **Qué necesitaba CurseTerm**: el gestor de contraseñas de iTerm2, que guarda
-  las cuentas en el Keychain de macOS (`KeychainPasswordDataSource.swift`).
-  En Linux el equivalente es el Secret Service (`org.freedesktop.secrets`).
-- **Qué ofrece hoy BarrierKit**: `password::PasswordField` y `SecureField`
-  para escribir una contraseña, pero nada para guardarla.
-- **Qué falta**: buscar, leer, crear, cambiar y borrar elementos del Secret
-  Service.
-- **Cómo lo resolví en CurseTerm**: `barrier_kit_next::secrets` habla el
-  protocolo por zbus: `OpenSession` con el algoritmo `plain`, `SearchItems`,
-  `Unlock`, `GetSecret`, `CreateItem` en el alias `default`, `SetSecret` y
-  `Delete`. Si el servicio pide desbloquear, muestra su propia ventana y
-  devuelve `Error::Locked`.
-- **Coste del workaround**: no espera la señal `Completed` del aviso; hay que
-  recargar tras desbloquear.
-- **API propuesta para el kit**: la de `Secrets`, con `Item`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: no aplica; es un servicio que falta.
+### BK-045 — No freedesktop Secret Service client
+- **Area**: platform
+- **What CurseTerm needed**: iTerm2's password manager, which keeps accounts
+  in the macOS Keychain (`KeychainPasswordDataSource.swift`). On Linux the
+  counterpart is the Secret Service (`org.freedesktop.secrets`).
+- **What BarrierKit offers today**: `password::PasswordField` and
+  `SecureField` to type a password, but nothing to keep it.
+- **What is missing**: searching, reading, creating, changing and deleting
+  Secret Service items.
+- **How I solved it in CurseTerm**: `barrier_kit_next::secrets` speaks the
+  protocol over zbus: `OpenSession` with the `plain` algorithm, `SearchItems`,
+  `Unlock`, `GetSecret`, `CreateItem` in the `default` alias, `SetSecret` and
+  `Delete`. If the service asks to unlock, it shows its own window and
+  returns `Error::Locked`.
+- **Cost of the workaround**: it does not wait for the prompt's `Completed`
+  signal; reload after unlocking.
+- **Proposed kit API**: that of `Secrets`, with `Item`.
+- **Severity**: medium
+- **How to reproduce**: not applicable; it is a missing service.
 
-### BK-046 — `Resolved` no lleva la preferencia de contraste
-- **Área**: apariencia
-- **Qué necesitaba CurseTerm**: el estilo de pestañas de alto contraste
-  cuando el sistema lo pide, como `-it_mojaveTabStyle` de
-  `NSAppearance+iTerm.m`.
-- **Qué ofrece hoy BarrierKit**: `AppearanceConfig::contrast` en
-  `vow-appearance`, que se lee de `appearance.domain`.
-- **Qué falta**: `vow_appearance::Resolved` no copia `contrast`, y el runner
-  solo avisa cuando cambia `Resolved` (`platform/runtime.rs:261`).
-- **Cómo lo resolví en CurseTerm**: `theme::use_system_contrast` vuelve a leer
-  `load_appearance().contrast` cada vez que cambia `Resolved`.
-- **Coste del workaround**: un cambio de solo `contrast` no se ve hasta otro
-  cambio de apariencia o hasta abrir la ventana.
-- **API propuesta para el kit**: `Resolved::contrast: bool`.
-- **Gravedad**: baja
-- **Cómo reproducirlo**: escribir `contrast = true` en `appearance.domain` con
-  una ventana abierta: `resolved()` no cambia.
+### BK-046 — `Resolved` does not carry the contrast preference
+- **Area**: appearance
+- **What CurseTerm needed**: the high-contrast tab style when the system asks
+  for it, like `-it_mojaveTabStyle` in `NSAppearance+iTerm.m`.
+- **What BarrierKit offers today**: `AppearanceConfig::contrast` in
+  `vow-appearance`, read from `appearance.domain`.
+- **What is missing**: `vow_appearance::Resolved` does not copy `contrast`,
+  and the runner only notifies when `Resolved` changes
+  (`platform/runtime.rs:261`).
+- **How I solved it in CurseTerm**: `theme::use_system_contrast` reads
+  `load_appearance().contrast` again whenever `Resolved` changes.
+- **Cost of the workaround**: a change of `contrast` alone does not show until
+  another appearance change or until the window opens.
+- **Proposed kit API**: `Resolved::contrast: bool`.
+- **Severity**: low
+- **How to reproduce**: write `contrast = true` in `appearance.domain` with a
+  window open: `resolved()` does not change.
 
-### BK-047 — Las animaciones de `freya-animation` no reciben fotogramas
-- **Área**: plataforma / animación
-- **Qué necesitaba CurseTerm**: el fundido de 0,2 s del hover de las pestañas
+### BK-047 — `freya-animation` animations get no frames
+- **Area**: platform / animation
+- **What CurseTerm needed**: the 0.2 s fade of the tab hover
   (`PSMTabBarCell.m -highlightAmount`).
-- **Qué ofrece hoy BarrierKit**: el runner envía el `RenderingTicker` tras cada
-  `present` (`platform/surface.rs:231`).
-- **Qué falta**: con `use_animation_transition` dentro de un componente, la
-  animación no avanza tras el primer repintado: no hay más dibujos hasta otro
-  evento, y entonces salta al final.
-- **Cómo lo resolví en CurseTerm**: como iTerm2, la pestaña guarda el instante
-  del cambio y pide un repintado cada 16 ms con `Timers::after` mientras dura.
-- **Coste del workaround**: un temporizador por fotograma en lugar del reloj de
-  animación.
-- **API propuesta para el kit**: que `UserEvent::RequestRedraw` produzca un
-  fotograma aunque el árbol no cambie.
-- **Gravedad**: media
-- **Cómo reproducirlo**: un `rect` cuyo color sale de
-  `use_animation_transition` sobre un `State<bool>`; cambiar el estado con el
-  ratón quieto: el color no cambia hasta mover el ratón.
+- **What BarrierKit offers today**: the runner sends the `RenderingTicker`
+  after each `present` (`platform/surface.rs:231`).
+- **What is missing**: with `use_animation_transition` inside a component, the
+  animation does not advance after the first redraw: there are no more draws
+  until another event, and then it jumps to the end.
+- **How I solved it in CurseTerm**: like iTerm2, the tab keeps the moment of
+  the change and asks for a redraw every 16 ms with `Timers::after` while it
+  lasts.
+- **Cost of the workaround**: one timer per frame instead of the animation
+  clock.
+- **Proposed kit API**: that `UserEvent::RequestRedraw` produces a frame even
+  when the tree does not change.
+- **Severity**: medium
+- **How to reproduce**: a `rect` whose colour comes from
+  `use_animation_transition` over a `State<bool>`; change the state with the
+  mouse still: the colour does not change until the mouse moves.
 
-### BK-048 — Sin forma de declarar la barra al dibujarla sin `Titlebar`
-- **Área**: ventana / chrome
-- **Qué necesitaba CurseTerm**: el radio de esquina de una ventana con barra de
-  título simple (28 px) o con pestañas en la barra (estilos Compacto y Mínimo).
-- **Qué ofrecía BarrierKit**: solo `Titlebar` enviaba
-  `infinity_window_style_v1.set_bar`; `WindowControls::set_bar` era
+### BK-048 — No way to declare the bar when drawing it without `Titlebar`
+- **Area**: window / chrome
+- **What CurseTerm needed**: the corner radius of a window with a plain title
+  bar (28 px) or with tabs in the bar (Compact and Minimal styles).
+- **What BarrierKit offered**: only `Titlebar` sent
+  `infinity_window_style_v1.set_bar`; `WindowControls::set_bar` was
   `pub(crate)`.
-- **Qué faltaba**: sin barra declarada, Malaysia trata la ventana CSD como
-  `unified` (26). Su curva tapaba los semáforos de una barra de 28 px.
-- **Cómo se resolvió**: barrierkit `36e5958` hace públicos `set_bar` y `Bar`.
-  CurseTerm declara `titlebar` o `compact` según su chrome, y separa los
-  semáforos del borde con `vow_appearance::traffic::inset`.
-- **Gravedad**: media
-- **Cómo reproducirlo**: abrir CurseTerm con el estilo Normal en Malaysia: el
-  botón rojo toca la esquina.
+- **What was missing**: with no declared bar, Malaysia treats the CSD window as
+  `unified` (26). Its curve covered the traffic lights of a 28 px bar.
+- **How it was solved**: barrierkit `36e5958` makes `set_bar` and `Bar` public.
+  CurseTerm declares `titlebar` or `compact` from its chrome, and keeps the
+  traffic lights off the edge with `vow_appearance::traffic::inset`.
+- **Severity**: medium
+- **How to reproduce it**: open CurseTerm with the Normal style on Malaysia:
+  the red button touches the corner.
 
-## Cosas que funcionaron bien
+## Things that worked well
 
-Comprobado en la fase 1 (sway sin pantalla, lavapipe):
+Checked in phase 1 (headless sway, lavapipe):
 
-- **Arranque fuera de Malaysia:** el runner sigue sin
-  `org_kde_kwin_appmenu_manager` ni los protocolos Infinity y lo registra con
+- **Startup outside Malaysia:** the runner carries on without
+  `org_kde_kwin_appmenu_manager` or the Infinity protocols and logs it with
   `tracing::info!`.
-- **Render de rejilla a alta frecuencia:** con el bloque `canvas`, `seq 1 300`
-  y el listado en color se dibujan sin retraso visible en un build de
-  depuración, y en reposo no hay frames (1 % de CPU).
-- **Métricas de fuente y respaldo:** Geist Mono del dev shell y el respaldo de
-  Skia (`match_family_style_character`) para CJK; los anchos dobles encajan.
-- **Escala fraccional:** a 1,5 el texto sale nítido y las celdas sin costuras.
-- **Portapapeles de texto:** copiar y pegar con otras apps (`wl-copy`,
-  `wl-paste`) funciona en los dos sentidos, también desde OSC 52.
-- **Apariencia en vivo:** cambiar `appearance.domain` repinta al momento las
-  ventanas del kit (Ajustes) y CurseTerm.
-- **`use_defaults` entre procesos:** Ajustes guarda el `.domain` y la ventana
-  del terminal lo recibe en vivo.
-- **Patrones:** `PreferencesWindow`, `Form`, `Stepper`, `TextField`,
-  `PopUpButton` y `about_window` sirvieron sin cambios; la barra lateral se
-  pliega sola por debajo de 760 px.
-- **Teclado:** `KeyboardEventData` trae `Key` y modificadores suficientes para
-  un codificador xterm; Alt, Ctrl y las teclas con nombre llegan bien.
-- **Estado vivo del menú:** `MenuHandle::update` publica el cambio por D-Bus
-  (revisión 1 → 3 al seleccionar).
-- **Cursor por forma:** `Cursor::set(CursorIcon::Text)` sobre la rejilla.
+- **High-frequency grid rendering:** with the `canvas` block, `seq 1 300`
+  and the colored listing draw with no visible lag in a debug
+  build, and at rest there are no frames (1 % CPU).
+- **Font metrics and fallback:** Geist Mono from the dev shell and Skia's
+  fallback (`match_family_style_character`) for CJK; double widths fit.
+- **Fractional scale:** at 1.5 the text is sharp and the cells have no seams.
+- **Text clipboard:** copy and paste with other apps (`wl-copy`,
+  `wl-paste`) works both ways, also from OSC 52.
+- **Live appearance:** changing `appearance.domain` instantly repaints the
+  kit's windows (Settings) and CurseTerm.
+- **`use_defaults` across processes:** Settings saves the `.domain` and the terminal
+  window receives it live.
+- **Patterns:** `PreferencesWindow`, `Form`, `Stepper`, `TextField`,
+  `PopUpButton` and `about_window` worked unchanged; the sidebar
+  collapses by itself below 760 px.
+- **Keyboard:** `KeyboardEventData` carries `Key` and enough modifiers for
+  an xterm encoder; Alt, Ctrl and the named keys arrive fine.
+- **Live menu state:** `MenuHandle::update` publishes the change over D-Bus
+  (revision 1 → 3 on selection).
+- **Cursor by shape:** `Cursor::set(CursorIcon::Text)` over the grid.
 
-- **Controles para unos Ajustes como los de iTerm2 (fase 3):** `TabView` es
-  justo la barra de pestañas con icono de la ventana Settings de iTerm2;
-  `Table` con selección, `SegmentedControl`, `Switch`, `Stepper`,
-  `PopUpButton` y `Form` cubrieron el editor de perfiles sin dibujar nada a
-  mano.
+- **Controls for iTerm2-like Settings (phase 3):** `TabView` is
+  exactly the icon tab bar of iTerm2's Settings window;
+  `Table` with selection, `SegmentedControl`, `Switch`, `Stepper`,
+  `PopUpButton` and `Form` covered the profile editor without drawing anything by
+  hand.
 
-- **Lo característico de iTerm2 (fase 4):** el bloque `canvas` dibujó sin
-  elementos extra las franjas de broadcast, los triángulos de marca, el
-  resaltado de triggers, la campana y las imágenes en línea, decodificadas con
-  `Image::from_encoded` de `freya-engine`. `Timers::after` sirvió para apagar
-  la campana; `SearchField` con `auto_focus` y `on_navigate` dio la barra de
-  búsqueda; `use_submenu_items` reconstruye el grupo de radio de Broadcast
-  Input y el host lo ve por D-Bus.
+- **iTerm2's signature features (phase 4):** the `canvas` block drew, without
+  extra elements, the broadcast stripes, the mark triangles, the
+  trigger highlighting, the bell and the inline images, decoded with
+  `Image::from_encoded` from `freya-engine`. `Timers::after` served to turn off
+  the bell; `SearchField` with `auto_focus` and `on_navigate` gave the search
+  bar; `use_submenu_items` rebuilds the Broadcast
+  Input radio group and the host sees it over D-Bus.
 
-Sin probar todavía: menú contextual, arrastrar y soltar, menú global en la
-barra de Malaysia, GNOME y KDE reales.
+Not tested yet: context menu, drag and drop, global menu in the
+Malaysia bar, real GNOME and KDE.
 
-## Documentación de BarrierKit
+## BarrierKit documentation
 
-- `docs/barrierkit/04-apariencia-y-tokens.md:33` dice que los JSON generan
-  Slint, CSS y QML en `tengen/generated/`; esa carpeta no existe en `ba58ce0`.
-- `docs/barrierkit/01-que-es.md:30` cuenta «cinco apps de prueba»; hay tres.
-- `docs/barrierkit/11-app.md` no menciona `MenuHandle` ni `update`, la única
-  vía para cambiar el menú en vivo (la usa `app/undo.rs:111`).
-- `docs/barrierkit/11-app.md` no dice que un atajo despachado llega también
-  como tecla a la app.
-- `README.md` y `docs/barrierkit/11-app.md` dicen que sin
-  `org_kde_kwin_appmenu_manager` el menú sigue en D-Bus; el código no lo
-  publica (BK-018).
-- `docs/barrierkit/11-app.md` dice que el handler de una acción corre «en el
-  hilo de la interfaz», pero no avisa de que corre fuera del contexto de Freya
+- `docs/barrierkit/04-apariencia-y-tokens.md:33` says the JSON files generate
+  Slint, CSS and QML in `tengen/generated/`; that folder does not exist in `ba58ce0`.
+- `docs/barrierkit/01-que-es.md:30` counts «cinco apps de prueba» (five test apps); there are three.
+- `docs/barrierkit/11-app.md` does not mention `MenuHandle` or `update`, the only
+  way to change the menu live (`app/undo.rs:111` uses it).
+- `docs/barrierkit/11-app.md` does not say that a dispatched shortcut also reaches
+  the app as a key.
+- `README.md` and `docs/barrierkit/11-app.md` say that without
+  `org_kde_kwin_appmenu_manager` the menu stays on D-Bus; the code does not
+  publish it (BK-018).
+- `docs/barrierkit/11-app.md` says an action's handler runs «en el
+  hilo de la interfaz» (on the UI thread), but does not warn that it runs outside Freya's context
   (BK-017).
-- `docs/barrierkit/07-titlebars.md` dice que `.close_only(true)` «deja solo el
-  botón de cerrar»; el código (`traffic.rs:126`) dibuja también minimizar y
-  maximizar, en gris.
-- `docs/barrierkit/16-preguntas.md` invita a usar `rect` de Freya directamente,
-  pero ningún capítulo dice que `Size::flex` solo reparte si el padre tiene
-  `.content(Content::flex())`; sin él, el primer hijo ocupa todo (lo vimos con
-  los paneles).
-- Nada documenta el signo de `WheelEventData::delta_y`: el runner pasa el eje
-  de Wayland tal cual (`platform/input/seat.rs:301`), negativo hacia arriba.
+- `docs/barrierkit/07-titlebars.md` says `.close_only(true)` «deja solo el
+  botón de cerrar» (leaves only the close button); the code (`traffic.rs:126`) also draws minimize and
+  maximize, in gray.
+- `docs/barrierkit/16-preguntas.md` invites using Freya's `rect` directly,
+  but no chapter says that `Size::flex` only distributes if the parent has
+  `.content(Content::flex())`; without it, the first child takes everything (we saw it with
+  the panes).
+- Nothing documents the sign of `WheelEventData::delta_y`: the runner passes the
+  Wayland axis as is (`platform/input/seat.rs:301`), negative upward.

@@ -2,7 +2,7 @@
 
 CurseTerm sigue las convenciones de
 [`barrierkit/AGENTS.md`](https://github.com/HBlanqueto/barrierkit/blob/main/AGENTS.md):
-rol, «Documentación (español e inglés)», «Código mínimo» (reglas 1–10) y
+rol, «Documentación (solo inglés)», «Código mínimo» (reglas 1–10) y
 formato de commits. Aquí solo lo propio.
 
 ## Reglas del proyecto
@@ -15,8 +15,8 @@ formato de commits. Aquí solo lo propio.
    del terminal son datos de esquema (`crates/curseterm/schemes/*.toml`).
 3. **Texto visible por Fluent:** `crates/curseterm/i18n/{en,es}/curseterm.ftl` y `tr!`.
 4. **Atajos con Super** (ADR 0003).
-5. **Docs en español (`nombre.md`) e inglés (`nombre.en.md`)**, que cambian
-   en el mismo commit; código, comentarios y rustdoc solo en inglés.
+5. **Docs solo en inglés (`nombre.md`)**, sin copias en español; código,
+   comentarios y rustdoc también en inglés.
 6. **Nada se da por probado sin ejecutarlo**; lo no probado se dice en
    `docs/progreso.md`.
 

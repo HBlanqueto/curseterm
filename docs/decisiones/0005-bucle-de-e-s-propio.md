@@ -1,42 +1,42 @@
-# 0005 — Bucle de E/S propio para ver los OSC de iTerm2
+# 0005 — Own I/O loop to see iTerm2's OSCs
 
-Estado: **aceptado** (2026-11-05). Sustituye el punto 2 del ADR 0002; el
-punto 4 (un `vte::Parser` en paralelo) se descarta.
+Status: **accepted** (2026-11-05). It supersedes point 2 of ADR 0002; point 4
+(a parallel `vte::Parser`) is dropped.
 
-## Contexto
+## Context
 
-La fase 4 necesita los OSC de iTerm2 que `alacritty_terminal` ignora: 133
-(marcas de la shell), 1337 (directorio actual, marcas, imágenes en línea) y 7
-(directorio actual). Además, una imagen en línea tiene que ocupar su sitio en
-la rejilla en el mismo orden que el texto que la rodea.
+Phase 4 needs the iTerm2 OSCs that `alacritty_terminal` ignores: 133
+(shell marks), 1337 (current directory, marks, inline images) and 7
+(current directory). Also, an inline image must take its place in
+the grid in the same order as the text around it.
 
-`alacritty_terminal::event_loop::EventLoop` lee el PTY en su hilo y pasa los
-bytes al `Term` sin ofrecer ningún gancho. Un segundo parser en paralelo no
-ve el orden entre texto e imagen.
+`alacritty_terminal::event_loop::EventLoop` reads the PTY on its own thread and passes the
+bytes to the `Term` without offering any hook. A second parallel parser does not
+see the order between text and image.
 
-## Decisión
+## Decision
 
-1. CurseTerm lee el PTY en un hilo propio (`crates/curseterm/src/io.rs`): un
-   duplicado del lector de `tty::Pty`, `rustix::event::poll` y un
-   `vte::ansi::Processor` que alimenta el `Term` igual que el bucle de
-   Alacritty, incluido el corte de las actualizaciones sincronizadas
+1. CurseTerm reads the PTY on its own thread (`crates/curseterm/src/io.rs`): a
+   duplicate of the `tty::Pty` reader, `rustix::event::poll` and a
+   `vte::ansi::Processor` that feeds the `Term` just like Alacritty's loop,
+   including the cutoff of synchronized updates
    (`sync_timeout`).
-2. Antes del `Processor`, un separador puro (`osc.rs`) saca del flujo los OSC
-   7, 9, 133 y 1337 y deja el resto en orden. Cada OSC se atiende con el `Term`
-   bloqueado, entre los trozos de texto que lo rodean.
-3. La escritura va por un hilo con canal; el redimensionado, por
-   `OnResize` del `Pty`, que vive en la sesión.
+2. Before the `Processor`, a pure splitter (`osc.rs`) pulls OSC
+   7, 9, 133 and 1337 out of the stream and keeps the rest in order. Each OSC is handled with the `Term`
+   locked, between the text chunks around it.
+3. Writing goes through a thread with a channel; resizing, through
+   the `Pty`'s `OnResize`, which lives in the session.
 
-## Consecuencias
+## Consequences
 
-- Se deja de usar `EventLoop`; lo demás de `alacritty_terminal` sigue igual.
-- El separador es lógica pura con tests (OSC partidos entre lecturas, BEL y
-  ST, OSC que no son de iTerm2).
+- `EventLoop` is no longer used; the rest of `alacritty_terminal` stays the same.
+- The splitter is pure logic with tests (OSCs split across reads, BEL and
+  ST, OSCs that are not iTerm2's).
 
-## Referencias
+## References
 
-- `alacritty_terminal-0.26.0/src/event_loop.rs` (bucle original y su manejo
-  de `sync_timeout`).
-- Documentación de iTerm2 sobre secuencias propias e imágenes en línea:
-  https://iterm2.com/documentation-escape-codes.html y
+- `alacritty_terminal-0.26.0/src/event_loop.rs` (original loop and its handling
+  of `sync_timeout`).
+- iTerm2 documentation on its own sequences and inline images:
+  https://iterm2.com/documentation-escape-codes.html and
   https://iterm2.com/documentation-images.html

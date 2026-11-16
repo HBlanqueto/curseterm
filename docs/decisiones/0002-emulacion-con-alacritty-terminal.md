@@ -1,44 +1,44 @@
-# 0002 — Emulación y PTY con `alacritty_terminal`
+# 0002 — Emulation and PTY with `alacritty_terminal`
 
-Estado: **aceptado** (2026-11-05).
+Status: **accepted** (2026-11-05).
 
-## Contexto
+## Context
 
-El encargo pide no reinventar la emulación y elegir entre
-[`alacritty_terminal`](https://docs.rs/alacritty_terminal/0.26.0) y
-[`vte`](https://docs.rs/vte/0.15.0), con el PTY por `rustix`/`nix` o
+The brief asks not to reinvent emulation and to choose between
+[`alacritty_terminal`](https://docs.rs/alacritty_terminal/0.26.0) and
+[`vte`](https://docs.rs/vte/0.15.0), with the PTY through `rustix`/`nix` or
 `portable-pty`.
 
-| | `alacritty_terminal` 0.26.0 (Apache-2.0) | `vte` 0.15.0 (Apache-2.0 o MIT) |
+| | `alacritty_terminal` 0.26.0 (Apache-2.0) | `vte` 0.15.0 (Apache-2.0 or MIT) |
 |---|---|---|
-| Parser | `vte` | Es el parser |
-| Rejilla, scrollback, reflow al redimensionar | Sí (`grid`, `Term::resize`) | No |
-| Selección (simple, palabra, línea, bloque) | Sí (`selection`) | No |
-| Búsqueda regex en el buffer | Sí (`term::search`) | No |
-| PTY | `tty::new` con `rustix-openpty`; `OnResize` hace `TIOCSWINSZ`, que manda `SIGWINCH` | No |
-| Bucle de E/S | `event_loop::EventLoop` en su hilo, con `Notifier` para escribir | No |
-| OSC propios de iTerm2 (1337, 133) | Los ignora | Se pueden parsear |
+| Parser | `vte` | It is the parser |
+| Grid, scrollback, reflow on resize | Yes (`grid`, `Term::resize`) | No |
+| Selection (simple, word, line, block) | Yes (`selection`) | No |
+| Regex search in the buffer | Yes (`term::search`) | No |
+| PTY | `tty::new` with `rustix-openpty`; `OnResize` does `TIOCSWINSZ`, which sends `SIGWINCH` | No |
+| I/O loop | `event_loop::EventLoop` on its own thread, with `Notifier` for writing | No |
+| iTerm2's own OSCs (1337, 133) | Ignores them | Can be parsed |
 
-## Decisión
+## Decision
 
-1. **`alacritty_terminal` 0.26** para la emulación, el scrollback, la
-   selección, la búsqueda y el PTY. `portable-pty` no hace falta.
-2. Su `EventLoop` corre en su hilo. El `EventListener` de CurseTerm guarda un
-   `barrier_kit::platform::WakeHandle` (de `Timers::wakeup`) y lo despierta en
-   cada `Event`; el callback, en el hilo de interfaz, sube una revisión que
-   repinta.
-3. La rejilla se lee bajo el `FairMutex` del `Term` y se dibuja con el lienzo
-   de `barrier-kit-next` (ADR 0001, BK-009).
-4. Para OSC 1337 y 133 (fase 4) se pasa el mismo flujo de bytes por un
-   `vte::Parser` propio que solo atiende esos OSC.
+1. **`alacritty_terminal` 0.26** for emulation, scrollback,
+   selection, search and the PTY. `portable-pty` is not needed.
+2. Its `EventLoop` runs on its own thread. CurseTerm's `EventListener` holds a
+   `barrier_kit::platform::WakeHandle` (from `Timers::wakeup`) and wakes it on
+   each `Event`; the callback, on the UI thread, bumps a revision that
+   repaints.
+3. The grid is read under the `Term`'s `FairMutex` and drawn with the
+   `barrier-kit-next` canvas (ADR 0001, BK-009).
+4. For OSC 1337 and 133 (phase 4), the same byte stream goes through a
+   dedicated `vte::Parser` that handles only those OSCs.
 
-## Consecuencias
+## Consequences
 
-- Las funciones de iTerm2 que dependen del modelo de pantalla (marcas,
-  imágenes en línea) se guardan junto a la rejilla, indexadas por línea.
-- La API de `alacritty_terminal` no es estable; el `rev` se fija en
-  `Cargo.lock` y se sube a mano.
+- iTerm2 features that depend on the screen model (marks,
+  inline images) are stored next to the grid, indexed by line.
+- The `alacritty_terminal` API is not stable; the `rev` is pinned in
+  `Cargo.lock` and bumped by hand.
 
-## Referencias
+## References
 
 - `alacritty_terminal-0.26.0/src/{event.rs,event_loop.rs,tty/unix.rs,term/mod.rs}`.
