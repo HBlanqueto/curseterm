@@ -21,7 +21,8 @@ the old document: `git show bc27a76:docs/barrierkit-gaps.md`.
 ## Gaps
 
 States: **open** (no API in the kit), **fixed** (the kit has it; remove the
-workaround) and **not re-checked**.
+workaround once the `rev` is past the commit that fixed it) and **not
+re-checked**.
 
 | ID | Gap | Workaround in CurseTerm | State at `1bf778c` |
 |---|---|---|---|
@@ -31,13 +32,13 @@ workaround) and **not re-checked**.
 | BK-017 | Menu handlers run outside Freya's context | handles taken in `render` (`terminal.rs`) | not re-checked |
 | BK-019 | An app cannot ask for an xdg-activation token | none; «Window» lists no windows | open: `platform/activation.rs` serves only the kit |
 | BK-020 | Labels of panes, rows and pop-ups are `&'static str` | `preferences::intern` leaks each name once | open: `PopUpButton::new` and `item` take `&'static str` |
-| BK-021 | `RadioGroup` is always horizontal | one single-option group per row (`preferences.rs`) | fixed: `RadioGroup` takes `Axis::Vertical` |
-| BK-024 | No bell or trash symbol | `SpeakerWave` for the bell; a drawn trash (`note_view.rs`) | bell fixed (`Symbol::Bell`); trash open |
+| BK-021 | `RadioGroup` is always horizontal | one single-option group per row (`preferences.rs`) | fixed in `afe570e`, after the pin: `RadioGroup` takes `Axis::Vertical` |
+| BK-024 | No bell or trash symbol | `SpeakerWave` for the bell; a drawn trash (`note_view.rs`) | bell fixed in `7a3464b`, after the pin (`Symbol::Bell`); trash open |
 | BK-025 | No global shortcuts or way to show and hide the window | `curseterm --hotkey` (`windows.rs`) | open: no GlobalShortcuts portal |
 | BK-027 | A view with global keys cannot tell whether a text field or an `Alert` keeps the key | the sheet closes one loop later (`terminal.rs`) | not re-checked |
 | BK-030 | Mouse events carry no modifiers | modifiers tracked from the keyboard (`terminal.rs`) | open: Freya 0.5.0 `MouseEventData` has only locations and button |
 | BK-032 | `Timers` callbacks outlive their window | `Handles::after` checks `alive` | not re-checked; the kit has `use_alive` |
-| BK-037 | `Alert` has two buttons and cannot be silenced | own three-button sheet (`terminal.rs`) | partly fixed: `Alert::suppression` exists; still two buttons |
+| BK-037 | `Alert` has two buttons and cannot be silenced | own three-button sheet (`terminal.rs`) | partly fixed: `Alert::suppression` exists at the pin; still two buttons |
 | BK-040 | `PopUpButton` neither scrolls nor filters | groups and a filter field (`key_bindings.rs`) | open: no such method in `popup_button.rs` |
 
 Gaps of the old document with no `BK-nnn` comment in the code (BK-014, 015,
