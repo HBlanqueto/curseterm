@@ -14,9 +14,20 @@ pub fn url_span(text: &str, columns: &[usize], column: usize) -> Option<Range<us
     URL.find_iter(text)
         .find(|found| columns[found.start()] <= column && column <= columns[found.end() - 1])
         .map(|found| {
-            let kept = found.as_str().trim_end_matches(['.', ',', ';', ':', ')']);
-            found.start()..found.start() + kept.len()
+            found.start()..found.start() + without_trailing_punctuation(found.as_str()).len()
         })
+}
+
+fn without_trailing_punctuation(url: &str) -> &str {
+    let mut kept = url;
+    while let Some(last) = kept.chars().last() {
+        let closes_unopened = last == ')' && kept.matches(')').count() > kept.matches('(').count();
+        if !(matches!(last, '.' | ',' | ';' | ':') || closes_unopened) {
+            break;
+        }
+        kept = &kept[..kept.len() - 1];
+    }
+    kept
 }
 
 pub fn url_at(text: &str, columns: &[usize], column: usize) -> Option<String> {
@@ -65,6 +76,16 @@ mod tests {
             Some("mailto:yo@example.org".to_string())
         );
         assert_eq!(url_at(text, &columns, 1), None);
+    }
+
+    #[test]
+    fn a_url_keeps_the_parenthesis_that_closes_its_own() {
+        let text = "ver https://es.wikipedia.org/wiki/Rust_(lenguaje).";
+        let columns: Vec<usize> = (0..text.len()).collect();
+        assert_eq!(
+            url_at(text, &columns, 10),
+            Some("https://es.wikipedia.org/wiki/Rust_(lenguaje)".to_string())
+        );
     }
 
     #[test]
