@@ -15,6 +15,7 @@ use crate::archive;
 use crate::arrangement::Arrangement;
 use crate::config::{APP_ID, APP_NAME, Defaults};
 use crate::grid::Fonts;
+use crate::io::spawn_reaped;
 use crate::{auxiliary, menu, preferences, terminal, theme};
 
 thread_local! {
@@ -195,7 +196,7 @@ pub fn open(arguments: &[&str]) {
         tracing::warn!("cannot find the CurseTerm executable");
         return;
     };
-    if let Err(error) = Command::new(exe).args(arguments).spawn() {
+    if let Err(error) = spawn_reaped(Command::new(exe).args(arguments)) {
         tracing::warn!(%error, "could not open a CurseTerm window");
     }
 }

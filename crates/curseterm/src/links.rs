@@ -1,9 +1,10 @@
 use std::ops::Range;
 use std::process::Command;
 use std::sync::LazyLock;
-use std::thread;
 
 use regex::Regex;
+
+use crate::io::spawn_reaped;
 
 static URL: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?:https?|ftp|file)://[^\s<>"'`]+|mailto:[^\s<>"'`]+"#)
@@ -51,11 +52,8 @@ pub fn word_span(text: &str, columns: &[usize], column: usize) -> Option<Range<u
 }
 
 pub fn open(target: &str) {
-    match Command::new("xdg-open").arg(target).spawn() {
-        Ok(mut child) => {
-            thread::spawn(move || child.wait());
-        }
-        Err(error) => tracing::warn!(%error, "could not run xdg-open"),
+    if let Err(error) = spawn_reaped(Command::new("xdg-open").arg(target)) {
+        tracing::warn!(%error, "could not run xdg-open");
     }
 }
 

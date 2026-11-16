@@ -788,19 +788,21 @@ fn for_each_cell(
 }
 
 // PTYSession.m -triggerSideEffectRunBackgroundCommand:pool:: the user's shell runs it unattended.
+pub fn spawn_reaped(command: &mut std::process::Command) -> io::Result<()> {
+    let mut child = command.spawn()?;
+    std::thread::spawn(move || child.wait());
+    Ok(())
+}
+
 pub fn run_command(command: &str) {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
-    match std::process::Command::new(shell)
-        .args(["-c", command])
+    let mut run = std::process::Command::new(shell);
+    run.args(["-c", command])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-    {
-        Ok(mut child) => {
-            std::thread::spawn(move || child.wait());
-        }
-        Err(error) => tracing::warn!(%error, "a Run Command trigger could not start"),
+        .stderr(std::process::Stdio::null());
+    if let Err(error) = spawn_reaped(&mut run) {
+        tracing::warn!(%error, "a Run Command trigger could not start");
     }
 }
 
