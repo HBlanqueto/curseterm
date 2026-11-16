@@ -88,7 +88,7 @@ pub fn typeface(manager: &FontMgr, family: &str, style: FontStyle) -> Typeface {
     manager
         .match_family_style(family, style)
         .or_else(|| manager.legacy_make_typeface(None, style))
-        .expect("the font manager has no fonts")
+        .unwrap_or_else(|| Font::default().typeface())
 }
 
 pub fn font(typeface: Typeface, size: f32) -> Font {
@@ -731,6 +731,12 @@ fn draw_cursor(
 mod tests {
     use super::*;
     use crate::config::SCHEMES;
+
+    #[test]
+    fn a_system_without_fonts_still_gets_a_typeface() {
+        let face = typeface(&FontMgr::empty(), "Geist Mono", FontStyle::normal());
+        assert!(font(face, 14.0).measure_str("a", None).0 >= 0.0);
+    }
 
     #[test]
     fn the_256_colour_cube_and_grey_ramp_follow_xterm() {
