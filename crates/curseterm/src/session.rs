@@ -140,7 +140,7 @@ pub struct Session {
     runs_command: bool,
     pub started: Instant,
     ended: Cell<bool>,
-    options: Cell<(usize, CursorStyle, bool)>,
+    options: Cell<(CursorStyle, bool)>,
     restored_from_archive: Cell<bool>,
     coprocess: RefCell<Option<Child>>,
     switcher: RefCell<Switcher>,
@@ -203,7 +203,10 @@ impl Session {
         let mut pty = tty::new(&options, size.window_size(), id)?;
         let shell_pid = pty.child().id();
         let term = Arc::new(FairMutex::new(Term::new(
-            Config::default(),
+            Config {
+                scrolling_history: pty_io::UNBOUNDED_HISTORY,
+                ..Config::default()
+            },
             &size.term_size(),
             listener.clone(),
         )));
@@ -224,11 +227,7 @@ impl Session {
             runs_command,
             started: Instant::now(),
             ended: Cell::new(false),
-            options: Cell::new((
-                Config::default().scrolling_history,
-                CursorStyle::default(),
-                false,
-            )),
+            options: Cell::new((CursorStyle::default(), false)),
             restored_from_archive: Cell::new(false),
             coprocess: RefCell::new(None),
             switcher: RefCell::default(),
@@ -260,6 +259,7 @@ impl Session {
             extras.set_smart_selection_rules(&profile.smart_selection_rules);
             *self.semantic_history.borrow_mut() = profile.semantic_history.clone();
             extras.apps_change_key_mode = profile.apps_change_key_reporting;
+            extras.history_limit = profile.scrollback_lines.min(SCROLLBACK_LIMIT) as usize;
             // PTYSession.m -setProfile: a profile asking for CSI u sets the session's mode.
             match (profile.report_keys_csi_u, extras.key_mode) {
                 (true, KeyMode::Standard) => extras.key_mode = KeyMode::CsiU,
@@ -267,7 +267,6 @@ impl Session {
                 _ => {}
             }
         }
-        let lines = profile.scrollback_lines.min(SCROLLBACK_LIMIT) as usize;
         let shape = match profile.cursor {
             CursorType::Box => CursorShape::Block,
             CursorType::VerticalBar => CursorShape::Beam,
@@ -278,14 +277,15 @@ impl Session {
             blinking: profile.blinking_cursor,
         };
         let kitty = profile.apps_change_key_reporting;
-        if self.options.replace((lines, cursor, kitty)) != (lines, cursor, kitty) {
+        if self.options.replace((cursor, kitty)) != (cursor, kitty) {
             self.term.lock().set_options(Config {
-                scrolling_history: lines,
+                scrolling_history: pty_io::UNBOUNDED_HISTORY,
                 default_cursor_style: cursor,
                 kitty_keyboard: kitty,
                 ..Config::default()
             });
         }
+        pty_io::drop_excess_history(&mut self.term.lock(), &mut self.extras());
     }
 
     pub fn key_mode(&self) -> KeyMode {
@@ -863,7 +863,7 @@ impl Session {
         if !inside.is_empty() {
             inside.sort_unstable_by(|a, b| b.cmp(a));
             for line in inside {
-                unfold(&mut term, &mut extras, line, self.options.get().0);
+                unfold(&mut term, &mut extras, line);
             }
             return;
         }
@@ -874,14 +874,7 @@ impl Session {
         let hidden = lines.end - lines.start - 2;
         let middle = tr!("fold-middle", count = hidden);
         let placeholder = buffer_edit::fold_placeholder(&rows, term.columns(), &middle);
-        fold(
-            &mut term,
-            &mut extras,
-            lines,
-            rows,
-            placeholder,
-            self.options.get().0,
-        );
+        fold(&mut term, &mut extras, lines, rows, placeholder);
     }
 
     // PTYTextView.swift -foldAllAboveCursor: from the first line that is not a fold to the one
@@ -909,14 +902,7 @@ impl Session {
         };
         let rows = buffer_edit::rows_of(&term, lines.clone());
         let placeholder = buffer_edit::fold_all_placeholder(&text, term.columns());
-        fold(
-            &mut term,
-            &mut extras,
-            lines,
-            rows,
-            placeholder,
-            self.options.get().0,
-        );
+        fold(&mut term, &mut extras, lines, rows, placeholder);
     }
 
     // PTYTextView+ARC.m -selectionIsEligibleForReplacement: and the JSON check: one selection of
@@ -945,8 +931,7 @@ impl Session {
             return;
         };
         let mut term = self.term.lock();
-        let limit = self.options.get().0;
-        buffer_edit::replace_lines(&mut term, &mut self.extras(), lines, rows, limit);
+        buffer_edit::replace_lines(&mut term, &mut self.extras(), lines, rows);
     }
 
     // PTYSession.m -arrangementWithContents:: every line up to the cursor or the last one written.
@@ -986,8 +971,7 @@ impl Session {
                 row
             })
             .collect();
-        let limit = self.options.get().0;
-        buffer_edit::replace_lines(&mut term, &mut self.extras(), 0..0, rows, limit);
+        buffer_edit::replace_lines(&mut term, &mut self.extras(), 0..0, rows);
     }
 
     // PseudoTerminal.m -zoomOnSelection:: the selected lines alone, as a session that only shows.
@@ -1630,21 +1614,20 @@ fn fold(
     lines: Range<i64>,
     rows: Vec<Row<GridCell>>,
     placeholder: Row<GridCell>,
-    limit: usize,
 ) {
-    let placed = buffer_edit::replace_lines(term, extras, lines, vec![placeholder], limit);
+    let placed = buffer_edit::replace_lines(term, extras, lines, vec![placeholder]);
     extras.folds.push(Fold {
         line: placed.start,
         rows,
     });
 }
 
-fn unfold(term: &mut Term<Listener>, extras: &mut Extras, line: i64, limit: usize) {
+fn unfold(term: &mut Term<Listener>, extras: &mut Extras, line: i64) {
     let Some(at) = extras.folds.iter().position(|fold| fold.line == line) else {
         return;
     };
     let fold = extras.folds.remove(at);
-    buffer_edit::replace_lines(term, extras, line..line + 1, fold.rows, limit);
+    buffer_edit::replace_lines(term, extras, line..line + 1, fold.rows);
 }
 
 pub static SOFT_BOUNDARIES: AtomicBool = AtomicBool::new(false);

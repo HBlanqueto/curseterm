@@ -228,10 +228,6 @@ default profile).
 **Not tested:** several annotations on the same line or Next wrapping to the
 start; a note in an unfocused pane.
 
-**Fails:** with a full scrollback, the lines that leave at the top shift the
-annotations, like marks: `alacritty_terminal` does not count the lines it
-drops. Seen with `scrollback_lines = 50`.
-
 ## Phase 36 — Composer
 
 **Not tested:** a light scheme (light material), the closing fade in a
@@ -366,8 +362,7 @@ keyboard has no semicolon).
 ## Phase 61 — Triggers like iTerm2's
 
 **Not tested:** the kit as is; Prompt Detected, Report Directory, Set Mark and
-Run Coprocess; Highlight Line on a wrapped line; drift with scrolls that are
-not line feeds (`ESC D`, `CSI S`).
+Run Coprocess; Highlight Line on a wrapped line.
 
 ## Phase 62 — Settings › Arrangements and the default arrangement
 
@@ -514,3 +509,11 @@ the unit tests; no window was opened); how `ButtonStyle::bordered_prominent`
 and the vertical `RadioGroup` of Profiles › General › Directory look;
 `nix build .#curseterm` (the dev shell evaluates, the package could not
 be evaluated in the lab).
+
+## History limit kept by CurseTerm
+
+**Not tested:** marks, annotations, timestamps, inline images and folds in the
+running app with a full history (only `io::tests`, on a headless `Term`);
+output speed with a full history (the limit is enforced after every line
+instead of by `alacritty_terminal`); lowering «Scrollback lines» in Settings
+with a session open.

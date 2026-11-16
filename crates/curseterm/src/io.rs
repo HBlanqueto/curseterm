@@ -16,7 +16,7 @@ use alacritty_terminal::grid::{Dimensions, Row};
 use alacritty_terminal::index::{Column, Line, Point};
 use alacritty_terminal::sync::FairMutex;
 use alacritty_terminal::term::cell::{Cell, Flags, Hyperlink};
-use alacritty_terminal::term::{Term, TermMode};
+use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::tty::{EventedReadWrite, Pty};
 use alacritty_terminal::vte::ansi::{Color, Handler, Processor};
 use freya_engine::prelude::{Data, Image};
@@ -33,6 +33,13 @@ use crate::throughput::Throughput;
 use crate::triggers::{self, Compiled, PARTIAL_LINE_INTERVAL};
 
 const READ_BUFFER: usize = 1 << 16;
+// alacritty_terminal drops the lines a full history cannot hold without saying how many, so its
+// limit is off and `drop_excess_history` keeps `Extras::history_limit` itself. Half of `usize`
+// because its reflow adds the limit to the screen lines.
+pub const UNBOUNDED_HISTORY: usize = usize::MAX / 2;
+// A burst scrolls at most a few thousand lines (a screenful per 4 bytes of CSI S), so the history
+// never grows far past its limit before it is trimmed.
+const SCROLL_BURST: usize = 256;
 
 pub struct Placed {
     pub line: i64,
@@ -80,6 +87,7 @@ pub struct Fold {
 
 #[derive(Default)]
 pub struct Extras {
+    pub history_limit: usize,
     pub throughput: Throughput,
     pub directory: Option<PathBuf>,
     pub remote_host: Option<(String, String)>,
@@ -128,6 +136,7 @@ impl Extras {
     pub fn new(cell: (f32, f32)) -> Self {
         Self {
             cell,
+            history_limit: Config::default().scrolling_history,
             triggers_enabled: true,
             ..Self::default()
         }
@@ -268,14 +277,14 @@ impl Extras {
             .chain(self.folds.iter_mut().map(|fold| &mut fold.line))
     }
 
-    // A full scrollback dropped its oldest line: what was anchored below it moves up one.
-    fn line_scrolled_off(&mut self) {
+    // The history dropped its oldest `lines`: what was anchored below them moves up.
+    fn lines_scrolled_off(&mut self, lines: i64) {
         let selections = std::mem::take(&mut self.sub_selections);
-        self.forget_lines(0..1);
+        self.forget_lines(0..lines);
         self.sub_selections = selections
             .into_iter()
-            .filter(|(start, _)| start.0 > 0)
-            .map(|(start, end)| ((start.0 - 1, start.1), (end.0 - 1, end.1)))
+            .filter(|(start, _)| start.0 >= lines)
+            .map(|(start, end)| ((start.0 - lines, start.1), (end.0 - lines, end.1)))
             .collect();
     }
 
@@ -356,6 +365,7 @@ pub fn resize_keeping_anchors(
     for (line, logical) in extras.anchored_lines().zip(logical) {
         *line = after.partition_point(|start| *start < logical) as i64;
     }
+    drop_excess_history(term, extras);
 }
 
 pub fn start(
@@ -529,13 +539,15 @@ fn feed(
     listener: &Listener,
     line_has_text: &mut bool,
 ) {
-    let has_triggers = extras.lock().is_ok_and(|extras| extras.has_triggers());
+    let (has_triggers, limit) = extras.lock().map_or((false, UNBOUNDED_HISTORY), |extras| {
+        (extras.has_triggers(), extras.history_limit)
+    });
     for piece in bytes.split_inclusive(|byte| is_line_feed(*byte)) {
         let (body, line_feed) = match piece.split_last() {
             Some((last, body)) if is_line_feed(*last) => (body, Some(*last)),
             _ => (piece, None),
         };
-        processor.advance(term, body);
+        advance_keeping_history(processor, term, extras, limit, body);
         if has_triggers {
             *line_has_text |= body.iter().any(|byte| *byte >= b' ' && *byte != 0x7f);
         }
@@ -549,30 +561,36 @@ fn feed(
         {
             check_line(term, &mut extras, listener, false);
         }
-        line_feed_counting_lost_lines(processor, term, line_feed, extras);
+        advance_keeping_history(processor, term, extras, limit, &[line_feed]);
     }
 }
 
-// alacritty_terminal does not count the lines a full scrollback drops (VT100Screen.m keeps
-// totalScrollbackOverflow); seeing the top row land in the history tells it happened.
-fn line_feed_counting_lost_lines(
+fn advance_keeping_history<T: EventListener>(
     processor: &mut Processor,
-    term: &mut Term<Listener>,
-    line_feed: u8,
+    term: &mut Term<T>,
     extras: &Mutex<Extras>,
+    limit: usize,
+    bytes: &[u8],
 ) {
-    let history = term.history_size();
-    let at_bottom =
-        history > 0 && term.grid().cursor.point.line.0 == term.screen_lines() as i32 - 1;
-    let top = at_bottom.then(|| term.grid()[Line(0)].clone());
-    processor.advance(term, &[line_feed]);
-    if let Some(top) = top
-        && term.history_size() == history
-        && term.grid()[Line(-1)] == top
-        && let Ok(mut extras) = extras.lock()
-    {
-        extras.line_scrolled_off();
+    for burst in bytes.chunks(SCROLL_BURST) {
+        processor.advance(term, burst);
+        if term.history_size() > limit
+            && let Ok(mut extras) = extras.lock()
+        {
+            drop_excess_history(term, &mut extras);
+        }
     }
+}
+
+// VT100Screen.m keeps totalScrollbackOverflow: what was anchored below the dropped lines moves up.
+pub fn drop_excess_history<T>(term: &mut Term<T>, extras: &mut Extras) -> usize {
+    let lost = term.history_size().saturating_sub(extras.history_limit);
+    if lost > 0 {
+        term.grid_mut().update_history(extras.history_limit);
+        term.grid_mut().update_history(UNBOUNDED_HISTORY);
+        extras.lines_scrolled_off(lost as i64);
+    }
+    lost
 }
 
 // PTYTriggerEvaluator.m -checkPartialLineTriggers, at most twice a second.
@@ -924,7 +942,102 @@ fn place(
 
 #[cfg(test)]
 mod tests {
+    use alacritty_terminal::event::VoidListener;
+    use alacritty_terminal::term::test::TermSize;
+
     use super::*;
+
+    const HISTORY: usize = 4;
+
+    fn terminal() -> (Term<VoidListener>, Processor, Mutex<Extras>) {
+        let config = Config {
+            scrolling_history: UNBOUNDED_HISTORY,
+            ..Config::default()
+        };
+        let extras = Extras {
+            history_limit: HISTORY,
+            ..Extras::default()
+        };
+        (
+            Term::new(config, &TermSize::new(10, 3), VoidListener),
+            Processor::new(),
+            Mutex::new(extras),
+        )
+    }
+
+    fn print(
+        (term, processor, extras): &mut (Term<VoidListener>, Processor, Mutex<Extras>),
+        text: &str,
+    ) {
+        advance_keeping_history(processor, term, extras, HISTORY, text.as_bytes());
+    }
+
+    fn text_at(term: &Term<VoidListener>, absolute: i64) -> String {
+        let row = &term.grid()[Line((absolute - term.history_size() as i64) as i32)];
+        let text: String = (0..term.columns())
+            .map(|column| row[Column(column)].c)
+            .collect();
+        text.trim_end().to_string()
+    }
+
+    fn line_of(term: &Term<VoidListener>, text: &str) -> Option<i64> {
+        (0..(term.history_size() + term.screen_lines()) as i64)
+            .find(|absolute| text_at(term, *absolute) == text)
+    }
+
+    #[test]
+    fn a_mark_follows_its_line_through_every_kind_of_scroll_of_a_full_history() {
+        let mut shell = terminal();
+        print(&mut shell, "x0\r\nx1\r\nx2\r\nx3\r\nx4\r\nx5\r\nx6\r\nKEEP");
+        let cursor = &shell.0.grid().cursor.point;
+        let kept = shell.0.history_size() as i64 + i64::from(cursor.line.0);
+        shell.2.lock().unwrap().add_mark(kept);
+        let cases = [
+            ("a line feed", "\r\n"),
+            ("a wrap at the last column", "qqqqqqqqqqr"),
+            ("an index", "\x1bD"),
+            ("a scroll up", "\x1b[1S"),
+        ];
+        for (kind, bytes) in cases {
+            print(&mut shell, bytes);
+            let marks = shell.2.lock().unwrap().marks.clone();
+            assert_eq!(marks, [line_of(&shell.0, "KEEP").unwrap()], "after {kind}");
+            assert_eq!(shell.0.history_size(), HISTORY, "after {kind}");
+        }
+        print(&mut shell, "\r\n\r\n\r\n");
+        assert_eq!(line_of(&shell.0, "KEEP"), None);
+        assert!(shell.2.lock().unwrap().marks.is_empty());
+    }
+
+    #[test]
+    fn a_lower_limit_drops_the_oldest_lines_and_what_was_anchored_moves_up() {
+        let mut shell = terminal();
+        print(&mut shell, "x0\r\nx1\r\nKEEP\r\nx3\r\nx4\r\nx5");
+        let kept = line_of(&shell.0, "KEEP").unwrap();
+        let (term, _, extras) = &mut shell;
+        let extras = extras.get_mut().unwrap();
+        extras.add_mark(kept);
+        extras.history_limit = 1;
+        let dropped = drop_excess_history(term, extras);
+        assert_eq!((dropped, term.history_size()), (2, 1));
+        assert_eq!(extras.marks, [line_of(term, "KEEP").unwrap()]);
+    }
+
+    #[test]
+    fn widening_the_terminal_keeps_the_history() {
+        let mut shell = terminal();
+        print(&mut shell, "x0\r\nx1\r\nx2\r\nx3\r\nx4\r\nx5\r\nx6\r\nx7");
+        shell.0.resize(TermSize::new(20, 3));
+        assert_eq!(shell.0.history_size(), HISTORY);
+        assert_eq!(line_of(&shell.0, "x1"), Some(0));
+    }
+
+    #[test]
+    fn a_line_longer_than_a_burst_never_leaves_more_history_than_the_limit() {
+        let mut shell = terminal();
+        print(&mut shell, &"k".repeat(3 * SCROLL_BURST));
+        assert_eq!(shell.0.history_size(), HISTORY);
+    }
 
     #[test]
     fn a_line_takes_the_time_of_the_next_stamp_and_old_stamps_fall_off() {

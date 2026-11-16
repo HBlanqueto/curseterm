@@ -7,7 +7,7 @@ use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::vte::ansi::{Color, NamedColor};
 use serde_json::Value;
 
-use crate::io::Extras;
+use crate::io::{self as pty_io, Extras};
 use crate::session::Listener;
 
 fn line(term: &Term<Listener>, absolute: i64) -> Line {
@@ -21,20 +21,17 @@ pub fn replace_lines(
     extras: &mut Extras,
     lines: Range<i64>,
     rows: Vec<Row<Cell>>,
-    history_limit: usize,
 ) -> Range<i64> {
     let (mut start, mut end) = (lines.start, lines.end);
     let added = rows.len() as i64;
     let removed = end - start;
     if added > removed {
         let grown = (added - removed) as usize;
-        let before = term.history_size();
         let screen = term.screen_lines() as i32;
         term.grid_mut()
             .scroll_up::<Color>(&(Line(0)..Line(screen)), grown);
-        let lost = (before + grown - term.history_size()) as i64;
+        let lost = pty_io::drop_excess_history(term, extras) as i64;
         if lost > 0 {
-            extras.forget_lines(0..lost);
             start = (start - lost).max(0);
             end = (end - lost).max(start);
         }
@@ -67,7 +64,7 @@ pub fn replace_lines(
         let dropped = (shift as usize).min(term.history_size());
         let kept = term.history_size() - dropped;
         term.grid_mut().update_history(kept);
-        term.grid_mut().update_history(history_limit);
+        term.grid_mut().update_history(pty_io::UNBOUNDED_HISTORY);
         let rest = shift - dropped as i64;
         if rest > 0 {
             let total = (term.history_size() + term.screen_lines()) as i64;
