@@ -4,7 +4,7 @@ use crate::tokens::{
     TAB_STYLE_LIGHT, TAB_STYLE_LIGHT_HIGH_CONTRAST, TITLE_BAR, TabStyle,
 };
 use alacritty_terminal::vte::ansi::Rgb;
-use vow_design::Rgba;
+use ctdesign::Rgba;
 
 use crate::config::Theme;
 

@@ -1,4 +1,4 @@
-use barrier_kit::menu::MenuItem;
+use bk::menu::MenuItem;
 use serde::{Deserialize, Serialize};
 
 use crate::localize::tr;

@@ -1,8 +1,8 @@
-use barrier_kit::controls::{Checkbox, ScrollView, Switch, TextField};
-use barrier_kit::views::form::{Form, Row, Section};
+use bk::controls::{Checkbox, ScrollView, Switch, TextField};
+use bk::views::form::{Form, Row, Section};
+use ctdesign::{SPACE_2, SPACE_3};
 use freya_core::prelude::*;
 use torin::prelude::{Direction, Gaps, Size};
-use vow_design::{SPACE_2, SPACE_3};
 
 use crate::advanced::{self, Advanced, ENTRIES, Entry, Value};
 use crate::config::change_defaults;

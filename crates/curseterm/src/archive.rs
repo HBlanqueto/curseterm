@@ -11,7 +11,7 @@ pub const RECENTS: usize = 10;
 // NSFileManager+iTerm.m -it_defaultArchiveDirectory, under the XDG data directory.
 pub fn default_directory() -> Option<PathBuf> {
     Some(
-        vow_appearance::xdg::data_home()?
+        ctappearance::xdg::data_home()?
             .join("curseterm")
             .join("archives"),
     )

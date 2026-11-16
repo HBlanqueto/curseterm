@@ -1,4 +1,4 @@
-use vow_design::{Font, Rgba};
+use ctdesign::{Font, Rgba};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct TabBarMetrics {
@@ -191,7 +191,7 @@ pub const ANNOTATION: AnnotationMetrics = AnnotationMetrics {
     fade_ms: 250,
     frame_ms: 33,
     font: Font {
-        family: vow_design::TEXT.family,
+        family: ctdesign::BODY.family,
         size: 12,
         line_height: 15,
         weight: 400,

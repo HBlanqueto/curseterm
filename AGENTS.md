@@ -10,7 +10,7 @@ formato de commits. Aquí solo lo propio.
 1. **No se modifica Malaysia.** Lo que le falta a BarrierKit se completa en
    barrierkit con sus reglas; CurseTerm sube el `rev` y lo anota en
    `docs/barrierkit-gaps.md` en el mismo commit (ADR 0006).
-2. **Diseño con tokens.** La interfaz usa `Palette`, `vow_design` y, para las
+2. **Diseño con tokens.** La interfaz usa `Palette`, `ctdesign` y, para las
    medidas propias de CurseTerm, `crates/curseterm/src/tokens.rs`. Los colores
    del terminal son datos de esquema (`crates/curseterm/schemes/*.toml`).
 3. **Texto visible por Fluent:** `crates/curseterm/i18n/{en,es}/curseterm.ftl` y `tr!`.

@@ -16,7 +16,7 @@ Nix library.
 2. CurseTerm's dev shell is barrierkit's (`devShells.default`) plus
    `CURSETERM_DEV_SHELL=1`: it inherits prebuilt Skia, Vulkan, fonts and the
    library path without copying them.
-3. The crates (`barrier-kit`, `vow-design`, `vow-appearance`) are git
+3. The crates (`bk`, `ctdesign`, `ctappearance`) are git
    dependencies in `[workspace.dependencies]` with that same `rev`, as in malaysia
    (ADR 0048 §2). Cargo cannot take crates from a flake input.
 4. Bumping the kit is one commit that changes the `rev` in both places:

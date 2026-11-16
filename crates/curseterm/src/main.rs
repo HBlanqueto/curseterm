@@ -63,13 +63,13 @@ mod workspace;
 
 use std::process::ExitCode;
 
-use barrier_kit::platform::run_window;
+use bk::platform::run_window;
 
 use crate::config::APP_ID;
 
 fn main() -> ExitCode {
-    barrier_kit::init_tracing();
-    barrier_kit::i18n::use_app_language(APP_ID);
+    bk::init_tracing();
+    bk::i18n::use_app_language(APP_ID);
     let arguments: Vec<String> = std::env::args().skip(1).collect();
     let _hotkey = match arguments.first().map(String::as_str) {
         Some("--hotkey") => match windows::toggle_hotkey() {

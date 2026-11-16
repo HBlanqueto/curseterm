@@ -1,9 +1,9 @@
 use crate::tokens::MOVE_PANE;
-use barrier_kit::canvas::canvas;
+use bk::canvas::Canvas;
+use ctdesign::HEADLINE;
 use freya_core::prelude::*;
 use freya_engine::prelude::{FontMgr, FontStyle, PaintStyle, Rect as SkRect};
 use torin::prelude::{Position, Size};
-use vow_design::HEADLINE;
 
 use crate::grid::{font, rgba_paint, typeface};
 use crate::localize::tr;
@@ -121,7 +121,7 @@ impl Component for DropTarget {
                     .position(Position::new_absolute().left(0.0).top(0.0))
                     .width(Size::percent(100.0))
                     .height(Size::percent(100.0))
-                    .child(canvas(look, move |ctx| {
+                    .child(Canvas::new(look, move |ctx| {
                         let Some((x, y, w, h)) = area else {
                             return;
                         };

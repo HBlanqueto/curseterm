@@ -5,11 +5,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use barrier_kit::platform::{WindowControls, WindowOptions};
+use bk::platform::{WindowControls, WindowOptions};
+use ctdesign::{SPACE_2, WINDOW_MIN_SIZE};
 use freya_core::integration::AppComponent;
 use freya_core::prelude::{use_drop, use_hook};
 use rustix::process::{Pid, Signal, kill_process};
-use vow_design::{SPACE_2, WINDOW_MIN_SIZE};
 
 use crate::archive;
 use crate::arrangement::Arrangement;
@@ -40,7 +40,7 @@ fn is_curseterm(pid: u32) -> bool {
 // iTermApplicationDelegate.m kPreferenceKeyOpenArrangementAtStartup: the first window CurseTerm
 // opens restores the default arrangement.
 pub fn default_arrangement_at_startup() -> Option<String> {
-    let defaults: Defaults = barrier_kit::app::load_defaults(APP_ID);
+    let defaults: Defaults = bk::app::load_defaults(APP_ID);
     let name = defaults
         .default_arrangement
         .filter(|_| defaults.open_arrangement_at_startup)?;
@@ -141,7 +141,7 @@ fn terminal_window(
 }
 
 fn profile_entries() -> Vec<(String, Vec<String>)> {
-    let defaults: Defaults = barrier_kit::app::load_defaults(APP_ID);
+    let defaults: Defaults = bk::app::load_defaults(APP_ID);
     defaults
         .profiles()
         .into_iter()
@@ -150,7 +150,7 @@ fn profile_entries() -> Vec<(String, Vec<String>)> {
 }
 
 fn terminal_size(profile: Option<&str>) -> (u32, u32) {
-    let defaults: Defaults = barrier_kit::app::load_defaults(APP_ID);
+    let defaults: Defaults = bk::app::load_defaults(APP_ID);
     let name = profile.map_or_else(|| defaults.default_profile_name(), str::to_string);
     let profile = defaults.profile(&name);
     let fonts = Fonts::new(&profile.font_family, profile.text_size(0));
@@ -231,5 +231,5 @@ fn quit_others() {
 
 // BK-012: the kit puts the one saved size per app_id over WindowOptions::size.
 pub fn forget_saved_size() {
-    let _ = barrier_kit::app::save_restoration(&format!("{APP_ID}.window"), &toml::Table::new());
+    let _ = bk::app::save_restoration(&format!("{APP_ID}.window"), &toml::Table::new());
 }

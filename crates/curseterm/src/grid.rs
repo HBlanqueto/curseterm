@@ -11,12 +11,12 @@ use alacritty_terminal::term::color::Colors;
 use alacritty_terminal::term::search::Match;
 use alacritty_terminal::term::{RenderableContent, RenderableCursor, Term};
 use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Rgb};
-use barrier_kit::canvas::CanvasContext;
+use bk::canvas::CanvasContext;
+use ctdesign::{DURATION_FAST_MS, DURATION_SLOW_MS, Rgba};
 use freya_engine::prelude::{
     ClipOp, Color4f, Font, FontEdging, FontMgr, FontStyle, Paint, PaintStyle, PathBuilder, RRect,
     Rect as SkRect, Typeface,
 };
-use vow_design::{DURATION_FAST_MS, DURATION_SLOW_MS, Rgba};
 
 use crate::clock::local_time;
 use crate::config::Scheme;

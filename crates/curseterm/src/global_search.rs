@@ -1,11 +1,11 @@
 use crate::tokens::GLOBAL_SEARCH;
-use barrier_kit::controls::{Button, ScrollView, SearchField};
-use barrier_kit::popup_button::PopUpButton;
-use barrier_kit::style::{Palette, text};
-use barrier_kit::theme::color;
+use bk::controls::{Button, ScrollView, SearchField};
+use bk::popup_button::PopUpButton;
+use bk::style::{Palette, text};
+use bk::theme::color;
+use ctdesign::{BODY, CAPTION, DIALOG, DIALOG_PADDING, HEADLINE, SPACE_1, SPACE_2};
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Position, Size};
-use vow_design::{CAPTION, DIALOG, DIALOG_PADDING, HEADLINE, SPACE_1, SPACE_2, TEXT};
 
 use crate::find_mode::FindMode;
 use crate::localize::tr;
@@ -92,7 +92,7 @@ pub fn global_search_panel(
         .iter()
         .enumerate()
         .flat_map(|(group, found)| {
-            let header = text(found.name.clone(), TEXT, palette.label).into_element();
+            let header = text(found.name.clone(), BODY, palette.label).into_element();
             let snippets = found.snippets.iter().enumerate().map({
                 let on_reveal = on_reveal.clone();
                 move |(row, snippet)| {
@@ -119,7 +119,7 @@ pub fn global_search_panel(
         .background(color(palette.raised_background))
         .border(
             Border::new()
-                .width(vow_design::HAIRLINE)
+                .width(ctdesign::HAIRLINE)
                 .alignment(BorderAlignment::Outer)
                 .fill(color(palette.separator)),
         )
@@ -188,18 +188,18 @@ fn result_row(snippet: &Snippet, selected: bool, on_press: impl Fn() + 'static) 
         .background(color(if selected {
             palette.accent
         } else {
-            vow_design::Rgba::TRANSPARENT
+            ctdesign::Rgba::TRANSPARENT
         }))
         .overflow(Overflow::Clip)
         .direction(Direction::Horizontal)
         .on_press(move |_| on_press())
-        .child(text(before, TEXT, ink))
+        .child(text(before, BODY, ink))
         .child(
             rect()
                 .direction(Direction::Vertical)
                 .content(Content::fit())
                 .background(color(GLOBAL_SEARCH.match_background))
-                .child(text(matched, TEXT, ink))
+                .child(text(matched, BODY, ink))
                 .child(
                     rect()
                         .width(Size::fill_minimum())
@@ -207,6 +207,6 @@ fn result_row(snippet: &Snippet, selected: bool, on_press: impl Fn() + 'static) 
                         .background(color(ink)),
                 ),
         )
-        .child(text(after, TEXT, ink))
+        .child(text(after, BODY, ink))
         .into_element()
 }

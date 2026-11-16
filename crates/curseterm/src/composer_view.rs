@@ -1,16 +1,16 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use crate::tokens::{COMPOSER, SHEET_MATERIAL_BLUR};
-use barrier_kit::canvas::{CanvasContext, canvas};
-use barrier_kit::controls::ScrollView;
-use barrier_kit::style::text;
-use barrier_kit::symbol::{Symbol, symbol};
-use barrier_kit::theme::color;
-use barrier_kit::views::text_view::{KeyPress, TextView};
+use bk::canvas::{Canvas, CanvasContext};
+use bk::controls::ScrollView;
+use bk::style::text;
+use bk::symbol::{Image, Symbol};
+use bk::theme::color;
+use bk::views::text_view::{KeyPress, TextView};
+use ctdesign::{BG_WINDOW_DARK, BG_WINDOW_LIGHT, CAPTION, DARK, LIGHT, Rgba};
 use freya_core::prelude::*;
 use freya_engine::prelude::{PaintStyle, RRect, Rect as SkRect, SaveLayerRec, TileMode, blur};
 use torin::prelude::{Alignment, Content, Direction, Gaps, Position, Size};
-use vow_design::{BG_WINDOW_DARK, BG_WINDOW_LIGHT, CAPTION, DARK, LIGHT, Rgba};
 
 use crate::grid::rgba_paint;
 use crate::localize::tr;
@@ -87,7 +87,7 @@ impl Component for ComposerView {
         [width, height, tint.r, tint.g, tint.b]
             .map(f32::to_bits)
             .hash(&mut look);
-        let background = canvas(look.finish(), move |ctx| draw_material(ctx, tint));
+        let background = Canvas::new(look.finish(), move |ctx| draw_material(ctx, tint));
         rect()
             .position(Position::new_absolute().left(COMPOSER.side_margin).top(0.0))
             .width(Size::px(width))
@@ -167,7 +167,7 @@ impl Component for ComposerView {
                                     .maybe_child((inner >= COMPOSER.tip_min_width).then(|| {
                                         text(
                                             tr!("composer-send-tip"),
-                                            vow_design::Font {
+                                            ctdesign::Font {
                                                 size: COMPOSER.tip_size as u32,
                                                 ..CAPTION
                                             },
@@ -192,7 +192,11 @@ impl Component for ComposerView {
                     .a11y_role(AccessibilityRole::Button)
                     .a11y_alt(tr!("composer-close"))
                     .on_press(move |_| on_close.call(ComposerEvent::Close))
-                    .child(symbol(Symbol::XMark, COMPOSER.close, palette.ink_muted)),
+                    .child(
+                        Image::system(Symbol::XMark)
+                            .size(COMPOSER.close)
+                            .color(palette.ink_muted),
+                    ),
             )
     }
 }

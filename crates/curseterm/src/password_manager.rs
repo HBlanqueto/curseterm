@@ -2,18 +2,19 @@ use std::collections::HashMap;
 use std::io::Read;
 
 use crate::tokens::PASSWORD_MANAGER;
-use barrier_kit::compact::IconButton;
-use barrier_kit::controls::{Button, ButtonStyle, Checkbox, SecureField, TextField};
-use barrier_kit::password::PasswordField;
-use barrier_kit::secrets::{Error, Item, Secrets};
-use barrier_kit::style::{Palette, text};
-use barrier_kit::symbol::Symbol;
-use barrier_kit::views::feedback::sheet;
-use barrier_kit::views::form::{Form, Row, Section};
-use barrier_kit::views::table::Table;
+use bk::compact::IconButton;
+use bk::controls::{Button, Checkbox, SecureField, TextField};
+use bk::password::PasswordField;
+use bk::secrets::{Error, Item, Secrets};
+use bk::style::{Palette, text};
+use bk::styles::ButtonStyle;
+use bk::symbol::Symbol;
+use bk::views::feedback;
+use bk::views::form::{Form, Row, Section};
+use bk::views::table::Table;
+use ctdesign::{CAPTION, HEADLINE, SPACE_1, SPACE_2};
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Direction, Size};
-use vow_design::{CAPTION, HEADLINE, SPACE_1, SPACE_2};
 use zeroize::Zeroizing;
 
 use crate::localize::tr;
@@ -306,8 +307,8 @@ impl Component for PasswordManager {
                                         .cross_align(Alignment::Center)
                                         .spacing(SPACE_1)
                                         .child(
-                                            SecureField::new(secret)
-                                                .width(PASSWORD_MANAGER.password_field),
+                                            SecureField::new(secret, tr!("password"))
+                                                .width(Size::px(PASSWORD_MANAGER.password_field)),
                                         )
                                         .child(
                                             Button::new(tr!("generate-password"))
@@ -329,7 +330,7 @@ impl Component for PasswordManager {
                             )
                             .child(
                                 Button::new(tr!("save-confirm"))
-                                    .style(ButtonStyle::Primary)
+                                    .style(ButtonStyle::bordered_prominent)
                                     .on_press({
                                         let current = current.clone();
                                         let mut reload = reload.clone();
@@ -393,7 +394,7 @@ impl Component for PasswordManager {
                         )
                         .child(
                             Button::new(tr!("password-manager-remove"))
-                                .style(ButtonStyle::Primary)
+                                .style(ButtonStyle::bordered_prominent)
                                 .on_press({
                                     let mut reload = reload.clone();
                                     move |_| {
@@ -426,7 +427,7 @@ impl Component for PasswordManager {
             .as_ref()
             .map(|account| account.user.clone())
             .filter(|name| !name.is_empty());
-        sheet(
+        feedback::Sheet::new(
             rect()
                 .width(Size::px(PASSWORD_MANAGER.width))
                 .direction(Direction::Vertical)
@@ -473,7 +474,7 @@ impl Component for PasswordManager {
                         )
                         .child(
                             Button::new(tr!("enter-password"))
-                                .style(ButtonStyle::Primary)
+                                .style(ButtonStyle::bordered_prominent)
                                 .disabled(current.is_none())
                                 .on_press(move |_| {
                                     if let Some(account) = &current {

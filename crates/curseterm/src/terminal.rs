@@ -1,4 +1,4 @@
-use barrier_kit::menu::MenuItem;
+use bk::menu::MenuItem;
 use std::cell::{Cell, OnceCell, RefCell};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -19,31 +19,31 @@ use alacritty_terminal::grid::{Row, Scroll};
 use alacritty_terminal::index::Direction as SearchDirection;
 use alacritty_terminal::term::TermMode;
 use alacritty_terminal::term::cell::Cell as GridCell;
-use barrier_kit::animation::use_alive;
-use barrier_kit::app::use_menu_action;
-use barrier_kit::app_menu::MenuHandle;
-use barrier_kit::app_menu::{
-    use_menu_checked, use_menu_enabled, use_menu_label, use_submenu_items,
-};
-use barrier_kit::compact::Stepper;
-use barrier_kit::controls::{Button, ButtonStyle, SearchField, Slider, TextField};
-use barrier_kit::notifications::{self, Notice};
-use barrier_kit::platform::{Bar, DecorationResponse, Timers, WakeHandle, WindowControls};
-use barrier_kit::popup_button::PopUpButton;
-use barrier_kit::style::{Palette, text};
-use barrier_kit::symbol::Symbol;
-use barrier_kit::theme::color;
-use barrier_kit::titlebar::{window_drag_handler, window_traffic_lights};
-use barrier_kit::views::feedback::{Alert, sheet};
-use barrier_kit::views::floating_pane::{FloatingPane, PaneFrame};
-use barrier_kit::views::split_panes::SplitPanes;
-use barrier_kit::views::table::Table;
+use bk::animation::use_alive;
+use bk::app::use_menu_action;
+use bk::compact::Stepper;
+use bk::controls::{Button, SearchField, Slider, TextField};
+use bk::main_menu::MenuHandle;
+use bk::main_menu::{use_menu_checked, use_menu_enabled, use_menu_label, use_submenu_items};
+use bk::notifications;
+use bk::platform::{Bar, DecorationResponse, Timers, WakeHandle, WindowControls};
+use bk::popup_button::PopUpButton;
+use bk::style::{Palette, text};
+use bk::styles::ButtonStyle;
+use bk::symbol::Symbol;
+use bk::theme::color;
+use bk::titlebar::window_drag_handler;
+use bk::traffic::TrafficLights;
+use bk::views::feedback::{self, Alert};
+use bk::views::floating_pane::{FloatingPane, PaneFrame};
+use bk::views::split_panes::SplitPanes;
+use bk::views::table::Table;
 use freya_clipboard::copypasta::ClipboardProvider;
 use freya_core::prelude::*;
 use rustix::process::{Pid, Signal, kill_process};
 use torin::prelude::{Alignment, Content, Direction, Gaps, Position, Size};
 
-use vow_design::{
+use ctdesign::{
     CAPTION, DURATION_FAST_MS, DURATION_SLOW_MS, FLOATING_PANE, HEADLINE, Rgba, SPACE_1, SPACE_2,
     SPACE_3, TITLEBAR,
 };
@@ -95,7 +95,7 @@ use crate::status;
 use crate::theme;
 use crate::windows;
 use crate::workspace::{Broadcast, Closed, Float, Tab, Workspace};
-use vow_appearance::ColorScheme;
+use ctappearance::ColorScheme;
 
 const INITIAL_GRID: (u16, u16) = (80, 24);
 const QUICK_EXIT: Duration = Duration::from_secs(1);
@@ -365,16 +365,16 @@ pub struct Terminal {
 impl App for Terminal {
     fn render(&self) -> impl IntoElement {
         windows::use_registered_window();
-        let defaults = barrier_kit::app::use_defaults::<Defaults>(APP_ID);
+        let defaults = bk::app::use_defaults::<Defaults>(APP_ID);
         // PseudoTerminal.m -updateWindowAppearance: the fixed themes force Aqua or DarkAqua.
-        barrier_kit::theme::use_appearance(move |config| {
+        bk::theme::use_appearance(move |config| {
             config.color_scheme = match defaults.read().theme {
                 Theme::Light | Theme::LightHighContrast => ColorScheme::Light,
                 Theme::Dark | Theme::DarkHighContrast => ColorScheme::Dark,
                 _ => config.color_scheme,
             }
         });
-        let dark = barrier_kit::theme::resolved().scheme.is_dark();
+        let dark = bk::theme::resolved().scheme.is_dark();
         let workspace = use_state(Workspace::default);
         let sessions = use_state(Sessions::new);
         let text_zoom = use_state(|| 0i32);
@@ -627,7 +627,7 @@ impl App for Terminal {
         let tab_style = theme::tab_style(
             theme,
             // NSAppearance+iTerm.m -it_mojaveTabStyle: increased contrast picks the high-contrast style.
-            (dark, barrier_kit::theme::resolved().contrast),
+            (dark, bk::theme::resolved().contrast),
             terminal_background,
             compact,
         );
@@ -1116,10 +1116,13 @@ fn traffic_lights(height: f32, active: bool) -> Rect {
             0.0,
             0.0,
             0.0,
-            vow_appearance::traffic::inset(height as u32) as f32,
+            ctappearance::traffic::inset(height as u32) as f32,
         ))
         .main_align(Alignment::Center)
-        .child(window_traffic_lights(active, WindowControls::get().fixed))
+        .child(TrafficLights::for_window(
+            active,
+            WindowControls::get().fixed,
+        ))
 }
 
 fn title_colors(dark: bool, active: bool) -> (TitleBarColors, Rgba, Rgba) {
@@ -1163,7 +1166,7 @@ fn title_strip(
                 .cross_align(Alignment::Center)
                 .child(text(
                     title,
-                    vow_design::Font {
+                    ctdesign::Font {
                         size: TITLE_BAR.font_size as u32,
                         weight: TITLE_BAR.font_weight,
                         ..TITLEBAR.font
@@ -1176,7 +1179,7 @@ fn title_strip(
 
 // PseudoTerminal.m in Lion full screen: no title bar, the tabs stay while Show Tabs in Fullscreen
 // is on, and with the compositor's focus bar down the title bar slides in over the terminal
-// (barrier-kit `WindowControls::titlebar_overlay_top`).
+// (bk `WindowControls::titlebar_overlay_top`).
 fn full_screen_chrome(
     dark: bool,
     title: String,
@@ -1199,7 +1202,7 @@ fn full_screen_chrome(
                 active,
                 drag,
             ));
-        // barrier-kit already pushes the window by the focus bar; the title bar pushes the tabs.
+        // bk already pushes the window by the focus bar; the title bar pushes the tabs.
         if *controls.fullscreen_push.read() {
             strip
                 .height(Size::px(TITLE_BAR.height * progress))
@@ -1265,6 +1268,7 @@ fn floating_pane(float: &Float, workspace: &Workspace, painting: &Painting, dark
                 moving.write().set_float_frame(id, frame);
             }
         }),
+        style: bk::styles::Theme::tengen(),
     }
     .into_element()
 }
@@ -1952,12 +1956,12 @@ fn paste_question_sheet(handles: &Handles, question: Sheet) -> Element {
             let button =
                 Button::new(label).on_press(move |_| answer_paste(&answering, question, answer));
             if index == 0 {
-                button.style(ButtonStyle::Primary).into_element()
+                button.style(ButtonStyle::bordered_prominent).into_element()
             } else {
                 button.into_element()
             }
         });
-    sheet(
+    feedback::Sheet::new(
         rect()
             .width(Size::px(PASTE_QUESTION_WIDTH))
             .direction(Direction::Vertical)
@@ -2104,7 +2108,7 @@ fn pick_sheet(handles: &Handles, picker: Picker, mut revision: State<u64>) -> El
     let (chosen, navigate) = (handles.clone(), entries.clone());
     let palette = Palette::current();
     let (width, height) = PASTE_HISTORY_SIZE;
-    sheet(
+    feedback::Sheet::new(
         rect()
             .width(Size::px(width as f32))
             .height(Size::px(height as f32))
@@ -2268,7 +2272,7 @@ fn field_sheet(handles: &Handles, target: Sheet) -> Element {
     };
     let (enter, confirm) = (handles.clone(), handles.clone());
     let mut shown = handles.sheet;
-    sheet(
+    feedback::Sheet::new(
         rect()
             .width(Size::px(RENAME_WIDTH))
             .direction(Direction::Vertical)
@@ -2289,7 +2293,7 @@ fn field_sheet(handles: &Handles, target: Sheet) -> Element {
                     .child(Button::new(tr!("close-cancel")).on_press(move |_| shown.set(None)))
                     .child(
                         Button::new(confirm_label)
-                            .style(ButtonStyle::Primary)
+                            .style(ButtonStyle::bordered_prominent)
                             .on_press(move |_| confirm_later(&confirm, target)),
                     ),
             ),
@@ -2399,7 +2403,7 @@ fn copy_mode_keys_sheet(handles: &Handles) -> Element {
         .collect();
     let mut shown = handles.sheet;
     let (width, height) = PASTE_HISTORY_SIZE;
-    sheet(
+    feedback::Sheet::new(
         rect()
             .width(Size::px(width as f32))
             .height(Size::px(height as f32))
@@ -2427,7 +2431,7 @@ fn copy_mode_keys_sheet(handles: &Handles) -> Element {
                     .main_align(Alignment::End)
                     .child(
                         Button::new(tr!("done"))
-                            .style(ButtonStyle::Primary)
+                            .style(ButtonStyle::bordered_prominent)
                             .on_press(move |_| shown.set(None)),
                     ),
             ),
@@ -2802,7 +2806,7 @@ fn replay_bar(handles: &Handles, id: SessionId, index: usize) -> Element {
         ))
         .child(
             rect().width(Size::flex(1.0)).child(
-                Slider::stepped(frames.max(2))
+                Slider::stepped(tr!("instant-replay-bar"), frames.max(2))
                     .value(index)
                     .on_change(move |step: usize| replay.set(Some((id, step)))),
             ),
@@ -3345,7 +3349,7 @@ fn post_for_session(handles: &Handles, id: SessionId, summary: String, body: Str
     let Some((sender, wake)) = handles.reveals.get().cloned() else {
         return;
     };
-    let notice = Notice {
+    let notice = notifications::Notification {
         app_name: APP_NAME,
         desktop_entry: APP_ID,
         summary,
@@ -4195,12 +4199,12 @@ fn question_sheet(handles: &Handles, question: Question) -> Element {
                 });
             });
             if index == 0 {
-                button.style(ButtonStyle::Primary).into_element()
+                button.style(ButtonStyle::bordered_prominent).into_element()
             } else {
                 button.into_element()
             }
         });
-    sheet(
+    feedback::Sheet::new(
         rect()
             .width(Size::px(PASTE_QUESTION_WIDTH))
             .direction(Direction::Vertical)

@@ -1,13 +1,14 @@
 use crate::tokens::ADVANCED_PASTE;
-use barrier_kit::controls::{Button, ButtonStyle, ScrollView, Switch, TextField};
-use barrier_kit::popup_button::PopUpButton;
-use barrier_kit::style::{Palette, text};
-use barrier_kit::views::feedback::sheet;
-use barrier_kit::views::form::{Form, Row, Section};
+use bk::controls::{Button, ScrollView, Switch, TextField};
+use bk::popup_button::PopUpButton;
+use bk::style::{Palette, text};
+use bk::styles::ButtonStyle;
+use bk::views::feedback;
+use bk::views::form::{Form, Row, Section};
+use ctdesign::MONO;
+use ctdesign::{CAPTION, HEADLINE, SPACE_2};
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Size};
-use vow_design::MONO;
-use vow_design::{CAPTION, HEADLINE, SPACE_2};
 
 use crate::localize::tr;
 use crate::paste_transform::{self, Tabs, Transform};
@@ -90,7 +91,7 @@ pub fn advanced_paste_sheet(
         .take(ADVANCED_PASTE.preview_chars)
         .collect();
     let palette = Palette::current();
-    sheet(
+    feedback::Sheet::new(
         rect()
             .width(Size::px(ADVANCED_PASTE.width))
             .height(Size::px(ADVANCED_PASTE.height))
@@ -166,7 +167,7 @@ pub fn advanced_paste_sheet(
                     .child(Button::new(tr!("close-cancel")).on_press(move |_| on_cancel()))
                     .child(
                         Button::new(tr!("paste-confirm"))
-                            .style(ButtonStyle::Primary)
+                            .style(ButtonStyle::bordered_prominent)
                             .on_press(move |_| on_paste(state.result(), *state.bracketed.peek())),
                     ),
             ),

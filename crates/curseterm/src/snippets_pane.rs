@@ -1,18 +1,19 @@
 use crate::tokens::SNIPPET_EDITOR;
-use barrier_kit::compact::IconButton;
-use barrier_kit::controls::{Button, ButtonStyle, TextField};
-use barrier_kit::popup_button::PopUpButton;
-use barrier_kit::style::{Palette, text};
-use barrier_kit::symbol::Symbol;
-use barrier_kit::theme::color;
-use barrier_kit::views::feedback::sheet;
-use barrier_kit::views::form::{Form, Row, Section};
-use barrier_kit::views::table::Table;
-use barrier_kit::views::text_view::TextView;
+use bk::compact::IconButton;
+use bk::controls::{Button, TextField};
+use bk::popup_button::PopUpButton;
+use bk::style::{Palette, text};
+use bk::styles::ButtonStyle;
+use bk::symbol::Symbol;
+use bk::theme::color;
+use bk::views::feedback;
+use bk::views::form::{Form, Row, Section};
+use bk::views::table::Table;
+use bk::views::text_view::TextView;
+use ctdesign::MONO;
+use ctdesign::{CAPTION, HEADLINE, SPACE_1, SPACE_2, SPACE_3};
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Size};
-use vow_design::MONO;
-use vow_design::{CAPTION, HEADLINE, SPACE_1, SPACE_2, SPACE_3};
 
 use crate::config::{Defaults, change_defaults};
 use crate::localize::tr;
@@ -172,7 +173,7 @@ fn edit_sheet(draft: Draft, index: Option<usize>, close: impl Fn() + Clone + 'st
         .background(color(palette.content_background))
         .border(
             Border::new()
-                .width(vow_design::HAIRLINE)
+                .width(ctdesign::HAIRLINE)
                 .fill(color(palette.control_border)),
         )
         .child(
@@ -186,7 +187,7 @@ fn edit_sheet(draft: Draft, index: Option<usize>, close: impl Fn() + Clone + 'st
             .height(Size::fill()),
         );
     let cancel = close.clone();
-    sheet(
+    feedback::Sheet::new(
         rect()
             .width(Size::px(SNIPPET_EDITOR.width))
             .direction(Direction::Vertical)
@@ -225,7 +226,7 @@ fn edit_sheet(draft: Draft, index: Option<usize>, close: impl Fn() + Clone + 'st
                     .child(Button::new(tr!("close-cancel")).on_press(move |_| cancel()))
                     .child(
                         Button::new(tr!("snippet-ok"))
-                            .style(ButtonStyle::Primary)
+                            .style(ButtonStyle::bordered_prominent)
                             .on_press(move |_| {
                                 let snippet = draft.snippet();
                                 change_defaults(|defaults| match index {

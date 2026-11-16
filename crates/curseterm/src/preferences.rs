@@ -6,25 +6,23 @@ use std::path::{Path, PathBuf};
 
 use crate::tokens::{HIGHLIGHT_COLORS, SETTINGS_WINDOW_SIZE, TERMINAL, TRIGGER_EDITOR};
 use alacritty_terminal::vte::ansi::Rgb;
-use barrier_kit::app::{use_defaults, use_menu_action};
-use barrier_kit::choices::RadioGroup;
-use barrier_kit::compact::{IconButton, Stepper};
-use barrier_kit::controls::{
-    Button, Checkbox, ScrollView, SegmentedControl, Slider, Switch, TextField,
-};
-use barrier_kit::platform::{WindowControls, WindowOptions};
-use barrier_kit::popup_button::PopUpButton;
-use barrier_kit::style::{Palette, text};
-use barrier_kit::symbol::Symbol;
-use barrier_kit::theme::color;
-use barrier_kit::titlebar::Titlebar;
-use barrier_kit::views::form::{Form, Row, Section};
-use barrier_kit::views::table::Table;
-use barrier_kit::views::tabs::TabView;
+use bk::app::{use_defaults, use_menu_action};
+use bk::choices::RadioGroup;
+use bk::compact::{IconButton, Stepper};
+use bk::controls::{Button, Checkbox, ScrollView, SegmentedControl, Slider, Switch, TextField};
+use bk::platform::{WindowControls, WindowOptions};
+use bk::popup_button::PopUpButton;
+use bk::style::{Palette, text};
+use bk::symbol::Symbol;
+use bk::theme::color;
+use bk::titlebar::Titlebar;
+use bk::views::form::{Form, Row, Section};
+use bk::views::table::Table;
+use bk::views::tabs::TabView;
+use ctdesign::{CAPTION, HEADLINE, SIDEBAR, SPACE_1, SPACE_3, WINDOW_MIN_SIZE};
 use freya_core::integration::AppComponent;
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Size};
-use vow_design::{CAPTION, HEADLINE, SIDEBAR, SPACE_1, SPACE_3, WINDOW_MIN_SIZE};
 
 use crate::advanced_pane::AdvancedPane;
 use crate::archive;
@@ -770,7 +768,7 @@ fn window_section(index: usize, profile: &Profile) -> Section {
             Row::new(tr!("window-transparency"))
                 .detail(tr!("window-transparency-detail"))
                 .control(
-                    Slider::stepped(TRANSPARENCY_STEPS)
+                    Slider::stepped(tr!("window-transparency"), TRANSPARENCY_STEPS)
                         .value(usize::from(profile.transparency / TRANSPARENCY_STEP))
                         .on_change(move |step: usize| {
                             change_defaults(|defaults| {
@@ -1563,10 +1561,9 @@ impl Component for ImportColors {
             .child(Button::new(tr!("import-colors-choose")).on_press(move |_| {
                 // iTermColorPresets.m -importColorPresetFromFile:: an open panel, one file.
                 spawn(async move {
-                    if let Some(path) =
-                        barrier_kit::portal::open_files(tr!("import-colors"), false, false)
-                            .await
-                            .and_then(|paths| paths.into_iter().next())
+                    if let Some(path) = bk::portal::open_files(tr!("import-colors"), false, false)
+                        .await
+                        .and_then(|paths| paths.into_iter().next())
                     {
                         outcome.set(import_into(index, &path));
                     }

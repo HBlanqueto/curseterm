@@ -1,12 +1,13 @@
 use crate::tokens::KEY_BINDING_EDITOR;
-use barrier_kit::controls::{Button, ButtonStyle, Checkbox, TextField};
-use barrier_kit::popup_button::PopUpButton;
-use barrier_kit::style::{Palette, text};
-use barrier_kit::views::feedback::sheet;
-use barrier_kit::views::form::{Form, Row, Section};
+use bk::controls::{Button, Checkbox, TextField};
+use bk::popup_button::PopUpButton;
+use bk::style::{Palette, text};
+use bk::styles::ButtonStyle;
+use bk::views::feedback;
+use bk::views::form::{Form, Row, Section};
+use ctdesign::{HEADLINE, SPACE_2};
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Direction, Size};
-use vow_design::{HEADLINE, SPACE_2};
 
 use crate::config::{Trigger, TriggerAction};
 use crate::localize::tr;
@@ -68,7 +69,7 @@ impl Component for AddTriggerSheet {
         );
         let (cancel, confirm) = (self.on_done.clone(), self.on_done.clone());
         let ready = !regex.read().is_empty();
-        sheet(
+        feedback::Sheet::new(
             rect()
                 .width(Size::px(KEY_BINDING_EDITOR.width))
                 .direction(Direction::Vertical)
@@ -86,7 +87,7 @@ impl Component for AddTriggerSheet {
                         )
                         .child(
                             Button::new(tr!("snippet-ok"))
-                                .style(ButtonStyle::Primary)
+                                .style(ButtonStyle::bordered_prominent)
                                 .disabled(!ready)
                                 .on_press(move |_| {
                                     confirm.call(Some(Trigger {

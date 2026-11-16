@@ -24,7 +24,7 @@ use alacritty_terminal::term::test::TermSize;
 use alacritty_terminal::term::{Config, Term, TermMode};
 use alacritty_terminal::tty;
 use alacritty_terminal::vte::ansi::{CursorShape, CursorStyle, Handler, Processor};
-use barrier_kit::platform::WakeHandle;
+use bk::platform::WakeHandle;
 
 use regex::Regex;
 use rustix::process::{Pid, Signal, kill_process_group};

@@ -26,7 +26,7 @@ They come from `barrierkit/AGENTS.md` and `barrierkit/CLAUDE.md`:
 2. **Tests only for risky pure logic**, with the name as the specification
    (`a_resize_sends_sigwinch_with_the_new_grid`).
 3. **Design with tokens only.** No color or size literal: everything comes
-   from `vow_design` and `Palette::current()`. The exception is the terminal
+   from `ctdesign` and `Palette::current()`. The exception is the terminal
    scheme colors (ANSI, profile background and ink), which are user data and
    not interface tokens (see §6).
 4. **Visible text through Fluent:** `i18n/{en,es}/curseterm.ftl` and `tr!`.
@@ -75,7 +75,7 @@ They come from `barrierkit/AGENTS.md` and `barrierkit/CLAUDE.md`:
 | Clipboard | `freya_clipboard::Clipboard` | Text only over `wl_data_device` |
 | Cursor | `Cursor::set(CursorIcon::Text)` | Requires `wp_cursor_shape_manager_v1` |
 | Own font | `register_font(bytes)` | |
-| Languages | `barrier_kit::i18n`, `tr!` | |
+| Languages | `bk::i18n`, `tr!` | |
 | Custom drawing | `freya_core::element::ElementExt::render(RenderContext)` | Public in Freya; the kit uses it internally in `glass.rs` |
 
 ### Global menu, end to end

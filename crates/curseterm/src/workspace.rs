@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
-use barrier_kit::views::floating_pane::PaneFrame;
+use bk::views::floating_pane::PaneFrame;
 
 use crate::advanced;
 use crate::config::APP_NAME;

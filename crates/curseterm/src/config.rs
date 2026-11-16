@@ -3,8 +3,8 @@ use std::sync::LazyLock;
 
 use crate::tokens::TERMINAL;
 use alacritty_terminal::vte::ansi::Rgb;
+use ctdesign::MONO;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use vow_design::MONO;
 
 use crate::advanced::Advanced;
 use crate::arrangement::Arrangement;
@@ -497,11 +497,11 @@ impl Defaults {
 }
 
 pub fn change_defaults(change: impl FnOnce(&mut Defaults)) {
-    let mut defaults: Defaults = barrier_kit::app::load_defaults(APP_ID);
+    let mut defaults: Defaults = bk::app::load_defaults(APP_ID);
     let before = defaults.clone();
     change(&mut defaults);
     if defaults != before
-        && let Err(error) = barrier_kit::app::save_defaults(APP_ID, &defaults)
+        && let Err(error) = bk::app::save_defaults(APP_ID, &defaults)
     {
         tracing::warn!(%error, "could not save the settings");
     }

@@ -2,14 +2,14 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::Instant;
 
 use crate::tokens::SHORTCUT_LABEL;
-use barrier_kit::canvas::canvas;
-use barrier_kit::style::Palette;
+use bk::canvas::Canvas;
+use bk::style::Palette;
+use ctdesign::{BODY, Rgba};
 use freya_core::prelude::*;
 use freya_engine::prelude::{
     BlurStyle, Font, FontMgr, FontStyle, MaskFilter, PaintStyle, RRect, Rect as SkRect,
 };
 use torin::prelude::{Position, Size};
-use vow_design::{Rgba, TEXT};
 
 use crate::grid::{font, rgba_paint, typeface};
 
@@ -39,7 +39,7 @@ impl Component for HintLabel {
     fn render(&self) -> impl IntoElement {
         let face = use_hook(|| {
             font(
-                typeface(&FontMgr::default(), TEXT.family, FontStyle::normal()),
+                typeface(&FontMgr::default(), BODY.family, FontStyle::normal()),
                 SHORTCUT_LABEL.font_size,
             )
         });
@@ -72,7 +72,7 @@ impl Component for HintLabel {
             .scale(self.motion.scale)
             .rotate(self.motion.rotation)
             .opacity(self.motion.opacity)
-            .child(canvas(look.finish(), move |ctx| {
+            .child(Canvas::new(look.finish(), move |ctx| {
                 draw(ctx, &face, &key, typed, accent)
             }))
     }
@@ -84,13 +84,7 @@ impl Component for HintLabel {
 
 // ContentNavigationShortcut.swift: an accent capsule with a white outline and a soft shadow; the
 // typed part of the key at half white.
-fn draw(
-    ctx: &mut barrier_kit::canvas::CanvasContext,
-    face: &Font,
-    key: &str,
-    typed: usize,
-    accent: Rgba,
-) {
+fn draw(ctx: &mut bk::canvas::CanvasContext, face: &Font, key: &str, typed: usize, accent: Rgba) {
     let radius = ctx.height / 2.0;
     let shape = RRect::new_rect_xy(
         SkRect::new(0.5, 0.5, ctx.width - 0.5, ctx.height - 0.5),

@@ -506,3 +506,10 @@ hover fade with `use_alive`.
 **Not tested:** a trigger fired in the running app (only `shell_script` is
 tested, against `/bin/sh`); a user whose `$SHELL` is fish or nushell, because
 Run Command now runs under `/bin/sh`, as Run Coprocess already did.
+
+## Kit b5c31c2 (`bk`, `ctdesign`, `ctappearance`)
+
+**Not tested:** running CurseTerm on this `rev` (it builds, passes clippy and
+the unit tests; no window was opened); how `ButtonStyle::bordered_prominent`
+looks; `nix build .#curseterm` (the dev shell evaluates, the package could not
+be evaluated in the lab).

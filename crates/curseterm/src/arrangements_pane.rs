@@ -1,13 +1,13 @@
 use crate::tokens::ARRANGEMENT_PREVIEW;
-use barrier_kit::compact::IconButton;
-use barrier_kit::controls::{Button, TextField};
-use barrier_kit::style::{Palette, text};
-use barrier_kit::symbol::Symbol;
-use barrier_kit::theme::color;
-use barrier_kit::views::table::Table;
+use bk::compact::IconButton;
+use bk::controls::{Button, TextField};
+use bk::style::{Palette, text};
+use bk::symbol::Symbol;
+use bk::theme::color;
+use bk::views::table::Table;
+use ctdesign::{CAPTION, HAIRLINE, HEADLINE, SIDEBAR, SPACE_1, SPACE_3};
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Size};
-use vow_design::{CAPTION, HAIRLINE, HEADLINE, SIDEBAR, SPACE_1, SPACE_3};
 
 use crate::arrangement::{Arrangement, Layout};
 use crate::config::{Defaults, change_defaults};

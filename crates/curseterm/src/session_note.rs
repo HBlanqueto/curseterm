@@ -1,17 +1,17 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use crate::tokens::{SESSION_NOTE, SHEET_MATERIAL_BLUR};
-use barrier_kit::canvas::{CanvasContext, canvas};
-use barrier_kit::style::text;
-use barrier_kit::symbol::{Symbol, symbol};
-use barrier_kit::theme::color;
-use barrier_kit::views::text_view::{KeyPress, TextView};
+use bk::canvas::{Canvas, CanvasContext};
+use bk::style::text;
+use bk::symbol::{Image, Symbol};
+use bk::theme::color;
+use bk::views::text_view::{KeyPress, TextView};
+use ctdesign::{BG_WINDOW_DARK, BG_WINDOW_LIGHT, CAPTION, DARK, LIGHT, Rgba};
 use freya_core::prelude::*;
 use freya_engine::prelude::{
     BlurStyle, MaskFilter, PaintStyle, RRect, Rect as SkRect, SaveLayerRec, TileMode, blur,
 };
 use torin::prelude::{Alignment, Content, Direction, Gaps, Position, Size};
-use vow_design::{BG_WINDOW_DARK, BG_WINDOW_LIGHT, CAPTION, DARK, LIGHT, Rgba};
 
 use crate::grid::rgba_paint;
 use crate::localize::tr;
@@ -268,15 +268,15 @@ impl Component for SessionNoteView {
                             })
                             .on_mouse_down(|event: Event<MouseEventData>| event.stop_propagation())
                             .on_press(move |_| on_collapse.call(NoteChange::Collapsed(!collapsed)))
-                            .child(symbol(
-                                if collapsed {
+                            .child(
+                                Image::system(if collapsed {
                                     Symbol::ChevronRight
                                 } else {
                                     Symbol::ChevronDown
-                                },
-                                SESSION_NOTE.chevron,
-                                palette.ink_muted,
-                            )),
+                                })
+                                .size(SESSION_NOTE.chevron)
+                                .color(palette.ink_muted),
+                            ),
                     ),
             )
             .maybe_child((!collapsed).then(|| {
@@ -335,7 +335,7 @@ fn background(width: f32, height: f32, tint: Rgba, dark: bool) -> Element {
         .position(Position::new_absolute().left(-room).top(-room))
         .width(Size::px(width + 2.0 * room))
         .height(Size::px(height + 2.0 * room))
-        .child(canvas(look.finish(), move |ctx| {
+        .child(Canvas::new(look.finish(), move |ctx| {
             draw_material(ctx, room, tint, dark)
         }))
         .into_element()

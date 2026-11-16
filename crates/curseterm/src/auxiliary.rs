@@ -1,13 +1,13 @@
 //! About window and the menu of the auxiliary windows.
 
 use crate::tokens::ABOUT_WINDOW_SIZE;
-use barrier_kit::adornments::avatar;
-use barrier_kit::app::use_menu_action;
-use barrier_kit::patterns::about::about_window;
-use barrier_kit::platform::{WindowControls, WindowOptions};
-use barrier_kit::style::Palette;
-use barrier_kit::theme::color;
-use barrier_kit::titlebar::Titlebar;
+use bk::adornments::Avatar;
+use bk::app::use_menu_action;
+use bk::patterns::about::AboutView;
+use bk::platform::{WindowControls, WindowOptions};
+use bk::style::Palette;
+use bk::theme::color;
+use bk::titlebar::Titlebar;
 use freya_core::integration::AppComponent;
 use freya_core::prelude::*;
 use torin::prelude::{Direction, Size};
@@ -52,11 +52,9 @@ impl App for About {
             .direction(Direction::Vertical)
             .background(color(palette.window_background))
             .child(Titlebar::new().close_only(true))
-            .child(about_window(
-                avatar("CT"),
-                APP_NAME,
-                Some(tr!("about-version", version = env!("CARGO_PKG_VERSION"))),
-                tr!("about-copyright"),
-            ))
+            .child(
+                AboutView::new(Avatar::new("CT"), APP_NAME, tr!("about-copyright"))
+                    .version(tr!("about-version", version = env!("CARGO_PKG_VERSION"))),
+            )
     }
 }

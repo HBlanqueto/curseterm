@@ -3,17 +3,17 @@
 
 use std::time::{Duration, Instant};
 
-use barrier_kit::animation::use_alive;
-use barrier_kit::context_menu::context_menu;
-use barrier_kit::interaction::use_interaction;
-use barrier_kit::menu::MenuItem;
-use barrier_kit::platform::Timers;
-use barrier_kit::style::text;
-use barrier_kit::symbol::{Symbol, symbol};
-use barrier_kit::theme::color;
+use bk::animation::use_alive;
+use bk::interaction::use_interaction;
+use bk::menu::MenuItem;
+use bk::modifiers::ViewModifiers;
+use bk::platform::Timers;
+use bk::style::text;
+use bk::symbol::{Image, Symbol};
+use bk::theme::color;
+use ctdesign::{CAPTION, Font, HEADLINE, Rgba};
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Position, Size};
-use vow_design::{CAPTION, Font, HEADLINE, Rgba};
 
 use crate::tokens::{TAB_BAR, TAB_GROUP, TAB_STRIP, TabStyle};
 
@@ -174,7 +174,11 @@ impl Component for TabBar {
                         event.stop_propagation();
                         on_add.call(());
                     })
-                    .child(symbol(Symbol::Plus, TAB_STRIP.close, add_ink)),
+                    .child(
+                        Image::system(Symbol::Plus)
+                            .size(TAB_STRIP.close)
+                            .color(add_ink),
+                    ),
             )
         });
         rect()
@@ -303,7 +307,11 @@ impl TabBar {
                 rect()
                     .width(Size::px(TAB_GROUP.chevron))
                     .main_align(Alignment::End)
-                    .child(symbol(Symbol::ChevronDown, TAB_BAR.badge, ink))
+                    .child(
+                        Image::system(Symbol::ChevronDown)
+                            .size(TAB_BAR.badge)
+                            .color(ink),
+                    )
             }))
     }
 }
@@ -362,7 +370,7 @@ impl Component for Tab {
         let frame = use_state(|| 0u64);
         frame.read();
         let alive = use_alive();
-        let duration = if barrier_kit::theme::resolved().reduced_motion {
+        let duration = if bk::theme::resolved().reduced_motion {
             Duration::ZERO
         } else {
             Duration::from_millis(TAB_STRIP.highlight_ms)
@@ -433,7 +441,11 @@ impl Component for Tab {
                     on_close.call(index);
                 }
             })
-            .child(symbol(Symbol::XMark, TAB_STRIP.close, close_ink));
+            .child(
+                Image::system(Symbol::XMark)
+                    .size(TAB_STRIP.close)
+                    .color(close_ink),
+            );
         let shadow = (style.shadow && !self.selected).then(|| {
             rect()
                 .position(Position::new_absolute().top(0.0).left(0.0))
@@ -475,62 +487,62 @@ impl Component for Tab {
             size: style.font_size as u32,
             ..CAPTION
         };
-        let tab = interaction
-            .attach(rect(), true)
-            .a11y_role(AccessibilityRole::Tab)
-            .a11y_alt(match self.badge {
-                Some(badge) => format!("{}, {}", self.title, badge.label),
-                None => self.title.clone(),
-            })
-            .width(Size::flex(1.0))
-            .min_width(Size::px(TAB_STRIP.min_tab_width))
-            .height(Size::fill())
-            .background(color(fill))
-            .on_press(move |_| {
-                if let Some(on_select) = &on_select {
-                    on_select.call(index);
-                }
-            })
-            .maybe_child(shadow)
-            .maybe_child((!self.selected).then(|| {
-                line(
-                    style.top_line,
-                    Position::new_absolute().top(0.0).left(0.0),
-                    true,
-                )
-            }))
-            .child(line(
-                separator,
-                Position::new_absolute()
-                    .top(1.0)
-                    .right(if self.last { -1.0 } else { 0.0 }),
-                false,
-            ))
-            .children(outline)
-            .child(
-                rect()
-                    .width(Size::fill())
-                    .height(Size::fill())
-                    .padding(Gaps::new(
-                        0.0,
-                        TAB_STRIP.label_inset,
-                        0.0,
-                        TAB_STRIP.label_inset,
-                    ))
-                    .direction(Direction::Horizontal)
-                    .main_align(Alignment::Center)
-                    .cross_align(Alignment::Center)
-                    .spacing(TAB_BAR.badge_gap)
-                    .maybe_child(
-                        self.badge
-                            .map(|badge| symbol(badge.symbol, TAB_BAR.badge, ink)),
+        let tab =
+            interaction
+                .attach(rect(), true)
+                .a11y_role(AccessibilityRole::Tab)
+                .a11y_alt(match self.badge {
+                    Some(badge) => format!("{}, {}", self.title, badge.label),
+                    None => self.title.clone(),
+                })
+                .width(Size::flex(1.0))
+                .min_width(Size::px(TAB_STRIP.min_tab_width))
+                .height(Size::fill())
+                .background(color(fill))
+                .on_press(move |_| {
+                    if let Some(on_select) = &on_select {
+                        on_select.call(index);
+                    }
+                })
+                .maybe_child(shadow)
+                .maybe_child((!self.selected).then(|| {
+                    line(
+                        style.top_line,
+                        Position::new_absolute().top(0.0).left(0.0),
+                        true,
                     )
-                    .child(text(self.title.clone(), font, ink)),
-            )
-            .child(close);
+                }))
+                .child(line(
+                    separator,
+                    Position::new_absolute()
+                        .top(1.0)
+                        .right(if self.last { -1.0 } else { 0.0 }),
+                    false,
+                ))
+                .children(outline)
+                .child(
+                    rect()
+                        .width(Size::fill())
+                        .height(Size::fill())
+                        .padding(Gaps::new(
+                            0.0,
+                            TAB_STRIP.label_inset,
+                            0.0,
+                            TAB_STRIP.label_inset,
+                        ))
+                        .direction(Direction::Horizontal)
+                        .main_align(Alignment::Center)
+                        .cross_align(Alignment::Center)
+                        .spacing(TAB_BAR.badge_gap)
+                        .maybe_child(self.badge.map(|badge| {
+                            Image::system(badge.symbol).size(TAB_BAR.badge).color(ink)
+                        }))
+                        .child(text(self.title.clone(), font, ink)),
+                )
+                .child(close);
         let tab = match self.menu.clone() {
             Some((items, menu)) => {
-                context_menu(tab, items, move |id| menu.on_activate.call((index, id)))
+                tab.context_menu(items, move |id| menu.on_activate.call((index, id)))
             }
             None => tab,
         };

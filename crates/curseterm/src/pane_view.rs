@@ -7,10 +7,10 @@ use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::index::{Column, Line, Point, Side};
 use alacritty_terminal::selection::SelectionType;
 use alacritty_terminal::term::TermMode;
-use barrier_kit::canvas::canvas;
+use bk::canvas::Canvas;
+use ctdesign::SPACE_2;
 use freya_core::prelude::*;
 use torin::prelude::Size;
-use vow_design::SPACE_2;
 
 use crate::composer::Composer;
 use crate::composer_view::{ComposerEvent, ComposerView};
@@ -159,7 +159,7 @@ impl Component for TerminalPane {
             let session = session.clone();
             let fonts = fonts.clone();
             let scheme = scheme.clone();
-            canvas(look.finish(), move |ctx| {
+            Canvas::new(look.finish(), move |ctx| {
                 let filtered = filter.as_deref().map(|query| session.filtered_rows(query));
                 let term = session.term.lock();
                 let extras = session.extras();
@@ -433,8 +433,8 @@ pub fn hints_animating(hints: &Hints) -> bool {
         || hints.ended.is_some()
 }
 
-fn rgb(color: alacritty_terminal::vte::ansi::Rgb) -> vow_design::Rgba {
-    vow_design::Rgba::rgb8(color.r, color.g, color.b)
+fn rgb(color: alacritty_terminal::vte::ansi::Rgb) -> ctdesign::Rgba {
+    ctdesign::Rgba::rgb8(color.r, color.g, color.b)
 }
 
 // NSColor+iTerm.m -isDark: perceived brightness under one half.
@@ -533,11 +533,11 @@ fn note_highlight(annotation: &Annotation) -> f32 {
 }
 
 #[derive(Clone)]
-struct Primary(barrier_kit::platform::WindowControls);
+struct Primary(bk::platform::WindowControls);
 
 impl Primary {
     fn get() -> Self {
-        Self(barrier_kit::platform::WindowControls::get())
+        Self(bk::platform::WindowControls::get())
     }
 
     fn publish(&self, text: String) {

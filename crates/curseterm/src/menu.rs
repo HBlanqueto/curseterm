@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
-use barrier_kit::app::{Action, Shortcut, ShortcutKey};
-use barrier_kit::app_menu::{AppMenu, Menu};
-use barrier_kit::menu::{CheckState, MenuItem};
+use bk::app::{Action, Shortcut, ShortcutKey};
+use bk::main_menu::{MainMenu, Menu};
+use bk::menu::{CheckState, MenuItem};
 use freya_core::prelude::Modifiers;
 
 use crate::config::{APP_NAME, MarkAlert};
@@ -409,8 +409,8 @@ fn keyed(id: &'static str, label: &str, shortcut: &str) -> MenuItem {
     MenuItem::action(id, label).with_shortcut(shortcut)
 }
 
-pub fn terminal_menu(profiles: &ProfileEntries) -> AppMenu {
-    AppMenu::new(vec![
+pub fn terminal_menu(profiles: &ProfileEntries) -> MainMenu {
+    MainMenu::new(vec![
         app_menu(),
         Menu::new(
             tr!("menu-shell"),
@@ -953,8 +953,8 @@ pub fn buried_items(buried: &[(SessionId, String)]) -> Vec<MenuItem> {
         .collect()
 }
 
-pub fn auxiliary_menu() -> AppMenu {
-    AppMenu::new(vec![
+pub fn auxiliary_menu() -> MainMenu {
+    MainMenu::new(vec![
         app_menu(),
         Menu::new(
             tr!("menu-shell"),

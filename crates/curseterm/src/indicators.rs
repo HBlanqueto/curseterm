@@ -1,7 +1,7 @@
 use crate::tokens::INDICATOR;
-use barrier_kit::canvas::CanvasContext;
+use bk::canvas::CanvasContext;
+use ctdesign::SYMBOL;
 use freya_engine::prelude::{PaintStyle, Path, RRect, Rect as SkRect};
-use vow_design::SYMBOL;
 
 use crate::grid::rgba_paint;
 

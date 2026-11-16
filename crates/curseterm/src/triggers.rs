@@ -2,8 +2,8 @@ use std::time::{Duration, Instant};
 
 use crate::tokens::HIGHLIGHT_COLORS;
 use alacritty_terminal::vte::ansi::Rgb;
+use ctdesign::Rgba;
 use regex::Regex;
-use vow_design::Rgba;
 
 use crate::advanced;
 use crate::config::{Trigger, TriggerAction};

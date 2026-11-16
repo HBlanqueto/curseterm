@@ -1,15 +1,15 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use crate::tokens::{ANNOTATION, AnnotationColors};
-use barrier_kit::canvas::{CanvasContext, canvas};
-use barrier_kit::theme::color;
-use barrier_kit::views::text_view::TextView;
+use bk::canvas::{Canvas, CanvasContext};
+use bk::theme::color;
+use bk::views::text_view::TextView;
+use ctdesign::{Rgba, SYMBOL};
 use freya_core::prelude::*;
 use freya_engine::prelude::{
     BlurStyle, MaskFilter, PaintStyle, Path, PathBuilder, Point as SkPoint, Rect as SkRect,
 };
 use torin::prelude::{Gaps, Position, Size};
-use vow_design::{Rgba, SYMBOL};
 
 use crate::grid::rgba_paint;
 use crate::localize::tr;
@@ -103,7 +103,7 @@ impl Component for NoteView {
             self.dark,
         )
             .hash(&mut look);
-        let painter = canvas(look.finish(), move |ctx| {
+        let painter = Canvas::new(look.finish(), move |ctx| {
             draw(ctx, &frame, colors, background, button)
         });
         let on_event = self.on_event.clone();

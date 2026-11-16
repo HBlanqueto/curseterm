@@ -1,18 +1,19 @@
 use crate::tokens::KEY_BINDING_EDITOR;
-use barrier_kit::buttons::MenuButton;
-use barrier_kit::compact::IconButton;
-use barrier_kit::controls::{Button, ButtonStyle, TextField};
-use barrier_kit::menu::MenuItem;
-use barrier_kit::popup_button::PopUpButton;
-use barrier_kit::style::{Palette, text};
-use barrier_kit::symbol::Symbol;
-use barrier_kit::theme::color;
-use barrier_kit::views::feedback::sheet;
-use barrier_kit::views::form::{Form, Row, Section};
-use barrier_kit::views::table::Table;
+use bk::buttons::MenuButton;
+use bk::compact::IconButton;
+use bk::controls::{Button, TextField};
+use bk::menu::MenuItem;
+use bk::popup_button::PopUpButton;
+use bk::style::{Palette, text};
+use bk::styles::ButtonStyle;
+use bk::symbol::Symbol;
+use bk::theme::color;
+use bk::views::feedback;
+use bk::views::form::{Form, Row, Section};
+use bk::views::table::Table;
+use ctdesign::{BODY, CAPTION, HEADLINE, SPACE_1, SPACE_2};
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Direction, Gaps, Size};
-use vow_design::{CAPTION, HEADLINE, SPACE_1, SPACE_2, TEXT};
 
 use crate::config::change_defaults;
 use crate::key_bindings::{
@@ -314,7 +315,7 @@ fn edit_sheet(
     let cancel = close.clone();
     let ready = !binding.combo.is_empty();
     let saving = editor.clone();
-    sheet(
+    feedback::Sheet::new(
         rect()
             .width(Size::px(KEY_BINDING_EDITOR.width))
             .direction(Direction::Vertical)
@@ -352,7 +353,7 @@ fn edit_sheet(
                     .child(Button::new(tr!("close-cancel")).on_press(move |_| cancel()))
                     .child(
                         Button::new(tr!("snippet-ok"))
-                            .style(ButtonStyle::Primary)
+                            .style(ButtonStyle::bordered_prominent)
                             .disabled(!ready)
                             .on_press(move |_| {
                                 let mut binding = draft.peek().clone();
@@ -519,7 +520,7 @@ fn preset_question(owner: Owner, preset: Preset, pending: State<Option<Preset>>)
             }
         }
     };
-    sheet(
+    feedback::Sheet::new(
         rect()
             .a11y_role(AccessibilityRole::AlertDialog)
             .a11y_alt(tr!("preset-load-heading"))
@@ -530,7 +531,7 @@ fn preset_question(owner: Owner, preset: Preset, pending: State<Option<Preset>>)
             .child(
                 text(
                     tr!("preset-remove-before-loading"),
-                    TEXT,
+                    BODY,
                     palette.secondary_label,
                 )
                 .width(Size::fill())
@@ -546,7 +547,7 @@ fn preset_question(owner: Owner, preset: Preset, pending: State<Option<Preset>>)
                     .child(Button::new(tr!("preset-remove")).on_press(answer(Some(true))))
                     .child(
                         Button::new(tr!("preset-keep"))
-                            .style(ButtonStyle::Primary)
+                            .style(ButtonStyle::bordered_prominent)
                             .on_press(answer(Some(false))),
                     ),
             ),
@@ -687,7 +688,7 @@ impl Component for Recorder {
             .background(color(palette.control_background))
             .border(
                 Border::new()
-                    .width(if focused { 2.0 } else { vow_design::HAIRLINE })
+                    .width(if focused { 2.0 } else { ctdesign::HAIRLINE })
                     .fill(color(if focused {
                         palette.accent
                     } else {
@@ -705,7 +706,7 @@ impl Component for Recorder {
             })
             .child(text(
                 label,
-                if focused { CAPTION } else { TEXT },
+                if focused { CAPTION } else { BODY },
                 palette.label,
             ))
     }
