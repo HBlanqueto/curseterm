@@ -3208,11 +3208,6 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
         TermEvent::ResetTitle => workspace.write().set_title(id, None),
         TermEvent::PtyWrite(text) => session.write(text.into_bytes()),
         TermEvent::ClipboardStore(_, text) => set_clipboard(handles.clipboard, text),
-        TermEvent::ClipboardLoad(_, format) => {
-            if let Some(text) = clipboard_text(handles.clipboard) {
-                session.write(format(&text).into_bytes());
-            }
-        }
         TermEvent::TextAreaSizeRequest(format) => {
             let size = session.size();
             session.write(
