@@ -752,8 +752,13 @@ fn perform(
                 cell.set_hyperlink(Some(link.clone()))
             });
         }
-        TriggerAction::RunCommand => run_command(&parameter),
-        TriggerAction::Coprocess => extras.fired.push(Fired::Coprocess(parameter)),
+        TriggerAction::RunCommand => {
+            run_command(&triggers::shell_script(&trigger.parameter, groups))
+        }
+        TriggerAction::Coprocess => extras.fired.push(Fired::Coprocess(triggers::shell_script(
+            &trigger.parameter,
+            groups,
+        ))),
         // PasswordTrigger.m: opens the password manager with that account chosen.
         TriggerAction::PasswordManager => extras.fired.push(Fired::PasswordManager(parameter)),
         TriggerAction::Alert if popup => {
@@ -795,8 +800,7 @@ pub fn spawn_reaped(command: &mut std::process::Command) -> io::Result<()> {
 }
 
 pub fn run_command(command: &str) {
-    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
-    let mut run = std::process::Command::new(shell);
+    let mut run = std::process::Command::new("/bin/sh");
     run.args(["-c", command])
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())

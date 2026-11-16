@@ -500,3 +500,9 @@ hover fade with `use_alive`.
 ## Phase 90 — Traffic lights away from the edge
 
 **Not tested:** it was not run on Malaysia.
+
+## Run Command and Coprocess triggers: captures as variables
+
+**Not tested:** a trigger fired in the running app (only `shell_script` is
+tested, against `/bin/sh`); a user whose `$SHELL` is fish or nushell, because
+Run Command now runs under `/bin/sh`, as Run Coprocess already did.

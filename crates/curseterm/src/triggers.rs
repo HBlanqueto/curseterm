@@ -84,6 +84,66 @@ impl Compiled {
 // Trigger.m -promisedValueOfInterpolatedString:withBackreferencesReplacedWithValues: \0 to \9,
 // then \a \b \e \n \r \t \\ and \xNN.
 pub fn expand(parameter: &str, groups: &[&str]) -> String {
+    expand_with(parameter, |_, index| {
+        groups.get(index).copied().unwrap_or_default().to_string()
+    })
+}
+
+// A capture is the program's output: it reaches the shell as a variable the script only
+// references, never as script text.
+pub fn shell_script(parameter: &str, groups: &[&str]) -> String {
+    let variables: String = groups
+        .iter()
+        .enumerate()
+        .map(|(index, group)| format!("{CAPTURE_VARIABLE}{index}={}; ", single_quoted(group)))
+        .collect();
+    variables
+        + &expand_with(parameter, |script, index| {
+            variable_reference(quote_at_end(script), index)
+        })
+}
+
+const CAPTURE_VARIABLE: &str = "CURSETERM_MATCH_";
+
+#[derive(Clone, Copy, PartialEq)]
+enum Quote {
+    None,
+    Single,
+    Double,
+}
+
+fn single_quoted(text: &str) -> String {
+    format!("'{}'", text.replace('\'', r"'\''"))
+}
+
+fn quote_at_end(script: &str) -> Quote {
+    let (mut quote, mut escaped) = (Quote::None, false);
+    for c in script.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        quote = match (quote, c) {
+            (Quote::Single, '\'') | (Quote::Double, '"') => Quote::None,
+            (Quote::None, '\'') => Quote::Single,
+            (Quote::None, '"') => Quote::Double,
+            (quote, _) => quote,
+        };
+        escaped = c == '\\' && quote != Quote::Single;
+    }
+    quote
+}
+
+fn variable_reference(quote: Quote, index: usize) -> String {
+    let variable = format!("${{{CAPTURE_VARIABLE}{index}}}");
+    match quote {
+        Quote::None => format!("\"{variable}\""),
+        Quote::Double => variable,
+        Quote::Single => format!("'\"{variable}\"'"),
+    }
+}
+
+fn expand_with(parameter: &str, capture: impl Fn(&str, usize) -> String) -> String {
     let mut expanded = String::new();
     let mut chars = parameter.chars().peekable();
     while let Some(c) = chars.next() {
@@ -94,7 +154,7 @@ pub fn expand(parameter: &str, groups: &[&str]) -> String {
         match chars.next() {
             Some(digit @ '0'..='9') => {
                 let index = digit as usize - '0' as usize;
-                expanded.push_str(groups.get(index).copied().unwrap_or_default());
+                expanded.push_str(&capture(&expanded, index));
             }
             Some('a') => expanded.push('\x07'),
             Some('b') => expanded.push('\x08'),
@@ -176,6 +236,29 @@ mod tests {
             "got 42 of error 42\nA\\\\z"
         );
         assert_eq!(expand(r"\3", &["only"]), "");
+    }
+
+    #[test]
+    fn a_capture_reaches_the_shell_as_text_in_every_quoting_context() {
+        let hostile = "a'b\"c $(echo pwned) `echo pwned`;echo pwned\nend";
+        let cases = [
+            (r"printf %s \1", hostile.to_string()),
+            (r#"printf %s "\1""#, hostile.to_string()),
+            (r"printf %s '\1'", hostile.to_string()),
+            (r#"printf %s "x\1y""#, format!("x{hostile}y")),
+        ];
+        for (template, printed) in cases {
+            let script = shell_script(template, &["", hostile]);
+            let output = std::process::Command::new("/bin/sh")
+                .args(["-c", &script])
+                .output()
+                .expect("sh runs");
+            assert_eq!(
+                String::from_utf8_lossy(&output.stdout),
+                printed,
+                "{template}"
+            );
+        }
     }
 
     #[test]
