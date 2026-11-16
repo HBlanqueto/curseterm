@@ -594,38 +594,25 @@ fn general_section(defaults: &Defaults, index: usize, profile: &Profile) -> Sect
         )
 }
 
-// BK-021: RadioGroup is always horizontal; one single-option group per row stacks them like iTerm2.
-fn directory_choices(index: usize, chosen: usize) -> Rect {
-    [
-        tr!("directory-home"),
-        tr!("directory-previous"),
-        tr!("directory-fixed"),
-    ]
-    .into_iter()
-    .enumerate()
-    .fold(
-        rect().direction(Direction::Vertical).spacing(SPACE_1),
-        |column, (kind, label)| {
-            column.child(
-                RadioGroup::new(label)
-                    .option(label)
-                    .selected(if kind == chosen { 0 } else { 1 })
-                    .on_change(move |_: usize| {
-                        edit(index, |profile| {
-                            profile.working_directory = match kind {
-                                0 => WorkingDirectory::Home,
-                                1 => WorkingDirectory::Previous,
-                                _ => WorkingDirectory::Fixed(
-                                    std::env::var_os("HOME")
-                                        .map(PathBuf::from)
-                                        .unwrap_or_default(),
-                                ),
-                            };
-                        });
-                    }),
-            )
-        },
-    )
+fn directory_choices(index: usize, chosen: usize) -> RadioGroup {
+    RadioGroup::new(tr!("profile-directory"))
+        .option(tr!("directory-home"))
+        .option(tr!("directory-previous"))
+        .option(tr!("directory-fixed"))
+        .selected(chosen)
+        .on_change(move |kind: usize| {
+            edit(index, |profile| {
+                profile.working_directory = match kind {
+                    0 => WorkingDirectory::Home,
+                    1 => WorkingDirectory::Previous,
+                    _ => WorkingDirectory::Fixed(
+                        std::env::var_os("HOME")
+                            .map(PathBuf::from)
+                            .unwrap_or_default(),
+                    ),
+                };
+            });
+        })
 }
 
 fn colors_section(defaults: &Defaults, index: usize, profile: &Profile) -> Section {

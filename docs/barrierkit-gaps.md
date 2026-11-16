@@ -32,7 +32,6 @@ re-checked**.
 | BK-017 | Menu handlers run outside Freya's context | handles taken in `render` (`terminal.rs`) | not re-checked |
 | BK-019 | An app cannot ask for an xdg-activation token | none; «Window» lists no windows | open: `platform/activation.rs` serves only the kit |
 | BK-020 | Labels of panes, rows and pop-ups are `&'static str` | `preferences::intern` leaks each name once | open: `PopUpButton::new` and `item` take `&'static str` |
-| BK-021 | `RadioGroup` is always horizontal | one single-option group per row (`preferences.rs`) | fixed in `afe570e`, which `b5c31c2` has: `RadioGroup` is vertical by default |
 | BK-024 | No bell or trash symbol | `SpeakerWave` for the bell; a drawn trash (`note_view.rs`) | bell fixed in `7a3464b`, after the pin (`Symbol::Bell`); trash open |
 | BK-025 | No global shortcuts or way to show and hide the window | `curseterm --hotkey` (`windows.rs`) | open: no GlobalShortcuts portal |
 | BK-027 | A view with global keys cannot tell whether a text field or an `Alert` keeps the key | the sheet closes one loop later (`terminal.rs`) | not re-checked |

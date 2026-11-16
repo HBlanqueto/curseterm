@@ -511,5 +511,6 @@ Run Command now runs under `/bin/sh`, as Run Coprocess already did.
 
 **Not tested:** running CurseTerm on this `rev` (it builds, passes clippy and
 the unit tests; no window was opened); how `ButtonStyle::bordered_prominent`
-looks; `nix build .#curseterm` (the dev shell evaluates, the package could not
+and the vertical `RadioGroup` of Profiles › General › Directory look;
+`nix build .#curseterm` (the dev shell evaluates, the package could not
 be evaluated in the lab).
