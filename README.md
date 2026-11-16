@@ -37,6 +37,6 @@ Malaysia installs it with its NixOS module and opens it in `./dev.sh demo` and
 ## Documentation
 
 - [`docs/estudio-previo.md`](docs/estudio-previo.md): what was learned before starting.
-- [`docs/progreso.md`](docs/progreso.md): plan and outcome of each phase.
-- [`docs/barrierkit-gaps.md`](docs/barrierkit-gaps.md): what BarrierKit lacks.
+- [`docs/untested.md`](docs/untested.md): what has not been run.
+- [`docs/barrierkit-gaps.md`](docs/barrierkit-gaps.md): what CurseTerm still works around.
 - [`docs/decisiones/`](docs/decisiones/): ADRs.

@@ -281,7 +281,6 @@ only for the OSCs that Alacritty ignores (1337, 133) in phase 4.
      neither does the kit.
   Until `github.com` (and `codeload.github.com`) are allowed in the
   environment's network, nothing that depends on the kit can be built or run
-  here. Phase 1 notes it in `progreso.md` and declares nothing tested that
-  has not been run.
+  here. [`untested.md`](untested.md) lists what has not been run.
 - malaysia's `dev.sh lab` also needs Vulkan, a private D-Bus bus and the
   nested compositor; it will be tested in phase 1.

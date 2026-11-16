@@ -29,8 +29,8 @@ iTerm2 uses ⌘ for almost everything. Linux has two common schemes: Super
 ## Consequences
 
 - In Malaysia, Super+W closes the whole window even if it has several tabs,
-  because the compositor handles it before the app. `progreso.md` records it
-  as a difference from iTerm2.
+  because the compositor handles it before the app. the phase log
+  (`git show bc27a76:docs/progreso.md`) records it as a difference from iTerm2.
 - In GNOME, the Super shortcuts the desktop reserves do not arrive; the menus
   still work with the mouse.
 

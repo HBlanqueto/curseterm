@@ -18,7 +18,7 @@ formato de commits. Aquí solo lo propio.
 5. **Docs solo en inglés (`nombre.md`)**, sin copias en español; código,
    comentarios y rustdoc también en inglés.
 6. **Nada se da por probado sin ejecutarlo**; lo no probado se dice en
-   `docs/progreso.md`.
+   `docs/untested.md`.
 
 ## Compilar
 
