@@ -41,6 +41,7 @@ pub struct TerminalPane {
     pub held: State<Modifiers>,
     pub badge: Option<Rc<str>>,
     pub opacity: f32,
+    pub show_marks: bool,
     pub preedit: Option<Rc<str>>,
     pub replay: Option<usize>,
     pub blink_off: bool,
@@ -67,6 +68,7 @@ impl PartialEq for TerminalPane {
             && self.filter == other.filter
             && self.badge == other.badge
             && self.opacity == other.opacity
+            && self.show_marks == other.show_marks
             && self.preedit == other.preedit
             && self.replay == other.replay
             && self.blink_off == other.blink_off
@@ -106,6 +108,7 @@ impl Component for TerminalPane {
         let mut reported_cell = use_state(|| None::<(usize, usize)>);
         let badge = self.badge.clone();
         let opacity = self.opacity;
+        let show_marks = self.show_marks;
         let preedit = self.preedit.clone();
         let replay = self.replay;
         let blink_off = self.blink_off;
@@ -131,7 +134,7 @@ impl Component for TerminalPane {
             broadcast,
             (&find, &filter),
             &badge,
-            opacity.to_bits(),
+            (opacity.to_bits(), show_marks),
             &preedit,
             (
                 replay,
@@ -185,6 +188,7 @@ impl Component for TerminalPane {
                     broadcast: broadcast.then_some(scheme.ansi[1]),
                     badge: badge.as_deref(),
                     opacity,
+                    show_marks,
                     preedit: preedit.as_deref(),
                     replay: replay
                         .and_then(|index| extras.replay.get(index))

@@ -210,6 +210,7 @@ pub struct Overlay<'a> {
     pub broadcast: Option<Rgb>,
     pub badge: Option<&'a str>,
     pub opacity: f32,
+    pub show_marks: bool,
     pub preedit: Option<&'a str>,
     pub replay: Option<&'a [Vec<Cell>]>,
     pub blink_off: bool,
@@ -311,7 +312,9 @@ pub fn draw(
         draw_preedit(ctx, text, (x, y), fonts, scheme);
     }
     draw_images(ctx, overlay.extras, top, fonts);
-    draw_marks(ctx, overlay, top, term.screen_lines() as i64, fonts, scheme);
+    if overlay.show_marks {
+        draw_marks(ctx, overlay, top, term.screen_lines() as i64, fonts, scheme);
+    }
     if overlay.extras.show_timestamps {
         let last = absolute_line(term) - top;
         draw_timestamps(

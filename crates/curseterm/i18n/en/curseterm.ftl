@@ -459,6 +459,7 @@ scrollback-lines = Scrollback lines
 scrollback-lines-detail = Up to { $limit }; 0 turns scrollback off.
 flash-visual-bell = Flash visual bell
 bell-icon-in-tabs = Show bell icon in tabs
+show-mark-indicators = Show mark indicators
 tab-bell = The bell rang
 find-count = { $current } of { $total }
 find-none = No matches

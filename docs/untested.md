@@ -536,3 +536,10 @@ the switch off and on; the switch in Settings › Profiles › Keys.
 or built in the session that made the change); the 32-point Regular title
 bar, the left-aligned title at 84 points, the traffic lights' inset in a
 Minimal window and the ⌘N label of each tab, in Malaysia.
+
+## Show mark indicators profile switch
+
+**Not tested:** not compiled (`./dev.sh check` had not finished in the session
+that made the change); the switch in Settings › Profiles › Terminal hiding and
+showing the prompt triangles at once in an open session, with `OSC 133;A` from
+the shell.

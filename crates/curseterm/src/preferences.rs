@@ -906,6 +906,15 @@ fn terminal_section(index: usize, profile: &Profile) -> Section {
                     }),
             ),
         )
+        .row(
+            Row::new(tr!("show-mark-indicators")).control(
+                Switch::new(tr!("show-mark-indicators"))
+                    .on(profile.show_mark_indicators)
+                    .on_toggle(move |on: bool| {
+                        edit(index, |profile| profile.show_mark_indicators = on)
+                    }),
+            ),
+        )
 }
 
 // ProfilesTerminalPreferencesViewController.m: Notification Center alerts and Filter Alerts.

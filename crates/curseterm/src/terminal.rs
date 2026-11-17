@@ -1427,6 +1427,7 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
                     } else {
                         1.0
                     },
+                    show_marks: profile.show_mark_indicators,
                     badge: (!profile.badge.is_empty()).then(|| {
                         let title = painting.workspace.peek().title(*id).to_string();
                         Rc::from(profile.badge.replace(r"\(session.name)", &title))

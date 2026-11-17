@@ -162,6 +162,7 @@ pub struct Profile {
     pub scrollback_lines: u32,
     pub flash_visual_bell: bool,
     pub bell_icon_in_tabs: bool,
+    pub show_mark_indicators: bool,
     pub columns: u16,
     pub rows: u16,
     pub when_session_ends: SessionEnd,
@@ -384,6 +385,8 @@ impl Default for Profile {
             scrollback_lines: 1000,
             flash_visual_bell: true,
             bell_icon_in_tabs: true,
+            // iTermProfilePreferences.m KEY_SHOW_MARK_INDICATORS: YES.
+            show_mark_indicators: true,
             columns: 80,
             rows: 25,
             when_session_ends: SessionEnd::Close,
