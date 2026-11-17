@@ -262,6 +262,8 @@ pub const MOVE_TAB_LEFT: Action = Action::new("move-tab-left", || tr!("move-tab-
 pub const MOVE_TAB_RIGHT: Action = Action::new("move-tab-right", || tr!("move-tab-right"));
 pub const SELECT_TAB: &str = "select-tab";
 pub const SELECT_TAB_PREFIX: &str = "select-tab:";
+pub const SELECT_WINDOW: &str = "select-window";
+pub const SELECT_WINDOW_PREFIX: &str = "select-window:";
 pub const ARRANGEMENTS_MENU: &str = "arrangements-menu";
 pub const RESTORE_ARRANGEMENT: &str = "restore-arrangement";
 pub const RESTORE_ARRANGEMENT_TABS: &str = "restore-arrangement-tabs";
@@ -698,6 +700,8 @@ pub fn terminal_menu(profiles: &ProfileEntries) -> MainMenu {
                         ),
                     ],
                 ),
+                MenuItem::Separator,
+                submenu(SELECT_WINDOW, tr!("select-window"), Vec::new()),
             ],
         ),
         Menu::new(
@@ -797,6 +801,27 @@ pub fn select_tab_items(titles: &[String], active: usize) -> Vec<MenuItem> {
 
 pub fn select_tab_shortcut(index: usize) -> Option<String> {
     (index < 9).then(|| format!("Super+{}", index + 1))
+}
+
+// iTermPreferences.m kPreferenceKeySwitchWindowModifier: ⌥⌘ and the window's number.
+pub fn select_window_shortcut(number: usize) -> Option<String> {
+    (1..=9)
+        .contains(&number)
+        .then(|| format!("Alt+Super+{number}"))
+}
+
+pub fn select_window_items(windows: &[(usize, String)], current: usize) -> Vec<MenuItem> {
+    windows
+        .iter()
+        .map(|(number, title)| {
+            let item = MenuItem::action(format!("{SELECT_WINDOW_PREFIX}{number}"), title.clone())
+                .with_check(CheckState::Radio(*number == current));
+            match select_window_shortcut(*number) {
+                Some(shortcut) => item.with_shortcut(shortcut),
+                None => item,
+            }
+        })
+        .collect()
 }
 
 pub fn indexed_items(prefix: &str, names: &[String]) -> Vec<MenuItem> {

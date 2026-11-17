@@ -317,7 +317,9 @@ pub struct IndicatorColors {
 
 // PSMTabBarControl's classic styles and iTerm2's compact window (PSMYosemiteTabStyle.m,
 // PSMTabBarControl.m, iTermRootTerminalView.m, iTermAdvancedSettingsModel.m), measured on
-// macOS 26: the title and the first tab start 84 points in and a tab's ⌘N ends 10 from its edge.
+// macOS 26: the title and the first tab start 84 points in and a tab's ⌘N ends 10 from its edge;
+// the window's ⌥⌘N, at 0.7 of the title's alpha, takes 51 points before the title or 45 before
+// the tabs.
 pub const TAB_STRIP: TabStripMetrics = TabStripMetrics {
     min_tab_width: 75.0,
     add_width: 22.0,
@@ -325,6 +327,9 @@ pub const TAB_STRIP: TabStripMetrics = TabStripMetrics {
     close_x: 6.0,
     label_inset: 26.0,
     shortcut_x: 10.0,
+    shortcut_alpha: 0.7,
+    title_shortcut_width: 51.0,
+    tabs_shortcut_width: 45.0,
     compact_inset: 84.0,
     minimal_height: 38.0,
     title_font_size: 13.0,
@@ -350,6 +355,9 @@ pub struct TabStripMetrics {
     pub close_x: f32,
     pub label_inset: f32,
     pub shortcut_x: f32,
+    pub shortcut_alpha: f32,
+    pub title_shortcut_width: f32,
+    pub tabs_shortcut_width: f32,
     pub compact_inset: f32,
     pub minimal_height: f32,
     pub title_font_size: f32,
@@ -388,13 +396,16 @@ const fn white(level: f32, alpha: f32) -> Rgba {
     )
 }
 
-// A titled NSWindow on macOS 26: a 32-point title bar with the bold 13-point title, in
-// NSColor.windowBackgroundColor (236 light, 50 dark), and iTermRootTerminalView.m's 1-point
-// division view (HSB brightness 0.70 or 0.86 light, 0.10 or 0.07 dark) when no tab bar is below.
+// A titled NSWindow on macOS 26: a 32-point title bar with the bold 13-point title and, 12 points
+// from the right end, the window's ⌥⌘N at half its alpha, in NSColor.windowBackgroundColor (236
+// light, 38 dark), and iTermRootTerminalView.m's 1-point division view (HSB brightness 0.70 or
+// 0.86 light, 0.19 or 0.07 dark) when no tab bar is below. The dark values are measured.
 pub const TITLE_BAR: TitleBarMetrics = TitleBarMetrics {
     height: 32.0,
     font_size: 13.0,
     font_weight: 700,
+    shortcut_x: 12.0,
+    shortcut_alpha: 0.5,
     light: TitleBarColors {
         background: white(236.0 / 255.0, 1.0),
         title: white(0.0, 0.85),
@@ -403,10 +414,10 @@ pub const TITLE_BAR: TitleBarMetrics = TitleBarMetrics {
         division_inactive: white(0.86, 1.0),
     },
     dark: TitleBarColors {
-        background: white(50.0 / 255.0, 1.0),
-        title: white(1.0, 0.85),
+        background: white(38.0 / 255.0, 1.0),
+        title: white(1.0, 0.58),
         title_inactive: white(1.0, 0.25),
-        division: white(0.10, 1.0),
+        division: white(49.0 / 255.0, 1.0),
         division_inactive: white(0.07, 1.0),
     },
 };
@@ -416,6 +427,8 @@ pub struct TitleBarMetrics {
     pub height: f32,
     pub font_size: f32,
     pub font_weight: u16,
+    pub shortcut_x: f32,
+    pub shortcut_alpha: f32,
     pub light: TitleBarColors,
     pub dark: TitleBarColors,
 }
@@ -450,9 +463,10 @@ pub const TAB_STYLE_LIGHT: TabStyle = TabStyle {
     outline: Rgba::TRANSPARENT,
 };
 
-// PSMDarkTabStyle.m; the bottom row blends its black-to-0.75 gradient over the 0.1 line.
+// PSMDarkTabStyle.m; the bottom row blends its black-to-0.75 gradient over the 0.1 line. The
+// backing is the compact strip measured on macOS 26.
 pub const TAB_STYLE_DARK: TabStyle = TabStyle {
-    backing: TITLE_BAR.dark.background,
+    backing: white(54.0 / 255.0, 1.0),
     unselected: white(0.0, 0.5),
     unselected_hover: white(0.0, 0.2),
     text_selected: white(1.0, 1.0),

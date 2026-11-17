@@ -72,6 +72,7 @@ previous-tab = Select Previous Tab
 move-tab-left = Move Tab Left
 move-tab-right = Move Tab Right
 select-tab = Select Tab
+select-window = Select Window
 split-pane = Split Pane
 pane-up = Select Pane Above
 pane-down = Select Pane Below

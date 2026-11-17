@@ -535,7 +535,10 @@ the switch off and on; the switch in Settings › Profiles › Keys.
 **Not tested:** not compiled (`skia-bindings` 0.104.0 could not be downloaded
 or built in the session that made the change); the 32-point Regular title
 bar, the left-aligned title at 84 points, the traffic lights' inset in a
-Minimal window and the ⌘N label of each tab, in Malaysia.
+Minimal window, the ⌘N label of each tab, the window's ⌥⌘N label in the three
+layouts and the dark colours, in Malaysia; ⌥⌘N raising another window
+through `WindowControls::make_key_and_order_front`. Windows of another
+CurseTerm process are numbered on their own, from 1.
 
 ## Show mark indicators profile switch
 

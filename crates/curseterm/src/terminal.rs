@@ -572,7 +572,8 @@ impl App for Terminal {
                 *revision.write() += 1;
             }
         });
-        use_live_menu(&handles);
+        let window_number = windows::use_window_number(handles.workspace.read().window_title());
+        use_live_menu(&handles, window_number);
         // PTYTextView+ARC.m: the shortcuts take the keys, so the find field gives up focus; it runs
         // here because menu handlers have no Freya context (BK-017).
         if *find.focused.peek()
@@ -630,7 +631,11 @@ impl App for Terminal {
         );
         let palette = Palette::current();
         let state = workspace.read();
-        let title = state.window_title().to_string();
+        let heading = Heading {
+            title: state.window_title().to_string(),
+            shortcut: menu::select_window_shortcut(window_number)
+                .map(|combo| key_bindings::shown(&combo)),
+        };
         let show_tab_bar = defaults.read().show_tab_bar;
         // iTermRootTerminalView.m -tabBarShouldBeVisibleWithAdditionalTabs:
         let tabs_allowed = !full_screen || defaults.read().show_tabs_in_fullscreen;
@@ -656,10 +661,10 @@ impl App for Terminal {
                 .fold(
                     TabBar::new(tr!("tabs"), tr!("close-tab"), tab_style)
                         .active(window_focused)
-                        .leading(if compact {
-                            TAB_STRIP.compact_inset
-                        } else {
-                            0.0
+                        .leading(match (compact, heading.shortcut.is_some()) {
+                            (true, true) => TAB_STRIP.compact_inset + TAB_STRIP.tabs_shortcut_width,
+                            (true, false) => TAB_STRIP.compact_inset,
+                            (false, _) => 0.0,
                         })
                         .on_empty_mouse_down({
                             let drag = drag.clone();
@@ -775,7 +780,7 @@ impl App for Terminal {
         drop(state);
         use_background_alpha(if transparent { 0.0 } else { 1.0 });
         place_ime_cursor(&handles);
-        use_window_title(&title);
+        use_window_title(&heading.title);
 
         let keyboard = handles.clone();
         let find_bar = (*find.open.read()).then(|| find_bar(&handles, revision));
@@ -1000,13 +1005,13 @@ impl App for Terminal {
                 *revision.write() += 1;
             })
             .children(if no_title_bar && chrome != Chrome::Server {
-                full_screen_chrome(dark, title, tab_bar, window_focused, drag)
+                full_screen_chrome(dark, heading, tab_bar, window_focused, drag)
             } else {
                 window_chrome(
                     chrome,
                     dark,
                     tab_style,
-                    title,
+                    heading,
                     tab_bar,
                     window_focused,
                     drag,
@@ -1049,11 +1054,17 @@ enum Chrome {
     Compact,
 }
 
+// The window's title and, for the first nine windows, the ⌥⌘N that selects it.
+struct Heading {
+    title: String,
+    shortcut: Option<String>,
+}
+
 fn window_chrome(
     chrome: Chrome,
     dark: bool,
     style: TabStyle,
-    title: String,
+    heading: Heading,
     tab_bar: Option<TabBar>,
     active: bool,
     drag: impl Fn(Event<MouseEventData>) + 'static,
@@ -1061,10 +1072,6 @@ fn window_chrome(
     if chrome == Chrome::Server {
         return tab_bar.into_iter().map(Into::into).collect();
     }
-    let lights = |height: f32| traffic_lights(height, active);
-    let title_bar = |height: f32, background: Rgba, ink: Rgba| {
-        title_strip(height, background, ink, title, active, drag)
-    };
     if chrome == Chrome::Regular {
         let (colors, ink, division) = title_colors(dark, active);
         let below: Element = match tab_bar {
@@ -1076,29 +1083,66 @@ fn window_chrome(
                 .into(),
         };
         return vec![
-            title_bar(TITLE_BAR.height, colors.background, ink).into(),
+            title_strip(
+                TITLE_BAR.height,
+                colors.background,
+                ink,
+                heading,
+                true,
+                active,
+                drag,
+            )
+            .into(),
             below,
         ];
     }
+    let mut ink = if active {
+        style.text_selected
+    } else {
+        style.text_selected_inactive
+    };
+    if active {
+        ink.a *= TAB_STRIP.title_alpha;
+    }
     match tab_bar {
-        Some(bar) => vec![
-            rect()
-                .width(Size::fill())
-                .child(bar)
-                .child(lights(style.height - 1.0))
-                .into(),
-        ],
-        None => {
-            let mut ink = if active {
-                style.text_selected
-            } else {
-                style.text_selected_inactive
-            };
-            if active {
-                ink.a *= TAB_STRIP.title_alpha;
-            }
-            vec![title_bar(style.height, style.backing, ink).into()]
+        Some(bar) => {
+            let height = style.height - 1.0;
+            vec![
+                rect()
+                    .width(Size::fill())
+                    .child(bar)
+                    .child(traffic_lights(height, active))
+                    .maybe_child(heading.shortcut.map(|shortcut| {
+                        rect()
+                            .position(
+                                Position::new_absolute()
+                                    .left(TAB_STRIP.compact_inset)
+                                    .top(0.0),
+                            )
+                            .layer(1)
+                            .height(Size::px(height))
+                            .main_align(Alignment::Center)
+                            .child(text(
+                                shortcut,
+                                title_font(),
+                                faded(ink, TAB_STRIP.shortcut_alpha),
+                            ))
+                    }))
+                    .into(),
+            ]
         }
+        None => vec![
+            title_strip(
+                style.height,
+                style.backing,
+                ink,
+                heading,
+                false,
+                active,
+                drag,
+            )
+            .into(),
+        ],
     }
 }
 
@@ -1136,40 +1180,69 @@ fn title_colors(dark: bool, active: bool) -> (TitleBarColors, Rgba, Rgba) {
     (colors, ink, division)
 }
 
+fn title_font() -> ctdesign::Font {
+    ctdesign::Font {
+        size: TITLE_BAR.font_size as u32,
+        weight: TITLE_BAR.font_weight,
+        ..TITLEBAR.font
+    }
+}
+
+fn faded(ink: Rgba, alpha: f32) -> Rgba {
+    Rgba {
+        a: ink.a * alpha,
+        ..ink
+    }
+}
+
+// macOS 26: the title starts after the lights; a regular title bar puts the ⌥⌘N at its right
+// end, a compact strip puts it before the title.
 fn title_strip(
     height: f32,
     background: Rgba,
     ink: Rgba,
-    title: String,
+    heading: Heading,
+    regular: bool,
     active: bool,
     drag: impl Fn(Event<MouseEventData>) + 'static,
 ) -> Rect {
+    let title = text(heading.title, title_font(), ink);
+    let row = rect()
+        .width(Size::fill())
+        .height(Size::fill())
+        .padding(Gaps::new(
+            0.0,
+            TITLE_BAR.shortcut_x,
+            0.0,
+            TAB_STRIP.compact_inset,
+        ))
+        .direction(Direction::Horizontal)
+        .content(Content::flex())
+        .cross_align(Alignment::Center);
+    let row =
+        if regular {
+            row.child(rect().width(Size::flex(1.0)).child(title))
+                .maybe_child(heading.shortcut.map(|shortcut| {
+                    text(shortcut, title_font(), faded(ink, TITLE_BAR.shortcut_alpha))
+                }))
+        } else {
+            row.maybe_child(heading.shortcut.map(|shortcut| {
+                rect()
+                    .width(Size::px(TAB_STRIP.title_shortcut_width))
+                    .child(text(
+                        shortcut,
+                        title_font(),
+                        faded(ink, TAB_STRIP.shortcut_alpha),
+                    ))
+            }))
+            .child(title)
+        };
     rect()
         .width(Size::fill())
         .height(Size::px(height))
         .background(color(background))
         .on_mouse_down(drag)
-        .child(
-            rect()
-                .width(Size::fill())
-                .height(Size::fill())
-                .padding(Gaps::new(
-                    0.0,
-                    TAB_STRIP.compact_inset,
-                    0.0,
-                    TAB_STRIP.compact_inset,
-                ))
-                .main_align(Alignment::Center)
-                .child(text(
-                    title,
-                    ctdesign::Font {
-                        size: TITLE_BAR.font_size as u32,
-                        weight: TITLE_BAR.font_weight,
-                        ..TITLEBAR.font
-                    },
-                    ink,
-                )),
-        )
+        .child(row)
         .child(traffic_lights(height, active))
 }
 
@@ -1178,7 +1251,7 @@ fn title_strip(
 // (bk `WindowControls::titlebar_overlay_top`).
 fn full_screen_chrome(
     dark: bool,
-    title: String,
+    heading: Heading,
     tab_bar: Option<TabBar>,
     active: bool,
     drag: impl Fn(Event<MouseEventData>) + 'static,
@@ -1194,7 +1267,8 @@ fn full_screen_chrome(
                 TITLE_BAR.height,
                 colors.background,
                 ink,
-                title,
+                heading,
+                true,
                 active,
                 drag,
             ));
@@ -1487,7 +1561,7 @@ fn pane_tree(node: &Pane, path: Vec<usize>, painting: &Painting) -> Element {
     }
 }
 
-fn use_live_menu(handles: &Handles) {
+fn use_live_menu(handles: &Handles, window_number: usize) {
     let state = handles.workspace.read();
     let tabs = state.tabs.len();
     let split = state.active_tab().is_some_and(|tab| tab.root.is_split());
@@ -1750,6 +1824,10 @@ fn use_live_menu(handles: &Handles) {
     use_menu_enabled(menu::SPLIT_VERTICALLY.id, unlocked && !floating);
     use_menu_enabled(menu::SPLIT_HORIZONTALLY.id, unlocked && !floating);
     use_submenu_items(menu::SELECT_TAB, menu::select_tab_items(&titles, active));
+    use_submenu_items(
+        menu::SELECT_WINDOW,
+        menu::select_window_items(&windows::numbered_windows(), window_number),
+    );
     let profiles = handles.defaults.read().profiles();
     use_profiles_menu(
         profiles
@@ -4466,6 +4544,13 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         .and_then(|index| index.parse().ok())
     {
         workspace.write().select_tab(index);
+        return;
+    }
+    if let Some(number) = id
+        .strip_prefix(menu::SELECT_WINDOW_PREFIX)
+        .and_then(|number| number.parse().ok())
+    {
+        windows::select_window(number);
         return;
     }
     if let Some(index) = id

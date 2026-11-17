@@ -72,6 +72,7 @@ previous-tab = Pestaña anterior
 move-tab-left = Mover pestaña a la izquierda
 move-tab-right = Mover pestaña a la derecha
 select-tab = Elegir pestaña
+select-window = Elegir ventana
 split-pane = Panel dividido
 pane-up = Panel de arriba
 pane-down = Panel de abajo

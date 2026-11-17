@@ -21,6 +21,7 @@ use crate::{auxiliary, menu, preferences, terminal, theme};
 thread_local! {
     static OPEN: RefCell<Vec<(u64, WindowControls)>> = const { RefCell::new(Vec::new()) };
     static NEXT: Cell<u64> = const { Cell::new(0) };
+    static NUMBERED: RefCell<Vec<(usize, String, WindowControls)>> = const { RefCell::new(Vec::new()) };
 }
 
 fn runtime_dir() -> Option<PathBuf> {
@@ -169,6 +170,58 @@ pub fn use_registered_window() {
         token
     });
     use_drop(move || OPEN.with(|open| open.borrow_mut().retain(|(other, _)| *other != token)));
+}
+
+// PseudoTerminal.m -number: a terminal window takes the lowest free number, from 1.
+pub fn use_window_number(title: &str) -> usize {
+    let number = use_hook(|| {
+        NUMBERED.with(|numbered| {
+            let mut numbered = numbered.borrow_mut();
+            let number = (1..)
+                .find(|free| numbered.iter().all(|(taken, ..)| taken != free))
+                .unwrap_or(1);
+            numbered.push((number, String::new(), WindowControls::get()));
+            number
+        })
+    });
+    NUMBERED.with(|numbered| {
+        if let Some(window) = numbered
+            .borrow_mut()
+            .iter_mut()
+            .find(|(n, ..)| *n == number)
+        {
+            title.clone_into(&mut window.1);
+        }
+    });
+    use_drop(move || {
+        NUMBERED.with(|numbered| numbered.borrow_mut().retain(|(n, ..)| *n != number))
+    });
+    number
+}
+
+pub fn numbered_windows() -> Vec<(usize, String)> {
+    NUMBERED.with(|numbered| {
+        let mut windows: Vec<_> = numbered
+            .borrow()
+            .iter()
+            .map(|(number, title, _)| (*number, title.clone()))
+            .collect();
+        windows.sort();
+        windows
+    })
+}
+
+pub fn select_window(number: usize) {
+    let controls = NUMBERED.with(|numbered| {
+        numbered
+            .borrow()
+            .iter()
+            .find(|(n, ..)| *n == number)
+            .map(|(.., controls)| controls.clone())
+    });
+    if let Some(controls) = controls {
+        controls.make_key_and_order_front();
+    }
 }
 
 pub fn quit() {
