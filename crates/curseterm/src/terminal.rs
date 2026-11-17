@@ -1112,7 +1112,8 @@ fn traffic_lights(height: f32, active: bool) -> Rect {
             0.0,
             0.0,
             0.0,
-            ctappearance::traffic::inset(height as u32) as f32,
+            // macOS 26: past the title bar's height the lights keep its inset and centre vertically.
+            ctappearance::traffic::inset(height.min(TITLE_BAR.height) as u32) as f32,
         ))
         .main_align(Alignment::Center)
         .child(TrafficLights::for_window(
@@ -1159,7 +1160,6 @@ fn title_strip(
                     TAB_STRIP.compact_inset,
                 ))
                 .main_align(Alignment::Center)
-                .cross_align(Alignment::Center)
                 .child(text(
                     title,
                     ctdesign::Font {

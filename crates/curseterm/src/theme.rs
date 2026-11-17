@@ -105,7 +105,7 @@ fn minimal(background: Rgb, tall: bool) -> TabStyle {
 }
 
 // The window chrome above the panes: a compact window has only its strip; a regular one, the
-// 28-point title bar and the tabs or the 1-point division view.
+// 32-point title bar and the tabs or the 1-point division view.
 pub fn chrome_height(theme: Theme, tab_bar_shown: bool) -> f32 {
     let tabs = if theme == Theme::Minimal {
         TAB_STRIP.minimal_height

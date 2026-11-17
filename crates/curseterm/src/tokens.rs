@@ -316,14 +316,16 @@ pub struct IndicatorColors {
 }
 
 // PSMTabBarControl's classic styles and iTerm2's compact window (PSMYosemiteTabStyle.m,
-// PSMTabBarControl.m, iTermRootTerminalView.m, iTermAdvancedSettingsModel.m).
+// PSMTabBarControl.m, iTermRootTerminalView.m, iTermAdvancedSettingsModel.m), measured on
+// macOS 26: the title and the first tab start 84 points in and a tab's ⌘N ends 10 from its edge.
 pub const TAB_STRIP: TabStripMetrics = TabStripMetrics {
     min_tab_width: 75.0,
-    add_width: 24.0,
+    add_width: 22.0,
     close: 16.0,
     close_x: 6.0,
     label_inset: 26.0,
-    compact_inset: 75.0,
+    shortcut_x: 10.0,
+    compact_inset: 84.0,
     minimal_height: 38.0,
     title_font_size: 13.0,
     title_alpha: 0.65,
@@ -347,6 +349,7 @@ pub struct TabStripMetrics {
     pub close: f32,
     pub close_x: f32,
     pub label_inset: f32,
+    pub shortcut_x: f32,
     pub compact_inset: f32,
     pub minimal_height: f32,
     pub title_font_size: f32,
@@ -385,11 +388,11 @@ const fn white(level: f32, alpha: f32) -> Rgba {
     )
 }
 
-// A titled NSWindow on macOS 11 to 15: a 28-point title bar with the bold 13-point title, in
+// A titled NSWindow on macOS 26: a 32-point title bar with the bold 13-point title, in
 // NSColor.windowBackgroundColor (236 light, 50 dark), and iTermRootTerminalView.m's 1-point
 // division view (HSB brightness 0.70 or 0.86 light, 0.10 or 0.07 dark) when no tab bar is below.
 pub const TITLE_BAR: TitleBarMetrics = TitleBarMetrics {
-    height: 28.0,
+    height: 32.0,
     font_size: 13.0,
     font_weight: 700,
     light: TitleBarColors {

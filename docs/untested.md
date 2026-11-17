@@ -529,3 +529,10 @@ with a session open.
 
 **Not tested:** a program copying with OSC 52 (`printf '\e]52;c;aGk=\a'`) with
 the switch off and on; the switch in Settings › Profiles › Keys.
+
+## Title bars and tab bar measured on macOS 26
+
+**Not tested:** not compiled (`skia-bindings` 0.104.0 could not be downloaded
+or built in the session that made the change); the 32-point Regular title
+bar, the left-aligned title at 84 points, the traffic lights' inset in a
+Minimal window and the ⌘N label of each tab, in Malaysia.

@@ -787,12 +787,16 @@ pub fn select_tab_items(titles: &[String], active: usize) -> Vec<MenuItem> {
         .map(|(index, title)| {
             let item = MenuItem::action(format!("{SELECT_TAB_PREFIX}{index}"), title.clone())
                 .with_check(CheckState::Radio(index == active));
-            match index {
-                0..9 => item.with_shortcut(format!("Super+{}", index + 1)),
-                _ => item,
+            match select_tab_shortcut(index) {
+                Some(shortcut) => item.with_shortcut(shortcut),
+                None => item,
             }
         })
         .collect()
+}
+
+pub fn select_tab_shortcut(index: usize) -> Option<String> {
+    (index < 9).then(|| format!("Super+{}", index + 1))
 }
 
 pub fn indexed_items(prefix: &str, names: &[String]) -> Vec<MenuItem> {

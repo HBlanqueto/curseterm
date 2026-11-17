@@ -1,5 +1,5 @@
 //! Document tabs drawn like PSMTabBarControl: equal tabs that fill the bar, a close button on
-//! the left on hover and the colors of a `TabStyle`.
+//! the left on hover, the ⌘N shortcut on the right and the colors of a `TabStyle`.
 
 use std::time::{Duration, Instant};
 
@@ -15,6 +15,8 @@ use ctdesign::{CAPTION, Font, HEADLINE, Rgba};
 use freya_core::prelude::*;
 use torin::prelude::{Alignment, Content, Direction, Gaps, Position, Size};
 
+use crate::key_bindings::shown;
+use crate::menu::select_tab_shortcut;
 use crate::tokens::{TAB_BAR, TAB_GROUP, TAB_STRIP, TabStyle};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -487,59 +489,79 @@ impl Component for Tab {
             size: style.font_size as u32,
             ..CAPTION
         };
-        let tab =
-            interaction
-                .attach(rect(), true)
-                .a11y_role(AccessibilityRole::Tab)
-                .a11y_alt(match self.badge {
-                    Some(badge) => format!("{}, {}", self.title, badge.label),
-                    None => self.title.clone(),
-                })
-                .width(Size::flex(1.0))
-                .min_width(Size::px(TAB_STRIP.min_tab_width))
-                .height(Size::fill())
-                .background(color(fill))
-                .on_press(move |_| {
-                    if let Some(on_select) = &on_select {
-                        on_select.call(index);
-                    }
-                })
-                .maybe_child(shadow)
-                .maybe_child((!self.selected).then(|| {
-                    line(
-                        style.top_line,
-                        Position::new_absolute().top(0.0).left(0.0),
-                        true,
-                    )
-                }))
-                .child(line(
-                    separator,
-                    Position::new_absolute()
-                        .top(1.0)
-                        .right(if self.last { -1.0 } else { 0.0 }),
-                    false,
-                ))
-                .children(outline)
-                .child(
-                    rect()
-                        .width(Size::fill())
-                        .height(Size::fill())
-                        .padding(Gaps::new(
-                            0.0,
-                            TAB_STRIP.label_inset,
-                            0.0,
-                            TAB_STRIP.label_inset,
-                        ))
-                        .direction(Direction::Horizontal)
-                        .main_align(Alignment::Center)
-                        .cross_align(Alignment::Center)
-                        .spacing(TAB_BAR.badge_gap)
-                        .maybe_child(self.badge.map(|badge| {
-                            Image::system(badge.symbol).size(TAB_BAR.badge).color(ink)
-                        }))
-                        .child(text(self.title.clone(), font, ink)),
+        // iTerm2 shows the ⌘N that selects a tab at its right edge.
+        let shortcut = select_tab_shortcut(index).map(|combo| shown(&combo));
+        let tab = interaction
+            .attach(rect(), true)
+            .a11y_role(AccessibilityRole::Tab)
+            .a11y_alt(match self.badge {
+                Some(badge) => format!("{}, {}", self.title, badge.label),
+                None => self.title.clone(),
+            })
+            .width(Size::flex(1.0))
+            .min_width(Size::px(TAB_STRIP.min_tab_width))
+            .height(Size::fill())
+            .background(color(fill))
+            .on_press(move |_| {
+                if let Some(on_select) = &on_select {
+                    on_select.call(index);
+                }
+            })
+            .maybe_child(shadow)
+            .maybe_child((!self.selected).then(|| {
+                line(
+                    style.top_line,
+                    Position::new_absolute().top(0.0).left(0.0),
+                    true,
                 )
-                .child(close);
+            }))
+            .child(line(
+                separator,
+                Position::new_absolute()
+                    .top(1.0)
+                    .right(if self.last { -1.0 } else { 0.0 }),
+                false,
+            ))
+            .children(outline)
+            .child(
+                rect()
+                    .width(Size::fill())
+                    .height(Size::fill())
+                    .padding(Gaps::new(
+                        0.0,
+                        if shortcut.is_some() {
+                            TAB_STRIP.shortcut_x
+                        } else {
+                            0.0
+                        },
+                        0.0,
+                        0.0,
+                    ))
+                    .direction(Direction::Horizontal)
+                    .content(Content::flex())
+                    .cross_align(Alignment::Center)
+                    .child(
+                        rect()
+                            .width(Size::flex(1.0))
+                            .height(Size::fill())
+                            .padding(Gaps::new(
+                                0.0,
+                                TAB_STRIP.label_inset,
+                                0.0,
+                                TAB_STRIP.label_inset,
+                            ))
+                            .direction(Direction::Horizontal)
+                            .main_align(Alignment::Center)
+                            .cross_align(Alignment::Center)
+                            .spacing(TAB_BAR.badge_gap)
+                            .maybe_child(self.badge.map(|badge| {
+                                Image::system(badge.symbol).size(TAB_BAR.badge).color(ink)
+                            }))
+                            .child(text(self.title.clone(), font, ink)),
+                    )
+                    .maybe_child(shortcut.map(|shortcut| text(shortcut, font, ink))),
+            )
+            .child(close);
         let tab = match self.menu.clone() {
             Some((items, menu)) => {
                 tab.context_menu(items, move |id| menu.on_activate.call((index, id)))
