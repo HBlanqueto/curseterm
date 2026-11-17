@@ -226,7 +226,7 @@ impl Component for SessionNoteView {
                     dragged.set(Some(active.apply((at.x, at.y))));
                 }
             })
-            .on_global_pointer_press(move |_| {
+            .on_global_pointer_up(move |_| {
                 if drag.peek().is_some() {
                     drag.set(None);
                     if let Some(frame) = dragged.peek().as_ref() {

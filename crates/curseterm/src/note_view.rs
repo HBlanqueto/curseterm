@@ -29,7 +29,7 @@ pub struct NoteView {
 }
 
 impl KeyExt for NoteView {
-    fn write_key(&mut self) -> &mut DiffKey {
+    fn key_mut(&mut self) -> &mut DiffKey {
         &mut self.key
     }
 }
@@ -161,7 +161,7 @@ impl Component for NoteView {
                     .height(Size::px(button.height()))
                     .a11y_role(AccessibilityRole::Button)
                     .a11y_alt(tr!("delete-annotation"))
-                    .on_pointer_enter(|_| Cursor::set(CursorIcon::default()))
+                    .cursor(CursorIcon::default())
                     .on_press(move |_| on_event.call(NoteEvent::Remove)),
             )
     }

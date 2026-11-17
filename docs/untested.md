@@ -502,13 +502,20 @@ hover fade with `use_alive`.
 tested, against `/bin/sh`); a user whose `$SHELL` is fish or nushell, because
 Run Command now runs under `/bin/sh`, as Run Coprocess already did.
 
-## Kit b5c31c2 (`bk`, `ctdesign`, `ctappearance`)
+## Kit 70968a9 (`bk`, `ctdesign`, `ctappearance`) and Freya 0.5.0
 
-**Not tested:** running CurseTerm on this `rev` (it builds, passes clippy and
-the unit tests; no window was opened); how `ButtonStyle::bordered_prominent`
-and the vertical `RadioGroup` of Profiles › General › Directory look;
-`nix build .#curseterm` (the dev shell evaluates, the package could not
-be evaluated in the lab).
+**Not tested:** typing, pointer and menu input on this `rev`. It builds
+(`nix build .#curseterm`), passes clippy and the unit tests, and the window
+opens and stays up for 30 s in a headless Weston on lavapipe; nothing was sent
+to it. The Freya 0.5.0 changes that compile but behave differently: copy and
+paste through `Clipboard::get` and `Clipboard::set` (the root context of 0.4.3
+panicked at start-up), the declarative `.cursor` (text cursor over a pane,
+arrow over the note's delete button), `on_global_pointer_up` ending a pane
+divider drag and a note drag, the stepped `Slider` of Window Transparency and
+of the instant replay bar (value and callback are `f32` steps), and
+`Symbol::Bell` in the tab bar's bell badge. The key per mode of the Password
+Manager body was a workaround for a freya-core 0.4.3 runner bug and was not
+re-checked on 0.5.0.
 
 ## History limit kept by CurseTerm
 

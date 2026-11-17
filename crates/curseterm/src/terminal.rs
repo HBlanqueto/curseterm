@@ -38,7 +38,7 @@ use bk::views::feedback::{self, Alert};
 use bk::views::floating_pane::{FloatingPane, PaneFrame};
 use bk::views::split_panes::SplitPanes;
 use bk::views::table::Table;
-use freya_clipboard::copypasta::ClipboardProvider;
+use freya_clipboard::prelude::Clipboard;
 use freya_core::prelude::*;
 use rustix::process::{Pid, Signal, kill_process};
 use torin::prelude::{Alignment, Content, Direction, Gaps, Position, Size};
@@ -103,7 +103,6 @@ const DIVIDER_STEP: f32 = 0.05;
 const UNDO_CLOSE: Duration = Duration::from_secs(5);
 
 type Sessions = HashMap<SessionId, Rc<Session>>;
-type ClipboardState = State<Option<Box<dyn ClipboardProvider>>>;
 type Events = Rc<(Sender<(SessionId, TermEvent)>, WakeHandle)>;
 type Reveals = (Sender<(SessionId, Option<String>)>, WakeHandle);
 type FontCache = Rc<RefCell<HashMap<(String, i32), Rc<Fonts>>>>;
@@ -127,7 +126,6 @@ struct Handles {
     hints: State<Option<Hints>>,
     replay: State<Option<(SessionId, usize)>>,
     toolbelt: Toolbelt,
-    clipboard: ClipboardState,
     broadcast: State<Broadcast>,
     find: Find,
     filter: Find,
@@ -458,7 +456,6 @@ impl App for Terminal {
             hints,
             replay,
             toolbelt,
-            clipboard: consume_root_context(),
             broadcast,
             find,
             filter,
@@ -598,7 +595,7 @@ impl App for Terminal {
             DecorationResponse::Client => Chrome::Regular,
         };
         let bar = if chrome == Chrome::Compact {
-            Bar::Compact
+            Bar::UnifiedCompact
         } else {
             Bar::Titlebar
         };
@@ -639,9 +636,8 @@ impl App for Terminal {
         let tabs_allowed = !full_screen || defaults.read().show_tabs_in_fullscreen;
         let tab_bar = ((state.tabs.len() > 1 || show_tab_bar) && tabs_allowed).then(|| {
             let (on_close, on_add) = (handles.clone(), handles.clone());
-            // BK-024: the kit has no bell symbol; SpeakerWave stands in for iTerm2's bell.
             let bell = Badge {
-                symbol: Symbol::SpeakerWave,
+                symbol: Symbol::Bell,
                 label: tr!("tab-bell"),
             };
             let groups = state.tabs.iter().map(|tab| {
@@ -1247,14 +1243,11 @@ fn floating_pane(float: &Float, workspace: &Workspace, painting: &Painting, dark
     let active = id == painting.active;
     let (colors, ink, _) = title_colors(dark, active && painting.window_focused);
     let handles = painting.handles.clone();
+    let body_size = *handles.body_size.peek();
     let mut raising = painting.workspace;
     let mut moving = painting.workspace;
     FloatingPane {
-        frame: clamped(
-            float.frame,
-            *handles.body_size.peek(),
-            float_cell(&handles, id),
-        ),
+        frame: clamped(float.frame, body_size, float_cell(&handles, id)),
         title: workspace.title(id).to_string(),
         active,
         accent: Palette::current().accent,
@@ -1786,7 +1779,7 @@ fn copy(handles: &Handles, session: &Session) {
 
 fn copy_text(handles: &Handles, text: String) {
     remember_paste(handles, text.clone());
-    set_clipboard(handles.clipboard, text);
+    set_clipboard(text);
 }
 
 fn copy_styled(handles: &Handles, session: &Session) {
@@ -1829,22 +1822,18 @@ fn remember_paste(handles: &Handles, text: String) {
     paste_history::remember(&mut pastes.write(), text);
 }
 
-fn set_clipboard(mut clipboard: ClipboardState, text: String) {
-    let copied = clipboard
-        .write()
-        .as_mut()
-        .map(|provider| provider.set_contents(text));
-    if !matches!(copied, Some(Ok(()))) {
+fn set_clipboard(text: String) {
+    if Clipboard::set(text).is_err() {
         tracing::warn!("could not copy to the clipboard");
     }
 }
 
-fn clipboard_text(mut clipboard: ClipboardState) -> Option<String> {
-    clipboard.write().as_mut()?.get_contents().ok()
+fn clipboard_text() -> Option<String> {
+    Clipboard::get().ok()
 }
 
 fn paste(handles: &Handles) {
-    match clipboard_text(handles.clipboard) {
+    match clipboard_text() {
         Some(text) => paste_text(handles, text),
         None => tracing::warn!("could not read the clipboard"),
     }
@@ -2807,8 +2796,8 @@ fn replay_bar(handles: &Handles, id: SessionId, index: usize) -> Element {
         .child(
             rect().width(Size::flex(1.0)).child(
                 Slider::stepped(tr!("instant-replay-bar"), frames.max(2))
-                    .value(index)
-                    .on_change(move |step: usize| replay.set(Some((id, step)))),
+                    .value(index as f32)
+                    .on_change(move |step: f32| replay.set(Some((id, step.round() as usize)))),
             ),
         )
         .maybe_child(at.map(|at| text(local_time(at), CAPTION, palette.label)))
@@ -2930,7 +2919,7 @@ fn perform_binding(
             Some(_) => copy(handles, session),
             None => send(vec![0x03]),
         },
-        BindingAction::PasteOrSend => match clipboard_text(handles.clipboard) {
+        BindingAction::PasteOrSend => match clipboard_text() {
             Some(text) => paste_text(handles, text),
             None => send(vec![0x16]),
         },
@@ -3218,7 +3207,7 @@ fn on_term_event(handles: &Handles, id: SessionId, event: TermEvent, revision: S
                 .profile(&session.profile())
                 .allow_clipboard_access
             {
-                set_clipboard(handles.clipboard, text);
+                set_clipboard(text);
             }
         }
         TermEvent::TextAreaSizeRequest(format) => {
@@ -4746,18 +4735,18 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
             }
         }
         _ if id == menu::ADVANCED_PASTE.id => {
-            if let Some(text) = clipboard_text(handles.clipboard) {
+            if let Some(text) = clipboard_text() {
                 handles.advanced.open(text);
                 open_sheet(handles, Sheet::AdvancedPaste);
             }
         }
         _ if id == menu::PASTE_SLOWLY.id => {
-            if let Some(text) = clipboard_text(handles.clipboard) {
+            if let Some(text) = clipboard_text() {
                 paste_checked(handles, text, true);
             }
         }
         _ if id == menu::PASTE_ESCAPED.id => {
-            if let Some(text) = clipboard_text(handles.clipboard) {
+            if let Some(text) = clipboard_text() {
                 paste_text(handles, session::shell_escaped(&text));
             }
         }
@@ -4786,7 +4775,7 @@ fn on_action(id: &str, handles: &Handles, events: &Events, revision: State<u64>)
         }
         // PTYTextView -pasteBase64Encoded: the first file on the clipboard, 77 characters a line.
         _ if id == menu::PASTE_FILE_BASE64.id => {
-            let file = clipboard_text(handles.clipboard).and_then(|text| {
+            let file = clipboard_text().and_then(|text| {
                 let first = text.lines().next()?.trim().to_string();
                 let path = first.strip_prefix("file://").unwrap_or(&first).to_string();
                 std::fs::read(path).ok()

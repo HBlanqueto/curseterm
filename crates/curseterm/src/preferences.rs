@@ -756,12 +756,12 @@ fn window_section(index: usize, profile: &Profile) -> Section {
                 .detail(tr!("window-transparency-detail"))
                 .control(
                     Slider::stepped(tr!("window-transparency"), TRANSPARENCY_STEPS)
-                        .value(usize::from(profile.transparency / TRANSPARENCY_STEP))
-                        .on_change(move |step: usize| {
+                        .value(f32::from(profile.transparency / TRANSPARENCY_STEP))
+                        .on_change(move |step: f32| {
                             change_defaults(|defaults| {
                                 defaults.ensure_profiles();
                                 if let Some(profile) = defaults.profiles.get_mut(index) {
-                                    profile.transparency = step as u8 * TRANSPARENCY_STEP;
+                                    profile.transparency = step.round() as u8 * TRANSPARENCY_STEP;
                                 }
                             });
                         }),

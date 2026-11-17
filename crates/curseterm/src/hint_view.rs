@@ -23,7 +23,7 @@ pub struct HintLabel {
 }
 
 impl KeyExt for HintLabel {
-    fn write_key(&mut self) -> &mut DiffKey {
+    fn key_mut(&mut self) -> &mut DiffKey {
         &mut self.diff_key
     }
 }

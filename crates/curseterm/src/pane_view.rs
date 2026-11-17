@@ -233,14 +233,11 @@ impl Component for TerminalPane {
                             );
                         }
                     })
+                    .cursor(CursorIcon::Text)
                     .on_pointer_enter({
                         let id = session.id;
-                        move |_| {
-                            Cursor::set(CursorIcon::Text);
-                            on_hover.call(id);
-                        }
+                        move |_| on_hover.call(id)
                     })
-                    .on_pointer_leave(|_| Cursor::set(CursorIcon::default()))
                     .on_mouse_down({
                         let session = session.clone();
                         let point_at = point_at.clone();
@@ -326,7 +323,7 @@ impl Component for TerminalPane {
                             *repaint.write() += 1;
                         }
                     })
-                    .on_global_pointer_press(move |_| dragging.set_if_modified(false))
+                    .on_global_pointer_up(move |_| dragging.set_if_modified(false))
                     .on_wheel({
                         let fonts = fonts.clone();
                         move |event: Event<WheelEventData>| {
