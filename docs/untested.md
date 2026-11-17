@@ -539,7 +539,7 @@ Minimal window and the ⌘N label of each tab, in Malaysia.
 
 ## Show mark indicators profile switch
 
-**Not tested:** not compiled (`./dev.sh check` had not finished in the session
-that made the change); the switch in Settings › Profiles › Terminal hiding and
-showing the prompt triangles at once in an open session, with `OSC 133;A` from
-the shell.
+**Not tested:** not compiled (the dev shell could not build skia in the session
+that made the change); only `cargo fmt --check` ran. Clippy, the tests and the
+switch in Settings › Profiles › Terminal hiding and showing the prompt
+triangles at once in an open session, with `OSC 133;A` from the shell.
