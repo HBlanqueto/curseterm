@@ -11,14 +11,14 @@ license = "MIT"
 repository = "https://github.com/HBlanqueto/curseterm"
 
 [workspace.dependencies]
-bk = { git = "https://github.com/HBlanqueto/barrierkit", rev = "c9534347676fb3f2df367c3e097ae78e1d65364c" }
-ctdesign = { git = "https://github.com/HBlanqueto/barrierkit", rev = "c9534347676fb3f2df367c3e097ae78e1d65364c" }
-ctappearance = { git = "https://github.com/HBlanqueto/barrierkit", rev = "c9534347676fb3f2df367c3e097ae78e1d65364c" }
+bk = { git = "https://github.com/HBlanqueto/barrierkit", rev = "e3bd15e90ebec152aae5d2ddbc28438373c60785" }
+ctdesign = { git = "https://github.com/HBlanqueto/barrierkit", rev = "e3bd15e90ebec152aae5d2ddbc28438373c60785" }
+ctappearance = { git = "https://github.com/HBlanqueto/barrierkit", rev = "e3bd15e90ebec152aae5d2ddbc28438373c60785" }
 
-freya-core = "=0.5.0"
-freya-engine = "=0.5.0"
-freya-clipboard = "=0.5.0"
-torin = "=0.5.0"
+freya-core = "=0.5.3"
+freya-engine = "=0.5.3"
+freya-clipboard = "=0.5.3"
+torin = "=0.5.3"
 
 alacritty_terminal = "0.26"
 

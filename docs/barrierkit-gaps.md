@@ -4,8 +4,8 @@
 so each workaround is removed when the kit gains the feature.
 **Reader:** whoever bumps the `rev` of barrierkit in `Cargo.toml`.
 **Input:** the `BK-nnn` comments in `crates/curseterm/src`, and BarrierKit at
-`c953434`, the `rev` CurseTerm pins (Freya 0.5.0).
-**Output:** one row per workaround, with its state at `c953434`.
+`e3bd15e`, the `rev` CurseTerm pins (Freya 0.5.3).
+**Output:** one row per workaround, with its state at `e3bd15e`.
 
 The 48 gaps found while building CurseTerm (ADR 0006) are in the last copy of
 the old document: `git show bc27a76:docs/barrierkit-gaps.md`.
@@ -24,7 +24,7 @@ States: **open** (no API in the kit), **fixed** (the kit has it; remove the
 workaround once the `rev` is past the commit that fixed it) and **not
 re-checked**.
 
-| ID | Gap | Workaround in CurseTerm | State at `c953434` |
+| ID | Gap | Workaround in CurseTerm | State at `e3bd15e` |
 |---|---|---|---|
 | BK-012 | The saved window size is one per `app_id` and cannot be overridden | `windows::forget_saved_size` | open: `platform/window.rs` still saves one size per `app_id` |
 | BK-013 | The compositor's close request cannot be intercepted | none | open: no close hook in `platform/` |
@@ -34,7 +34,7 @@ re-checked**.
 | BK-024 | No trash symbol (the bell symbol is fixed) | a drawn trash (`note_view.rs`) | bell fixed: the bell badge uses `Symbol::Bell`; trash open |
 | BK-025 | No global shortcuts or way to show and hide the window | `curseterm --hotkey` (`windows.rs`) | open: no GlobalShortcuts portal in the kit |
 | BK-027 | A view with global keys cannot tell whether a text field or an `Alert` keeps the key | the sheet closes one loop later (`terminal.rs`) | not re-checked |
-| BK-030 | Mouse events carry no modifiers | modifiers tracked from the keyboard (`terminal.rs`) | open: Freya 0.5.0 `MouseEventData` has only locations and button |
+| BK-030 | Mouse events carry no modifiers | modifiers tracked from the keyboard (`terminal.rs`) | open: Freya 0.5.3 `MouseEventData` has only locations and button |
 | BK-032 | `Timers` callbacks outlive their window | `Handles::after` checks `alive` | open: `Timers::after` queues the callback with no window attached; `use_alive` is the workaround |
 | BK-037 | `Alert` has two buttons and cannot be silenced | own three-button sheet (`terminal.rs`) | partly fixed: `Alert::suppression` exists; still two buttons |
 | BK-040 | `PopUpButton` neither scrolls nor filters | groups and a filter field (`key_bindings.rs`) | open: no scrolling or filter in `popup_button.rs` |

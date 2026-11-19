@@ -517,6 +517,16 @@ of the instant replay bar (value and callback are `f32` steps), and
 Manager body was a workaround for a freya-core 0.4.3 runner bug and was not
 re-checked on 0.5.0.
 
+## Kit e3bd15e (`bk`, `ctdesign`, `ctappearance`) and Freya 0.5.3
+
+**Not tested:** it was not compiled, linted or run: the session that bumped it
+had no Skia binaries (`freya-skia-bindings` 0.104.0 answered 404 for the
+prebuilt archive and 403 for the source) and no dev shell. Checked by reading
+only: `Cargo.lock` resolves with `--locked`, `freya-skia-bindings` stays at
+0.104.0, no `pub` item CurseTerm uses was removed or changed in the 17 kit
+commits since `c953434` or in Freya 0.5.1 to 0.5.3, and the kit's glass, menu
+and Dock tokens now differ from the ones CurseTerm last ran on.
+
 ## History limit kept by CurseTerm
 
 **Not tested:** marks, annotations, timestamps, inline images and folds in the
